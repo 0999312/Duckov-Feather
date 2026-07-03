@@ -1,0 +1,6 @@
+{
+    "Reward_UnlockEndowment": "解鎖天賦",
+    "Reward_UnlockBuilding": "解鎖建築",
+    "Task_TagKillCount": "使用帶有 [{1}] 標籤的武器擊殺 {0} 名敵人",
+    "Task_TagSubmitItem": "提交 {0} 件帶有 [{1}] 標籤的物品"
+}

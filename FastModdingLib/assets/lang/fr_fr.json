@@ -1,0 +1,6 @@
+{
+    "Reward_UnlockEndowment": "Unlock Endowment",
+    "Reward_UnlockBuilding": "Unlock Building",
+    "Task_TagKillCount": "Kill {0} enemies using weapon with tag [{1}]",
+    "Task_TagSubmitItem": "Submit {0} items with tag [{1}]"
+}

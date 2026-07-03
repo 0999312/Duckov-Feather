@@ -40,7 +40,7 @@ namespace FastModdingLib
             }
             else
             {
-                _modDirectory = Assembly.GetExecutingAssembly().Location;
+                _modDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty;
             }
 
             EventBusManager.Instance.Sync.Register<LanguageChangedEvent>(OnLanguageChanged);

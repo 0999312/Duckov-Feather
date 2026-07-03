@@ -1,4 +1,4 @@
-﻿using Cysharp.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using Duckov.ItemBuilders;
 using Duckov.Utilities;
 using FastModdingLib.Register;
@@ -64,25 +64,25 @@ namespace FastModdingLib
         /// modid 从调用方程序集名自动推导。
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static Sprite? LoadSprite(string resourceName, int NEW_ITEM_ID)
+        public static Sprite? LoadSprite(string resourceName)
         {
             var callingAssembly = System.Reflection.Assembly.GetCallingAssembly();
             var id = new Identifier(callingAssembly.GetName().Name, resourceName);
-            return LoadSprite(id, NEW_ITEM_ID);
+            return LoadSprite(id);
         }
 
         /// <summary>
         /// 从调用方 mod 目录 <c>assets/textures/</c> 加载 Sprite（适用物品图标、Perk 图标等）。
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static Sprite? LoadSprite(Identifier id, int NEW_ITEM_ID)
+        public static Sprite? LoadSprite(Identifier id)
         {
             var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-            return LoadSpriteFromDir(modDir, id.Path, NEW_ITEM_ID);
+            return LoadSpriteFromDir(modDir, id.Path);
         }
 
         /// <summary>从指定目录加载 Sprite。适用物品图标、Perk 图标等所有 Sprite 场景。</summary>
-        public static Sprite? LoadSpriteFromDir(string modDirectory, string resourceName, int NEW_ITEM_ID)
+        public static Sprite? LoadSpriteFromDir(string modDirectory, string resourceName)
         {
             try
             {
@@ -122,21 +122,21 @@ namespace FastModdingLib
         /// 文件 IO 在线程池执行，Texture2D 创建在主线程。用于加载阶段加速。
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static async UniTask<Sprite?> LoadSpriteAsync(string resourceName, int NEW_ITEM_ID)
+        public static async UniTask<Sprite?> LoadSpriteAsync(string resourceName)
         {
             var callingAssembly = System.Reflection.Assembly.GetCallingAssembly();
             var id = new Identifier(callingAssembly.GetName().Name, resourceName);
-            return await LoadSpriteAsync(id, NEW_ITEM_ID);
+            return await LoadSpriteAsync(id);
         }
 
         /// <summary>
         /// 【推荐】异步加载 Sprite。文件 IO 在线程池执行，Texture2D 创建在主线程。
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static async UniTask<Sprite?> LoadSpriteAsync(Identifier id, int NEW_ITEM_ID)
+        public static async UniTask<Sprite?> LoadSpriteAsync(Identifier id)
         {
             var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-            return await LoadSpriteFromDirAsync(modDir, id.Path, NEW_ITEM_ID);
+            return await LoadSpriteFromDirAsync(modDir, id.Path);
         }
 
         /// <summary>
@@ -144,7 +144,7 @@ namespace FastModdingLib
         /// 文件 IO 通过 <c>UniTask.RunOnThreadPool</c> 在线程池执行，避免阻塞主线程；
         /// Texture2D.LoadImage / Apply / Sprite.Create 回到主线程完成。
         /// </summary>
-        public static async UniTask<Sprite?> LoadSpriteFromDirAsync(string modDirectory, string resourceName, int NEW_ITEM_ID)
+        public static async UniTask<Sprite?> LoadSpriteFromDirAsync(string modDirectory, string resourceName)
         {
             try
             {
@@ -204,7 +204,7 @@ namespace FastModdingLib
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath, config.itemId));
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath));
 
             config.modifiers.ForEach(modifier =>
             {
@@ -231,7 +231,7 @@ namespace FastModdingLib
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath, config.itemId));
+                .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath));
 
             config.modifiers.ForEach(modifier =>
             {
@@ -258,7 +258,7 @@ namespace FastModdingLib
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath, config.itemId));
+                .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath));
 
             config.modifiers.ForEach(modifier =>
             {
@@ -285,7 +285,7 @@ namespace FastModdingLib
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath, config.itemId));
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath));
 
             config.modifiers.ForEach(modifier =>
             {
@@ -491,7 +491,7 @@ namespace FastModdingLib
             Item component = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath, config.itemId))
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath))
                 .SetConstant("Caliber", config.Caliber, true)
                 .SetConstant("SFX_Put", config.SFX_Put, false)
                 .SetConstant("CritDamageFactorGain", config.CritDamageFactorGain, config.CritDamageFactorGain != 0F)

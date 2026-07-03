@@ -1,6 +1,6 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-01
+> 最后更新：2026-07-03
 
 ---
 
@@ -136,10 +136,13 @@
 - **`PerkTreeUtils.RemoveAllPerks`**：新增自定义 PerkTree 的 GameObject 销毁和 PerkTreeManager 列表清理
 - **`PerkTreeEnablePatch`/`PerkTreeCollectGuard`**：从名称前缀检测改为 `IsFMLTree()` 注册表检测
 - **PLAN.md "Stub / 空缺" 部分**：Endowment/Building/PerkTree 状态从 ❌/⚠️ 更新为 ✅
-- **PLAN-Phase4.md 验收清单**：所有 `[ ]` 更新为 `[x]`，添加 ✅ 状态标记
 
 ### 遗留问题
-- 无（OnBuildingBuilt 已通过 Wave 2 修复）
+- [x] **Endowment API 设计缺陷**：已修复（2026-07-03）——新增 `EndowmentConfig`/`EndowmentModifier` DTO，modder 纯 C# 配置天赋，无需接触游戏内部类型。旧 `object[]` 和 `EndowmentEntry` 重载标记 `[Obsolete]`。
+- [x] **全局 `internal static Registry` 属性**：已修复（2026-07-03）——7 个模块的 Registry 从 `internal` 改为 `public`。
+- [x] **Endowment 系统内部反射清理**：已修复（2026-07-03）——EndowmentUtils、EndowmentManagerPatch、EndowmentRegistry 共 14 处反射替换为直接访问（利用 Publicizer 公开的游戏成员）。
+- [x] **Endowment UI 选择**：已修复（2026-07-03）——根因确认为时序竞争（`Awake` 早于 `PatchAll`）。修复方案：注册时主动注入 `entries`（`TryInjectToManager`），`AllocateIndex` 幂等化。Patch 层保留为安全网。
+- [ ] **PerkTree 系统 9 处游戏数据反射**：待后续修复——`PerkTreeUtils.cs` 中通过反射访问 `PerkTreeManager.perkTrees` 等字段，Publicizer 已覆盖但未清理。
 
 ### 未实现的 PLAN-Phase4 设计项
 以下组件在 `PLAN-Phase4-Building-Perk-Endowment-UI.md` §14-17 中有详细设计但未在 Phase 4 中实现，
@@ -154,6 +157,74 @@
 | `SimpleViewBuilder` | §16.2 | ✅ 已完成（Wave 3 补实现） |
 | UI 注入辅助 | §16.1 | ⏳ 待 Phase 5 |
 | `ItemEntry.ByTag()` + `WithDurabilityCost()` | §13-C.3 | ✅ 已完成（Wave 2 补实现） |
+
+### P0/P1 修复记录（2026-07-03 Endowment DTO + Registry 公开 + 反射清理）
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FastModdingLib/Endowment/EndowmentConfig.cs` | `EndowmentModifier` + `EndowmentConfig` DTO，modder 纯 C# 配置天赋 |
+| 修改 | `FastModdingLib/Endowment/EndowmentUtils.cs` | 新增 `RegisterEndowment(Identifier, EndowmentConfig)`；旧 API 标记 `[Obsolete]`；9 处反射→直接访问；移除 `System.Reflection` 依赖 |
+| 修改 | `FastModdingLib/Endowment/EndowmentRegistry.cs` | 4 个方法 `internal`→`public`；`OnRemoved` 中 2 处反射→`EndowmentManager.CurrentIndex` + `Instance.SelectIndex()` |
+| 修改 | `FastModdingLib/Endowment/Patches/EndowmentManagerPatch.cs` | 3 处反射→直接访问（`Registry`/`entries`/`index`）；移除 `System.Reflection` 依赖 |
+| 修改 | `FastModdingLib/Buildings/BuildingUtils.cs` | `internal static Registry` → `public` |
+| 修改 | `FastModdingLib/Buffs/BuffUtils.cs` | `internal static Registry` → `public` |
+| 修改 | `FastModdingLib/PerkTrees/PerkTreeUtils.cs` | `internal static Registry` → `public` |
+| 修改 | `FastModdingLib/Entities/EnemyUtils.cs` | `internal static Registry` → `public` |
+| 修改 | `FastModdingLib/Shop/ShopUtils.cs` | `internal static Registry` → `public` |
+| 修改 | `FastModdingLib/Quests/QuestUtils.cs` | `internal static Registry` → `public` |
+| 修改 | `Docs/USAGE.md` | §15 EndowmentUtils 文档重写为 DTO 用法 |
+| 修改 | `Docs/PROGRESS.md` | 遗留问题状态更新 |
+| 新建 | `Docs/ISSUES.md` | 完整问题记录与修复计划 |
+
+### 修复记录（2026-07-03 Endowment 时序 + Icon + 解锁）
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `FastModdingLib/Endowment/EndowmentRegistry.cs` | `AllocateIndex` 幂等化 + 新增 `TryInjectToManager` 主动注入方法 |
+| 修改 | `FastModdingLib/Endowment/EndowmentUtils.cs` | `RegisterEndowment` 调用 `TryInjectToManager` 解决 Awake 时序竞争；`CreateNativeEntry` 补充 `unlockedByDefault` 和 `icon` 字段设置 |
+| 修改 | `FastModdingLib/Endowment/Patches/EndowmentManagerPatch.cs` | `Awake_Postfix` 委托给 `TryInjectToManager`，作为安全网兜底 |
+| 修改 | `FastModdingLib/Endowment/EndowmentConfig.cs` | 新增 `Icon (Sprite?)` 字段，支持 modder 传入图标 |
+| 修改 | `Docs/USAGE.md` | §15 补充 Icon 用法 + 默认解锁示例 + Quest 任务解锁完整示例 |
+| 修改 | `Docs/PROGRESS.md` | 遗留问题状态更新 |
+
+### Quest 修复记录（2026-07-03 RewardUnlockEndowment + RewardUnlockBuilding）
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FastModdingLib/Quests/FMLReward_UnlockEndowment.cs` | `Reward` 子类，AutoClaim + onCompleted 双重保障解锁天赋 |
+| 新建 | `FastModdingLib/Quests/FMLReward_UnlockBuilding.cs` | `Reward` 子类，任务完成时将建筑注册到 BuildingDataCollection |
+| 修改 | `FastModdingLib/Quests/QuestData.cs` | 新增 `RewardUnlockEndowmentData` + `RewardUnlockBuildingData`；添加 `Duckov.Buildings`/`UnityEngine` using |
+| 修改 | `Docs/USAGE.md` | §6 Quest 奖励示例加入解锁天赋 + 解锁建筑用法 |
+
+### 清理记录（2026-07-03 移除未使用参数 + Harmony 修正）
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `FastModdingLib/Items/ItemUtils.cs` | 移除所有 `LoadSprite`/`LoadSpriteAsync` 中未使用的 `int NEW_ITEM_ID` 参数 |
+| 修改 | `FastModdingLib/Crafting/Patches/CraftingManagerPatch.cs` | `[HarmonyPatch]` 添加 `typeof(CraftingFormula)` 消除重载二义性 |
+| 修改 | `FastModdingLib/PerkTrees/Patches/PerkTreeEnablePatch.cs` | `Prefix` 参数 `treeId` → `perkTreeID` 匹配游戏原生方法签名 |
+| 修改 | `Docs/USAGE.md` | 6 处 `LoadSprite(name, int)` → `LoadSprite(name)` |
+| 修改 | `Docs/MIGRATION.md` | 1 处旧 API 引用更新 |
+| 修改 | `Docs/FML-REFERENCE.md` | 1 处旧 API 引用更新 |
+| 修改 | `Docs/CASE-STUDIES.md` | 1 处旧 API 引用更新 |
+
+### 本地化记录（2026-07-03 Reward/Task I18n + FML 自注册）
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FastModdingLib/assets/lang/en_us.json` | 英文 Reward/Task 本地化条目 |
+| 新建 | `FastModdingLib/assets/lang/zh_cn.json` | 简体中文本地化 |
+| 新建 | `FastModdingLib/assets/lang/zh_tw.json` | 繁体中文本地化 |
+| 新建 | `FastModdingLib/assets/lang/ja_jp.json` | 日文本地化 |
+| 新建 | `FastModdingLib/assets/lang/ko_kr.json` | 韩文本地化 |
+| 新建 | `FastModdingLib/assets/lang/ru_ru.json` | 俄文本地化 |
+| 新建 | `FastModdingLib/assets/lang/it_it.json` | 意大利文（英文回退） |
+| 新建 | `FastModdingLib/assets/lang/fr_fr.json` | 法文（英文回退） |
+| 新建 | `FastModdingLib/assets/lang/sv_se.json` | 瑞典文（英文回退） |
+| 修改 | `FastModdingLib/Quests/FMLReward_UnlockEndowment.cs` | `Description` 改用 `ToPlainText()` 本地化 |
+| 修改 | `FastModdingLib/Quests/FMLReward_UnlockBuilding.cs` | `Description` 改用 `ToPlainText()` 本地化 + 新增 `BuildingDisplayName` |
+| 修改 | `FastModdingLib/I18n.cs` | 修复 FML 路径 bug：`Assembly.Location` → `Path.GetDirectoryName(Assembly.Location)` |
+| 修改 | `FastModdingLib/FMLBootstrap.cs` | `EnsureInit()` 新增 `I18n.InitI18n()` 调用 |
 
 ### Wave 修复记录（2026-07-01 文档&代码修复）
 - **Wave 1（文档）**：MIGRATION.md API 签名修正、PLAN.md 索引/矩阵/日期更新、PROGRESS.md 补充未实现项、USAGE.md 注释修正
@@ -179,9 +250,9 @@
 - Weather / Seasons（天气/季节）
 - Fishing（钓鱼）
 - Multi-Scene（多场景支持）
-- 友善 NPC 交互（FIX-PLAN-v1.md 附录 A.2）
-- UI 注入辅助（FIX-PLAN-v1.md 附录 A.3）
-- 标签驱动的物品需求（FIX-PLAN-v1.md 附录 A.4）
+- 友善 NPC 交互（详见附录）
+- UI 注入辅助（详见附录）
+- 标签驱动的物品需求（详见附录）
 
 **已完成的前置工作**（可在 Phase 5 启用）：
 - `FaceRef` / `FacePartIds` / `NpcRole` 类型已就绪

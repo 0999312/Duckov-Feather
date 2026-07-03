@@ -231,7 +231,7 @@ var buildingInfo = new BuildingInfo
     prefabName = "Building_CoffeeMachine",
     maxAmount = 1,
     cost = new Cost(money: 3000),
-    iconReference = ItemUtils.LoadSprite("coffee_machine_icon", 0)
+    iconReference = ItemUtils.LoadSprite("coffee_machine_icon")
 };
 var building = BuildingUtils.CreateSimpleBuilding(
     new Identifier("drinkmod", "coffee_machine"),

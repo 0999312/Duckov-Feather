@@ -1,9 +1,11 @@
-﻿using Duckov.Quests;
+﻿using Duckov.Buildings;
+using Duckov.Quests;
 using Duckov.Quests.Rewards;
 using Duckov.Quests.Tasks;
 using FastModdingLib.Quests;
 using FastModdingLib.Utils;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace FastModdingLib
 {
@@ -239,6 +241,56 @@ namespace FastModdingLib
             reward.id = id;
             reward.unlockItem = itemTypeID;
             reward.master = quest;
+            return reward;
+        }
+    }
+
+    /// <summary>
+    /// 🆕 解锁天赋奖励。任务完成时自动解锁指定天赋。
+    /// </summary>
+    public class RewardUnlockEndowmentData : RewardData
+    {
+        /// <summary>要解锁的天赋 Identifier。</summary>
+        public Identifier endowmentId;
+
+        public override Reward SetReward(Quest quest)
+        {
+            var reward = quest.gameObject.AddComponent<Quests.FMLReward_UnlockEndowment>();
+            reward.id = id;
+            reward.master = quest;
+            reward.endowmentDomain = endowmentId.Domain;
+            reward.endowmentPath = endowmentId.Path;
+            return reward;
+        }
+    }
+
+    /// <summary>
+    /// 🆕 解锁建筑奖励。任务完成时将建筑注册到 BuildingDataCollection，
+    /// 使其在 BuilderView 中可建造。
+    /// </summary>
+    public class RewardUnlockBuildingData : RewardData
+    {
+        /// <summary>要解锁的建筑 Identifier。</summary>
+        public Identifier buildingId;
+
+        /// <summary>完整的 BuildingInfo（含 cost、dimensions 等）。</summary>
+        public BuildingInfo buildingInfo;
+
+        /// <summary>
+        /// Building prefab 名称（游戏已有的 Building prefab，如 "Building_Workbench"）。
+        /// 也可使用 <see cref="BuildingUtils.CreateSimpleBuilding"/> 创建的 prefab 名称。
+        /// </summary>
+        public string prefabName = "";
+
+        public override Reward SetReward(Quest quest)
+        {
+            var reward = quest.gameObject.AddComponent<Quests.FMLReward_UnlockBuilding>();
+            reward.id = id;
+            reward.master = quest;
+            reward.buildingDomain = buildingId.Domain;
+            reward.buildingPath = buildingId.Path;
+            reward.buildingInfoJson = JsonUtility.ToJson(buildingInfo);
+            reward.prefabName = prefabName;
             return reward;
         }
     }

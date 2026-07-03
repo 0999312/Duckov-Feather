@@ -169,7 +169,7 @@ modid **不再作为方法参数**，而是从 `id.Domain` 自动推导。modPat
 Item item = ItemUtils.GetCustomItem(itemData);
 
 // 加载内嵌 Sprite（从 assets/textures/）
-Sprite? sprite = ItemUtils.LoadSprite("icon_rifle", 150001);
+Sprite? sprite = ItemUtils.LoadSprite("icon_rifle");
 ```
 
 ### TypeID 冲突自动处理
@@ -192,7 +192,7 @@ ItemUtils.CreateCustomItem(new Identifier("mymod", "coffee"), drinkData);
 
 | 方法 | 旧签名 | 新签名 |
 |------|--------|--------|
-| `AddCraftingFormula` | `(..., string modid = "old_fml_version")` | `(string formulaId, long money, (int id, long amount)[] costItems, int resultItemId, int resultItemAmount, string[]? tags, string requirePerk, bool unlockByDefault, bool hideInIndex, bool lockInDemo, string? modid = null)` |
+| `AddCraftingFormula` | `(..., string modid = "old_fml_version")` | `(string formulaId, long money, (int id, long amount)[] costItems, int resultItemId, int resultItemAmount, string[]? tags, string requirePerk, bool unlockByDefault = true, bool hideInIndex = false, bool lockInDemo = false, string? modid = null)` |
 | `AddDecomposeFormula` | `(..., string modid = "old_fml_version")` | `(int itemId, long money, (int id, long amount)[] resultItems, string? modid = null)` |
 | `RemoveAllAddedFormulas` | `(string modid = "old_fml_version")` | `(string? modid = null)` |
 | `RemoveAllAddedDecomposeFormulas` | `(string modid = "old_fml_version")` | `(string? modid = null)` |
@@ -208,6 +208,8 @@ CraftingUtils.AddCraftingFormula(
     tags: new[] { "WorkBenchAdvanced" },
     requirePerk: "reloading_expert",
     unlockByDefault: false,
+    hideInIndex: false,    // 是否在配方索引中隐藏
+    lockInDemo: false,     // Demo 版本是否锁定
     modid: "MyMod"
 );
 
@@ -541,6 +543,9 @@ PerkTreeUtils.ConnectPerks(
 PerkTreeUtils.ForceUnlock(new Identifier("mymod", "ExtraHealth"));
 PerkTreeUtils.RemoveAllPerks("mymod");
 ```
+
+> **注意**：`AddPerk(string treeId, string perkName, ...)`、`ConnectPerks(string, string, string)`、
+> `ForceUnlock(string, string)` 等旧版 string 参数重载已标记 `[Obsolete]`，新项目请统一使用 `Identifier` 版本。
 
 ### BuildingUtils（全新）
 ```csharp

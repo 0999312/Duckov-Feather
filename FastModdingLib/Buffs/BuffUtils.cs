@@ -10,7 +10,8 @@ namespace FastModdingLib
         private static readonly BuffRegistry _buffRegistry = new BuffRegistry();
         private static bool _initialized;
 
-        internal static BuffRegistry Registry => _buffRegistry;
+        /// <summary>暴露给 RegisterBootstrap 用于注册到元表和查询。</summary>
+        public static BuffRegistry Registry => _buffRegistry;
 
         /// <summary>
         /// 初始化：将 BuffRegistry 注册到 <see cref="RegistryManager.Registry"/> 元表。

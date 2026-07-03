@@ -29,6 +29,7 @@ namespace FastModdingLib
 
             RegisterBootstrap.Init();
             EventBusBootstrap.Init();
+            I18n.InitI18n();
         }
 
         /// <summary>

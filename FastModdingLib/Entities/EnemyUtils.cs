@@ -15,7 +15,8 @@ namespace FastModdingLib
         private static bool _initialized;
 
         /// <summary>暴露给 <c>RegisterBootstrap</c> 用于注册到元表。</summary>
-        internal static EnemyRegistry Registry => _enemyRegistry;
+        /// <summary>暴露给 RegisterBootstrap 用于注册到元表和查询。</summary>
+        public static EnemyRegistry Registry => _enemyRegistry;
 
         /// <summary>
         /// 初始化：将 EnemyRegistry 注册到 <see cref="RegistryManager.Registry"/> 元表。

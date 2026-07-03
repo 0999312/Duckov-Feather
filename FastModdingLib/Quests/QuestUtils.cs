@@ -12,7 +12,7 @@ namespace FastModdingLib
         private static readonly QuestRegistry _questRegistry = new QuestRegistry();
 
         /// <summary>暴露给外部用于元注册表注册等场景。</summary>
-        internal static QuestRegistry Registry => _questRegistry;
+        public static QuestRegistry Registry => _questRegistry;
 
         /// <summary>
         /// 注册自定义任务。使用 <see cref="Identifier"/> 标识任务，

@@ -394,6 +394,12 @@ if (ItemUtils.TryGetCustomItem(150001, out Item? item))
     // 找到物品
 }
 
+// 按 Identifier 反查自定义物品（推荐）
+if (ItemUtils.TryGetCustomItem(new Identifier("mymod", "coffee"), out Item? item))
+{
+    // 找到物品
+}
+
 // 批量卸载
 ItemUtils.UnregisterAllItem("mymod");
 ```
@@ -405,10 +411,10 @@ ItemUtils.UnregisterAllItem("mymod");
 ```csharp
 // 异步加载（推荐：加载阶段用，IO 在线程池 + Texture2D 在主线程）
 Sprite? icon = await ItemUtils.LoadSpriteAsync(
-    new Identifier("mymod", "coffee_icon.png"), 150001);
+    new Identifier("mymod", "coffee_icon.png"));
 
 // 便捷重载（需先 ModPathResolver.Register）：
-// Sprite? icon = await ItemUtils.LoadSpriteAsync("coffee_icon.png", 150001);
+// Sprite? icon = await ItemUtils.LoadSpriteAsync("coffee_icon.png");
 ```
 
 同步版本（兼容保留，加载阶段不推荐）：
@@ -416,7 +422,7 @@ Sprite? icon = await ItemUtils.LoadSpriteAsync(
 ```csharp
 // 同步加载（仅兼容旧代码，新项目请用异步版）
 Sprite? icon = ItemUtils.LoadSprite(
-    new Identifier("mymod", "coffee_icon.png"), 150001);
+    new Identifier("mymod", "coffee_icon.png"));
 ```
 
 ---
@@ -606,7 +612,28 @@ var questData = new QuestData
     rewards = new List<RewardData>
     {
         new RewardMoney { id = 1, amount = 5000 },
-        new RewardEXP { id = 2, amount = 200 }
+        new RewardEXP { id = 2, amount = 200 },
+        // 🆕 解锁天赋：任务完成时自动解锁指定天赋
+        new RewardUnlockEndowmentData
+        {
+            id = 3,
+            endowmentId = new Identifier("mymod", "assassin")
+        },
+        // 🆕 解锁建筑：任务完成时开放建筑建造权限
+        new RewardUnlockBuildingData
+        {
+            id = 4,
+            buildingId = new Identifier("mymod", "bounty_shop"),
+            buildingInfo = new BuildingInfo
+            {
+                id = "bounty_shop",
+                prefabName = "Building_Workbench",
+                maxAmount = 1,
+                dimensions = new Vector2Int(3, 3),
+                cost = new BuildingCost { money = 5000 }
+            },
+            prefabName = "Building_Workbench"
+        }
     }
 };
 
@@ -617,8 +644,8 @@ QuestUtils.RegisterQuest(questData, "mymod");
 QuestUtils.RegisterQuest(new Identifier("mymod", "coffee_run"), questData);
 ```
 
-> **新增**：`QuestData`、`TaskRequireItem`、`TaskRequireUseItem`、`TaskKillCount`、`RewardGiveItem`、`RewardUnlockItem` 均支持可选的 `Identifier?` 字段（如 `itemIdentifier`、`weaponIdentifier`）。
-> 设置后，`RegisterQuest` 会在注册时自动解析为对应的 `typeID`；解析失败时回退到原有的 `int` 字段。
+> **新增**：`QuestData`、`TaskRequireItem`、`TaskRequireUseItem`、`TaskKillCount`、`RewardGiveItem`、`RewardUnlockItem`、`RewardUnlockEndowmentData` 均支持可选的 `Identifier?` 字段。
+> `RewardUnlockEndowmentData` 在任务完成时自动解锁指定天赋（AutoClaim），无需 modder 手动处理解锁逻辑。
 >
 > ```csharp
 > // 使用 itemIdentifier 引用自定义物品
@@ -709,7 +736,15 @@ IReadOnlyList<ShopGoodsData> allGoods = ShopUtils.GetAllGoods("Merchant_Normal")
 ### 7.3 编辑商品
 
 ```csharp
+// 按商人 + typeID 编辑
 ShopUtils.EditGoods("Merchant_Normal", 150001, new ShopGoodsData
+{
+    maxStock = 20,
+    priceFactor = 1.5f
+});
+
+// 按 Identifier 编辑（推荐）
+ShopUtils.EditGoods(new Identifier("mymod", "coffee"), new ShopGoodsData
 {
     maxStock = 20,
     priceFactor = 1.5f
@@ -719,14 +754,20 @@ ShopUtils.EditGoods("Merchant_Normal", 150001, new ShopGoodsData
 ### 7.4 移除商品
 
 ```csharp
-// 移除单个商品
+// 移除单个商品（按商人 + typeID）
 ShopUtils.RemoveGoods("Merchant_Normal", 150001);
+
+// 移除单个商品（按 Identifier，推荐）
+ShopUtils.RemoveGoods(new Identifier("mymod", "coffee"));
 
 // 移除指定商人下的所有 FML 注册商品
 ShopUtils.RemoveAllGoods("Merchant_Normal");
 
-// 按 mod 批量卸载
+// 按 mod 批量卸载商品
 ShopUtils.UnregisterAllGoods("mymod");
+
+// 按 mod 批量卸载该模组创建的全部商人 profile
+ShopUtils.RemoveAllProfiles("mymod");
 ```
 
 ### 7.5 创建新商人
@@ -956,7 +997,7 @@ private async UniTask LoadSpritesFrameByFrame(SpriteLoadRequestEvent e)
 {
     foreach (var (itemId, spriteName) in e.Items)
     {
-        await ItemUtils.LoadSpriteAsync(itemId, 10000 + e.Items.IndexOf((itemId, spriteName)));
+        await ItemUtils.LoadSpriteAsync(itemId);
         await UniTask.Yield();  // 等待下一帧
     }
 }
@@ -992,7 +1033,9 @@ EconomyUtils.SetMoney(5000);
 
 // 解锁物品
 EconomyUtils.UnlockItem(itemTypeId);                       // int 重载（原生 TypeID）
+EconomyUtils.UnlockItem(itemTypeId, needConfirm: false, showUI: true); // 可控制是否需要确认、是否弹 UI
 EconomyUtils.UnlockItem(new Identifier("mymod", "coffee")); // Identifier 重载（推荐）
+EconomyUtils.UnlockItem(new Identifier("mymod", "coffee"), needConfirm: false, showUI: true);
 
 // 查询解锁状态
 bool unlocked = EconomyUtils.IsItemUnlocked(itemTypeId);
@@ -1079,10 +1122,30 @@ BuildingUtils.UnregisterBuilding(new Identifier("mymod", "workbench"));
 // 批量卸载指定 mod 注册的全部建筑
 BuildingUtils.UnregisterAllBuildings("mymod");
 
+// ===== 建筑建成回调 =====
+
+// 注册建筑建成回调（modid 自动从 id.Domain 推导）
+BuildingUtils.OnBuildingBuilt(
+    new Identifier("mymod", "workbench"),
+    onBuilt);  // Action<Building>
+
 // 取消建筑建成回调
 BuildingUtils.OffBuildingBuilt(
     new Identifier("mymod", "workbench"),
-    myCallback);  // 需传入与 OnBuildingBuilt 相同的 Action 引用
+    onBuilt);  // 需传入与 OnBuildingBuilt 相同的 Action 引用
+
+// ===== 代码端创建建筑 =====
+
+// 纯代码创建简易 Building（无需 Unity 编辑器预制体）
+Building building = BuildingUtils.CreateSimpleBuilding(
+    new Identifier("mymod", "workbench"),
+    new Vector2Int(2, 2),                     // 占地尺寸
+    existingPrefabName: "Building_Workbench"); // 可选：克隆已有建筑结构
+
+// 设置建筑模型
+BuildingUtils.SetBuildingModel(
+    new Identifier("mymod", "workbench"),
+    myModelPrefab);
 ```
 
 ---
@@ -1143,26 +1206,94 @@ PerkTreeUtils.RemoveAllPerks("mymod");
 
 ## 15. 天赋系统（EndowmentUtils）
 
+> **2026-07-03 更新**：新增 `EndowmentConfig`/`EndowmentModifier` DTO，modder 用纯 C# 配置天赋，
+> 无需接触 `EndowmentEntry` 等游戏内部类型，无需反射。
+
 ```csharp
-// ===== 注册天赋 =====
+// ===== 注册天赋（推荐：使用 FML DTO） =====
 
-// 注册自定义天赋（modid 从 id.Domain 自动推导）
-// FML 内部自动分配 EndowmentIndex（≥10），modder 不接触枚举值
-EndowmentUtils.RegisterEndowment(
-    new Identifier("mymod", "assassin"),  // Identifier（domain=modid, path=天赋名）
-    entry,                                 // 已构造好的 EndowmentEntry 实例
-    modid: "mymod"                         // 可选，默认从 id.Domain 推导
-);
+// 加载图标（从 assets/textures/ 目录的 PNG 文件）
+var icon = ItemUtils.LoadSprite("endowment_assassin");
 
-// 便捷重载：通过效果描述数组创建 EndowmentEntry（无需手动反射设置字段）
-// modifiers: object[] 数组，实际运行时通过反射设置到 EndowmentEntry 的私有字段。
-// 由于 EndowmentEntry.ModifierDescription 是嵌套 struct，无法在编译期引用，
-// 故使用 object[] 替代。每个元素应是具有 statKey/type/value 属性的对象。
+// modder 用纯 C# EndowmentConfig DTO 配置，FML 内部负责转换为游戏原生 EndowmentEntry
 EndowmentUtils.RegisterEndowment(
     new Identifier("mymod", "assassin"),
-    new object[] { /* 运行时构造的 ModifierDescription 对象 */ },
-    unlockedByDefault: false,
-    requirementText: "Complete the assassination mission"
+    new EndowmentConfig
+    {
+        Modifiers = new[]
+        {
+            new EndowmentModifier
+            {
+                StatKey = "moveSpeed",
+                Type = ModifierType.PercentageAdd,
+                Value = 0.15f    // +15% 移动速度
+            },
+            new EndowmentModifier
+            {
+                StatKey = "maxHealth",
+                Type = ModifierType.PercentageAdd,
+                Value = -0.1f    // -10% 最大生命
+            }
+        },
+        Icon = icon,                         // 天赋图标（null 则使用默认）
+        UnlockedByDefault = false,           // false = 需任务解锁
+        RequirementTextKey = "endowment_assassin_requirement"
+    }
+    // modid 可选，默认从 id.Domain 推导
+);
+
+// ===== 通过任务解锁天赋（Endowment 的常规解锁方式） =====
+
+// 步骤 1：注册任务，在任务完成回调中解锁天赋
+var questId = new Identifier("mymod", "quest_assassin_training");
+var endowmentId = new Identifier("mymod", "assassin");
+
+QuestUtils.RegisterQuest(new QuestData
+{
+    ID = questId.Path,
+    NameKey = "quest_assassin_training_name",
+    DescriptionKey = "quest_assassin_training_desc",
+    Tasks = new QuestTask[]
+    {
+        new TaskKillCountData
+        {
+            DescriptionKey = "task_kill_enemies",
+            TargetCount = 10
+        }
+    },
+    Rewards = new QuestReward[]
+    {
+        new RewardMoneyData { Amount = 500 }
+    },
+    // 注意：QuestData 不支持直接指定"完成时解锁天赋"的回调，
+    // 需要通过 EventBus 订阅 QuestTaskFinishedEvent 来实现。
+}, "mymod");
+
+// 步骤 2：订阅任务完成事件，在任务完成时解锁天赋
+EventBusManager.Instance.Sync.Register<QuestTaskFinishedEvent>(e =>
+{
+    // 检查是否是我们关注的任务
+    var quest = QuestUtils.FindQuest(questId);
+    if (quest != null && e.QuestID == quest.ID)
+    {
+        EndowmentUtils.UnlockEndowment(endowmentId);
+    }
+}, 0, "mymod");
+
+// ===== 默认解锁天赋（无需任务） =====
+// 设置 UnlockedByDefault = true，进入基地后直接可选
+EndowmentUtils.RegisterEndowment(
+    new Identifier("mymod", "survivor"),
+    new EndowmentConfig
+    {
+        Modifiers = new[]
+        {
+            new EndowmentModifier { StatKey = "maxHealth", Type = ModifierType.Add, Value = 20 }
+        },
+        Icon = ItemUtils.LoadSprite("endowment_survivor"),
+        UnlockedByDefault = true,    // 默认解锁——直接显示在面板中并可选择
+        RequirementTextKey = ""      // 默认解锁时无需解锁条件文本
+    }
 );
 
 // ===== 查询 =====
@@ -1206,7 +1337,7 @@ EndowmentUtils.UnregisterAllEndowments("mymod");
 
 // 兜底：使用强指定的 EndowmentIndex 注册（仅在需要共享枚举空间时使用）
 EndowmentUtils.RegisterEndowmentWithIndex(
-    new Identifier("mymod", "assassin"),
+    new Identifier("mymod", "legacy"),
     entry,
     (EndowmentIndex)10,  // 显式指定枚举值
     "mymod"

@@ -1,4 +1,4 @@
-using Duckov.PerkTrees;
+﻿using Duckov.PerkTrees;
 using HarmonyLib;
 
 namespace FastModdingLib.PerkTrees.Patches
@@ -13,10 +13,10 @@ namespace FastModdingLib.PerkTrees.Patches
     public static class PerkTreeEnablePatch
     {
         [HarmonyPrefix]
-        public static bool Prefix(string treeId, ref bool __result)
+        public static bool Prefix(string perkTreeID, ref bool __result)
         {
             // 检查 treeId 是否对应 FML 注册的 PerkTree
-            if (PerkTreeUtils.IsFMLTree(treeId))
+            if (PerkTreeUtils.IsFMLTree(perkTreeID))
             {
                 __result = true;
                 return false; // 跳过原生方法

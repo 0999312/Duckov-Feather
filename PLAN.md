@@ -1,7 +1,7 @@
 # Fast-Modding-Lib 开发计划表 (PLAN.md)
 
 > 高层粒度的阶段性路线图。每个阶段进入实施前再细化为代码级子任务与验收标准。
-> 最后更新：2026-07-01
+> 最后更新：2026-07-03
 
 ---
 
@@ -138,13 +138,14 @@ Buildings / PerkTrees / CustomOptions / Entities(待 EnemyUtils) 等模块。
 > 详见 [`PLAN-EventBus.md`](./PLAN-EventBus.md)。已落地 `FastModdingLib/Events/`。
 
 - B1~B6 全部落地：核心总线（修复参考设计两处缺陷——同优先级 handler 不互相覆盖、
-  新增 `Unregister` / `UnregisterAll`）+ 15 个游戏事件桥接（14 个用 `DynamicMethod`
-  反射订阅绕过 Publicizer 二义性）+ I18n 内部迁移 + `EventBusTest` 7 用例
+   新增 `Unregister` / `UnregisterAll`）+ 15 个游戏事件桥接（14 个用 `DynamicMethod`
+   反射订阅绕过 Publicizer 二义性）+ I18n 内部迁移 + `EventBusTest` 7 用例
 - 协程由 `EventBusRunner : MonoBehaviour` 宿主
+- 代码位置：`FastModdingLib/Events/`
 
 #### 1.B — 其他内核加固 ✅
 
-- **[Register 一体化]** R1~R8 全部落地。详见 [`PLAN-Register.md`](./PLAN-Register.md)。
+- **[Register 一体化]** R1~R8 全部落地。代码位置：`FastModdingLib/Register/`。
   - `IRegistry<T>` 扩能 + `ReverseLookupRegistry<T,TKey>` +
     `RegistryManager.CurrentModid` + `EnterModScope`
   - Audio / Quests / Shop / Items / Crafting 五模块旁路字典全部收编
@@ -179,17 +180,14 @@ Buildings / PerkTrees / CustomOptions / Entities(待 EnemyUtils) 等模块。
 - ✅ **PerkTreeUtils**：`AddPerk`/`ConnectPerks`/`ForceUnlock`/`RemovePerk`
 - ✅ **BuildingUtils**：`RegisterBuilding`/`GetBuildingInfo`/`UnregisterBuilding`/
   `PlaceBuilding`(占位)
-- ✅ **EnemyUtils**：已实现（方案 A — Hybrid，`IStateConfig` → `StateMachineToBT.Compile()`）
-  - 详见下文 §3 方案 A + [`PLAN-EnemyUtils.md`](./PLAN-EnemyUtils.md)
+- ✅ **EnemyUtils**：已实现（方案 A — Hybrid，`IStateConfig` → `StateMachineToBT.Compile()`），代码位置：`FastModdingLib/Entities/`
 
 > 已撤回子任务确认：CropUtils 仍等官方实装；BlackMarket 不封装
 
 ---
 
 ### Phase 4 — Building / PerkTree / Endowment / UI 深化 ✅
-**状态**：全部完成。
-
-> 详细计划见 [`PLAN-Phase4-Building-Perk-Endowment-UI.md`](./PLAN-Phase4-Building-Perk-Endowment-UI.md)。
+**状态**：全部完成。代码位置：`FastModdingLib/Buildings/`、`FastModdingLib/PerkTrees/`、`FastModdingLib/Endowment/`、`FastModdingLib/UI/`。
 
 Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐了全部功能缺口：
 
@@ -223,7 +221,7 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 ## 3. EnemyUtils 架构方案 ✅（Phase 3 已完成）
 
 > **已实现**：方案 A — Hybrid（modder 实现 `IStateConfig`，FML 编译为 NodeCanvas `BehaviourTree`）。
-> 详见 [`PLAN-EnemyUtils.md`](./PLAN-EnemyUtils.md)（已归档）。
+> 代码位置：`FastModdingLib/Entities/`。
 
 ### 方案 A — Hybrid（FML 推荐）
 - **modder 视角**：实现 `IStateConfig` C# 接口（state + onUpdate/onEnter/onExit 回调 + transition 条件）
@@ -285,7 +283,7 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 |---|---|---|---|
 | Items / Inventory / Stats | ✅ | 完备（R6: `ReverseLookupRegistry`, `TryGetCustomItem`） |
 | Crafting / Decompose | ✅ | 完备（R7: 迁移至 Registry, per-formula 管理） |
-| Quests | ✅ | 完备（R5: `QuestRegistry`, `UnregisterQuestAll`） |
+| Quests | ✅ | 完备（R5: `QuestRegistry`, `UnregisterQuestAll`; 2026-07: +`RewardUnlockEndowment`/`RewardUnlockBuilding`） |
 | I18n | ✅ | 完备（B4: 内部迁移到 EventBus `LanguageChangedEvent`） |
 | Audio (SFX + BGM + Bus) | ✅ | 完备（R4: 删 mapdata, 扩 BGM/bus volume/mute） |
 | Shop (A–Z) | ✅ | 完备（Add/Remove/Edit/CreateProfile/Query/Unregister） |
@@ -295,8 +293,8 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 | Buffs / 状态效果 | ✅ | Phase 2 完成 |
 | CustomOptions (设置 UI) | ✅ | Phase 2 完成 |
 | Perk Trees | ✅ | Phase 3 基础 + Phase 4 P1 深化（ConnectPerks 重写 + AddPerkBehaviour + RegisterPerkTree + 双 Patch） |
-| Buildings | ✅ | Phase 3 基础 + Phase 4 B1/B2 深化（3 个 Harmony Postfix + PlaceBuilding 反射 + Identifier API） |
-| **Endowment** | ✅ | Phase 4 E1 从零实现（EndowmentUtils + Registry + Patch，全部 Identifier 驱动） |
+| Buildings | ✅ | Phase 3 基础 + Phase 4 B1/B2 深化（3 个 Harmony Postfix + PlaceBuilding 反射 + Identifier API; 2026-07: +`RewardUnlockBuildingData` Quest 解锁） |
+| **Endowment** | ✅ | Phase 4 E1 从零实现（EndowmentUtils + Registry + Patch + `EndowmentConfig` DTO，全部 Identifier 驱动） |
 | **Entities / AI / Spawner** | ✅ | Phase 3 EnemyUtils 完成（方案 A — Hybrid） |
 | ModBehaviour 生命周期 | ✅ | OnAfterSetup + OnBeforeDeactivate 完整卸载链 |
 | Save/Load 自定义数据 | ⚠️ | 通过 EventBus `CollectSaveDataEvent` 桥接，声明式基类待补 |
@@ -320,12 +318,12 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 
 ---
 
-## 6. 关键子模块文档索引
+## 6. 关键子模块代码索引
 
-- **EventBus 详细设计 →** [`PLAN-EventBus.md`](./PLAN-EventBus.md) ✅ 已完成
-- **Register 一体化详细设计 →** [`PLAN-Register.md`](./PLAN-Register.md) ✅ 已完成
-- **EnemyUtils 三方案 →** [`PLAN-EnemyUtils.md`](./PLAN-EnemyUtils.md) ✅ 已完成（方案 A — Hybrid）
-- **Phase 4 深化实施 →** [`PLAN-Phase4-Building-Perk-Endowment-UI.md`](./PLAN-Phase4-Building-Perk-Endowment-UI.md) ✅ 已完成
+- **EventBus →** `FastModdingLib/Events/` ✅ 已完成
+- **Register 一体化 →** `FastModdingLib/Register/` ✅ 已完成
+- **EnemyUtils 三方案 →** `FastModdingLib/Entities/` ✅ 已完成（方案 A — Hybrid）
+- **Phase 4 深化 →** `FastModdingLib/Buildings/`、`FastModdingLib/PerkTrees/`、`FastModdingLib/Endowment/`、`FastModdingLib/UI/` ✅ 已完成
 - EnemyUtils 三方案对比 → 本文 §3（已归档）
 
 ---
@@ -339,10 +337,10 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 - ✅ **Phase 3** — 内容创作系统全部完成（Shop / Audio / Buildings 基础 / PerkTrees 基础 / EnemyUtils）
 
 ### ✅ 已完成
-- **Phase 4** — Building / PerkTree / Endowment / UI 深化（详见 [`PLAN-Phase4-Building-Perk-Endowment-UI.md`](./PLAN-Phase4-Building-Perk-Endowment-UI.md)）
+- **Phase 4** — Building / PerkTree / Endowment / UI 深化
   - **B1/B2**：Building 3 个 Harmony Postfix + `PlaceBuilding` 反射实现 + Identifier API 迁移
   - **P1**：PerkTree `ConnectPerks` 重写 + `AddPerkBehaviour` + `RegisterPerkTree` + 双 Patch
-  - **E1**：Endowment 从零实现（`EndowmentUtils` + `EndowmentRegistry` + `EndowmentManager` Patch）
+  - **E1**：Endowment 从零实现（`EndowmentUtils` + `EndowmentRegistry` + `EndowmentManager` Patch + `EndowmentConfig` DTO）
   - **U1**：UI 交互入口模板（3 个 InteractableBase 子类）
 
 ### 待启动
@@ -351,5 +349,4 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 
 ---
 
-*本 PLAN.md 仅为高层路线图。具体代码级执行计划在每个子模块文档单独产出
-（目前已有：PLAN-EventBus.md、PLAN-Register.md、PLAN-EnemyUtils.md、PLAN-Phase4-Building-Perk-Endowment-UI.md）。*
+*本 PLAN.md 仅为高层路线图。各模块代码实现见对应目录。*

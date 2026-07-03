@@ -12,9 +12,9 @@ namespace FastModdingLib
 
         /// <summary>
         /// 暴露 <see cref="_shopRegistry"/> 供 <c>RegisterBootstrap</c> 注册到
-        /// <see cref="RegistryManager.Registry"/> 元表（internal：仅同程序集 Bootstrap 访问）。
+        /// <see cref="RegistryManager.Registry"/> 元表。
         /// </summary>
-        internal static ShopRegistry Registry => _shopRegistry;
+        public static ShopRegistry Registry => _shopRegistry;
 
         // —— Identifier 构造（domain=owner modid, path=shop_{merchantProfileID}_{typeID}）——
         private static Identifier MakeIdentifier(string owner, string merchantProfileID, int typeID)

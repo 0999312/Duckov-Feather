@@ -18,7 +18,8 @@ namespace FastModdingLib
         private static readonly MethodInfo? _buyAndPlaceMethod = typeof(BuildingManager)
             .GetMethod("BuyAndPlace", BindingFlags.NonPublic | BindingFlags.Static);
 
-        internal static BuildingRegistry Registry => _buildingRegistry;
+        /// <summary>暴露给 RegisterBootstrap 和 Patch 层用于注册到元表和查询。</summary>
+        public static BuildingRegistry Registry => _buildingRegistry;
 
         /// <summary>初始化：将 BuildingRegistry 注册到 RegistryManager 元表。</summary>
         internal static void Init()
@@ -152,24 +153,25 @@ namespace FastModdingLib
 
         // ===== 便捷回调 =====
 
-        private static readonly Dictionary<string, List<(Identifier buildingId, Action<Building> callback, string modid)>> _buildingCallbacks
-            = new Dictionary<string, List<(Identifier, Action<Building>, string)>>();
+        private static readonly Dictionary<string, List<(Identifier buildingId, Action<Building> callback)>> _buildingCallbacks
+            = new Dictionary<string, List<(Identifier, Action<Building>)>>();
         private static bool _buildingEventsHooked;
 
         /// <summary>
         /// 注册建筑建成回调。当指定 buildingId 的建筑建造完成时触发。
         /// FML 内部订阅 <c>BuildingManager.OnBuildingBuiltComplex</c>，按 buildingInfo.id 匹配。
+        /// owner modid 自动从 <paramref name="buildingId"/>.<see cref="Identifier.Domain"/> 推导。
         /// </summary>
-        public static void OnBuildingBuilt(Identifier buildingId, Action<Building> callback, string modid)
+        public static void OnBuildingBuilt(Identifier buildingId, Action<Building> callback)
         {
             Init();
             HookBuildingEvents();
 
             var path = buildingId.Path;
             if (!_buildingCallbacks.ContainsKey(path))
-                _buildingCallbacks[path] = new List<(Identifier, Action<Building>, string)>();
+                _buildingCallbacks[path] = new List<(Identifier, Action<Building>)>();
 
-            _buildingCallbacks[path].Add((buildingId, callback, modid));
+            _buildingCallbacks[path].Add((buildingId, callback));
         }
 
         /// <summary>移除建筑建成回调。</summary>
@@ -199,7 +201,7 @@ namespace FastModdingLib
         {
             if (!_buildingCallbacks.TryGetValue(info.id, out var list)) return;
             var prefab = info.Prefab;
-            foreach (var (buildingId, callback, modid) in list)
+            foreach (var (buildingId, callback) in list)
             {
                 try
                 {
