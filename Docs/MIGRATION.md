@@ -84,9 +84,10 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
 ItemUtils.RegisterItem(new Identifier("mymod", "coffee"), coffeeItem);
 ```
 
-**方法 B — 显式传 modid（旧式 API 仍保留）**
+**方法 B — 显式传 modid（旧式 API 仍保留为 internal）**
 ```csharp
-CraftingUtils.AddCraftingFormula("coffee_recipe", 100, costItems, 200001, 1, modid: "MyWeaponPack");
+// 旧 int 重载已 internal，推荐使用 CraftingFormulaData 方式
+CraftingUtils.AddCraftingFormula(new CraftingFormulaData { ... });
 ```
 
 **方法 C — 使用 EnterModScope**
@@ -192,37 +193,33 @@ ItemUtils.CreateCustomItem(new Identifier("mymod", "coffee"), drinkData);
 
 | 方法 | 旧签名 | 新签名 |
 |------|--------|--------|
-| `AddCraftingFormula` | `(..., string modid = "old_fml_version")` | `(string formulaId, long money, (int id, long amount)[] costItems, int resultItemId, int resultItemAmount, string[]? tags, string requirePerk, bool unlockByDefault = true, bool hideInIndex = false, bool lockInDemo = false, string? modid = null)` |
-| `AddDecomposeFormula` | `(..., string modid = "old_fml_version")` | `(int itemId, long money, (int id, long amount)[] resultItems, string? modid = null)` |
+| `AddCraftingFormula` | `(..., string modid = "old_fml_version")` | `(CraftingFormulaData data)` — 推荐；旧 int 重载已 internal |
+| `AddDecomposeFormula` | `(..., string modid = "old_fml_version")` | `(DecomposeFormulaData data)` — 推荐；旧 int 重载已 internal |
 | `RemoveAllAddedFormulas` | `(string modid = "old_fml_version")` | `(string? modid = null)` |
 | `RemoveAllAddedDecomposeFormulas` | `(string modid = "old_fml_version")` | `(string? modid = null)` |
 
 ### 示例
 ```csharp
-// 合成配方（带标签和前置技能）
-CraftingUtils.AddCraftingFormula(
-    "ammo_pack", 100,
-    new[] { (1001, 5L), (1002, 2L) },
-    resultItemId: 200001,
-    resultItemAmount: 10,
-    tags: new[] { "WorkBenchAdvanced" },
-    requirePerk: "reloading_expert",
-    unlockByDefault: false,
-    hideInIndex: false,    // 是否在配方索引中隐藏
-    lockInDemo: false,     // Demo 版本是否锁定
-    modid: "MyMod"
-);
+// 合成配方（推荐：CraftingFormulaData 方式，全 Identifier）
+CraftingUtils.AddCraftingFormula(new CraftingFormulaData
+{
+    Id = new Identifier("MyMod", "ammo_pack"),
+    Money = 100,
+    CostItems = new[] { ItemEntry.Of("duckov:Gunpowder", 5), ItemEntry.Of("duckov:Iron", 2) },
+    Result = ItemEntry.Of("MyMod:ammo_pack", 10),
+    Tags = new[] { "WorkBenchAdvanced" },
+    RequirePerk = "reloading_expert",
+    UnlockByDefault = false
+});
 
-// 分解配方
-CraftingUtils.AddDecomposeFormula(
-    itemId: 200001, money: 50,
-    new[] { (1001, 3L) },
-    modid: "MyMod"
-);
-
-// 卸载
-CraftingUtils.RemoveAllAddedFormulas("MyMod");
-CraftingUtils.RemoveAllAddedDecomposeFormulas("MyMod");
+// 分解配方（全 Identifier）
+CraftingUtils.AddDecomposeFormula(new DecomposeFormulaData
+{
+    Id = new Identifier("MyMod", "scrap_ammo"),
+    SourceItemId = new Identifier("MyMod", "ammo_pack"),
+    Money = 50,
+    ResultItems = new[] { ItemEntry.Of("duckov:Gunpowder", 3) }
+});
 ```
 
 ### 新增 per-formula 管理
@@ -267,40 +264,26 @@ ShopUtils.AddGoods(data);
 // 但无法卸载，无法查询，无法编辑
 ```
 
-### 新版（完整的 CRUD）
+### 新版（完整的 CRUD，全部 Identifier 化）
 ```csharp
-// 1. 注册商品（modid 走 CurrentModid 兜底或显式传入）
+// 1. 注册商品（使用 itemIdentifier 引用物品）
 ShopUtils.AddGoods(new ShopGoodsData
 {
     merchantProfileID = "Merchant_Normal",
-    typeID = 150001,
+    itemIdentifier = new Identifier("mymod", "coffee"),  // typeID 已 internal，改用 Identifier
     maxStock = 10,
     priceFactor = 1.0f
 }, "MyMod");
 
-// 2. 查询商品
-if (ShopUtils.TryGetGoods("Merchant_Normal", 150001, out var data))
-{
-    Debug.Log($"Current stock: {data.maxStock}");
-}
-
-// 3. 修改商品属性
-ShopUtils.EditGoods("Merchant_Normal", 150001, new ShopGoodsData
-{
-    maxStock = 20,
-    priceFactor = 1.5f
-});
-
-// 4. 移除单个商品
-ShopUtils.RemoveGoods("Merchant_Normal", 150001);
-
-// 5. 创建新商人
-ShopUtils.CreateMerchantProfile("MyTrader");
-
-// 6. 按商人批量移除
+// 2. 查询/修改/移除使用 Identifier 版本
+// ShopUtils.TryGetGoods/EditGoods/RemoveGoods 的 int 重载已 internal
+// 改为在注册时记录 Identifier，之后用 Identifier 操作
 ShopUtils.RemoveAllGoods("Merchant_Normal");
 
-// 7. 按 mod 批量卸载
+// 3. 创建新商人
+ShopUtils.CreateMerchantProfile("MyTrader");
+
+// 4. 按 mod 批量卸载
 ShopUtils.UnregisterAllGoods("MyMod");
 ```
 
