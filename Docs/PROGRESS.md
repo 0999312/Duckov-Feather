@@ -1,6 +1,22 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-03
+> 最后更新：2026-07-06
+
+---
+
+## 待测试模块
+
+以下模块代码已完成但尚未在实际游戏环境中验证：
+
+| 模块 | Phase | 关联文件 | 测试要点 |
+|------|-------|---------|---------|
+| **Building** | Phase 4 | `BuildingUtils.cs`, `BuildingRegistry.cs`, `BuildingCollectionPatch.cs` | 建筑注册、PlaceBuilding 反射放置、GetInfo/GetPrefab 回退、建造面板显示 |
+| **PerkTree** | Phase 4 | `PerkTreeUtils.cs`, `PerkTreeRegistry.cs`, `PerkTreeEnablePatch.cs`, `PerkTreeCollectGuard.cs` | 自定义 PerkTree 创建/显示、AddPerk/ConnectPerks、ForceUnlock、PerkBehaviour 挂载 |
+| **NPC / Enemy** | Phase 3–4 | `EnemyUtils.cs`, `EnemyRegistry.cs`, `EnemyPresetData.cs`, `IStateConfig.cs`, `StateMachineToBT.cs`, `OtherPatches.cs`, `AICharacterControllerInit.cs` | 自定义敌人注册/生成、IStateConfig→BT 编译、捏脸引用、AI 行为注入 |
+| **NPC 武器注入** | — | `WeaponInjectionUtils.cs`, `WeaponInjectionRegistry.cs` | 按 preset/team 注入武器、卸载恢复 |
+| **抽奖箱注入** | — | `LotteryBoxUtils.cs`, `LotteryBoxPatch.cs`, `LotteryBoxRegistry.cs` | 物品注入/权重、枪/刀隔离、卸载恢复 |
+
+> 测试通过后更新此表对应行状态为 ✅，并补充测试环境信息（游戏版本、Mod 列表）。
 
 ---
 
