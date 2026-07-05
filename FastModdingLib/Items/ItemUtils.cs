@@ -1,6 +1,8 @@
 using Cysharp.Threading.Tasks;
 using Duckov.ItemBuilders;
 using Duckov.Utilities;
+
+using FastModdingLib.Items;
 using FastModdingLib.Register;
 using FastModdingLib.Utils;
 using ItemStatsSystem;
@@ -9,6 +11,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+
+using Unity.VisualScripting;
+
 using UnityEngine;
 
 namespace FastModdingLib
@@ -359,14 +364,15 @@ namespace FastModdingLib
             return GameplayDataSettings.Tags.Get(tagName);
         }
 
-        private static int lastKnownUsed = -1;
-
         /// <summary>
         /// TypeID 预定表：异步加载在 await 前预占 TypeID，防止被低优先级同步加载抢占。
         /// key=TypeID, value=预定者 Identifier。RegisterItem 确认后清除。
         /// </summary>
         private static readonly Dictionary<int, Identifier> _reservedTypeIds = new Dictionary<int, Identifier>();
         private static readonly object _reservationLock = new object();
+
+        private const int FallbackTypeIdStart = 90000;
+        private const int ForwardScanRange = 10000;
 
         /// <summary>
         /// 二重检测：游戏原生静态表 + FML 已注册动态条目。
@@ -383,7 +389,6 @@ namespace FastModdingLib
 
         /// <summary>
         /// 检查 TypeID 是否被当前 Identifier 之外的其他人预定。
-        /// 自己预定的 TypeID 不视为冲突——允许异步加载自身完成后正常注册。
         /// </summary>
         private static bool IsTypeIdReservedByOther(int tid, Identifier currentId)
         {
@@ -396,23 +401,37 @@ namespace FastModdingLib
         }
 
         /// <summary>
+        /// 从 preferred 位置向后扫描空闲 TypeID。先扫 preferred+1 ~ preferred+ForwardScanRange，
+        /// 无空闲则回退到 FallbackTypeIdStart 起扫描。每次检测均查占用+预定。
+        /// </summary>
+        private static int FindNextFreeTypeId(int preferred, Identifier id)
+        {
+            // 前向扫描
+            int scanEnd = preferred + ForwardScanRange;
+            for (int tid = preferred + 1; tid < scanEnd; tid++)
+            {
+                if (!IsTypeIdOccupied(tid) && !IsTypeIdReservedByOther(tid, id))
+                    return tid;
+            }
+            // 兜底：从 90000 起扫描
+            int fallback = FallbackTypeIdStart;
+            while (IsTypeIdOccupied(fallback) || IsTypeIdReservedByOther(fallback, id))
+                fallback++;
+            return fallback;
+        }
+
+        /// <summary>
         /// 预定 TypeID（供异步加载在 await 前调用）。如果首选 TypeID 已被占用或预定，
-        /// 自动通过 lastKnownUsed 分配空闲值。返回实际分配的 TypeID。
+        /// 通过 FindNextFreeTypeId 从 preferred 位置后移扫描空闲值。返回实际分配的 TypeID。
         /// </summary>
         internal static int ReserveTypeId(Identifier id, int preferredTypeId)
         {
             lock (_reservationLock)
             {
                 int tid = preferredTypeId;
-                while (IsTypeIdOccupied(tid) || _reservedTypeIds.ContainsKey(tid))
+                if (IsTypeIdOccupied(tid) || _reservedTypeIds.ContainsKey(tid))
                 {
-                    lastKnownUsed++;
-                    tid = lastKnownUsed;
-                    while (IsTypeIdOccupied(tid))
-                    {
-                        lastKnownUsed++;
-                        tid = lastKnownUsed;
-                    }
+                    tid = FindNextFreeTypeId(preferredTypeId, id);
                 }
                 _reservedTypeIds[tid] = id;
                 return tid;
@@ -458,15 +477,10 @@ namespace FastModdingLib
         {
             string owner = id.Domain;
 
-            // 冲突检测：游戏原生表 + FML 已注册 + 被其他 Identifier 预定，任一命中即重新分配
+            // 冲突检测：游戏原生表 + FML 已注册 + 被其他 Identifier 预定
             if (IsTypeIdOccupied(item.TypeID) || IsTypeIdReservedByOther(item.TypeID, id))
             {
-                do
-                {
-                    lastKnownUsed++;
-                } while (IsTypeIdOccupied(lastKnownUsed) || IsTypeIdReservedByOther(lastKnownUsed, id));
-
-                item.TypeID = lastKnownUsed;
+                item.TypeID = FindNextFreeTypeId(item.TypeID, id);
             }
             if (RegistryManager.Instance.ItemID.TryGet(id, out _))
             {

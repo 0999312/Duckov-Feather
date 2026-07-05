@@ -380,23 +380,18 @@ ItemUtils.CreateCustomBullet(new Identifier("mymod", "bullet_556"), bulletData);
 
 ### 4.7 TypeID 冲突自动处理
 
-如果 `itemId` 与已有物品冲突，`RegisterItem` 会自动分配一个可用的 ID：
+若 `itemId` 与已有物品（游戏原生或已注册）冲突，FML 从指定位置向后扫描（范围 +10000），
+无空闲则兜底从 90000 开始：
 
 ```csharp
-// 即使 150001 已被占用，也不会报错
+// config.itemId = 150001，若被占用则扫描 150002~160001，不行再从 90000 起
 ItemUtils.CreateCustomItem(new Identifier("mymod", "coffee"), itemData);
 ```
 
 ### 4.8 查询与卸载
 
 ```csharp
-// 按 TypeID 反查自定义物品
-if (ItemUtils.TryGetCustomItem(150001, out Item? item))
-{
-    // 找到物品
-}
-
-// 按 Identifier 反查自定义物品（推荐）
+// 按 Identifier 反查（推荐）
 if (ItemUtils.TryGetCustomItem(new Identifier("mymod", "coffee"), out Item? item))
 {
     // 找到物品
@@ -665,11 +660,8 @@ var questData = new QuestData
 QuestUtils.RegisterQuest(new Identifier("mymod", "coffee_run"), questData);
 ```
 
-> **数字 ID 全自分配**：`QuestData.ID`、`TaskData.id`、`RewardData.id` 均由 FML 在注册时自动分配：
-> - Quest ID 从 1000 起递增（避开原版任务）
-> - Task/Reward id 从 1 起递增（游戏原生 API 要求唯一）
-> 
-> modder 无需也无法手动设置这些字段（已 internal）。
+> **数字 ID 全自分配**：`QuestData.ID`（从 1000 起递增）、`TaskData.id`、`RewardData.id`（从 1 起递增）
+> 均由 FML 在注册时自动分配。modder 无需手动设置（已 internal）。
 > `RewardUnlockEndowmentData` 在任务完成时自动解锁指定天赋（AutoClaim），无需 modder 手动处理解锁逻辑。
 
 ### 6.3 任务关系图
