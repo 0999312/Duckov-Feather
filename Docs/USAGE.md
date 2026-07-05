@@ -665,8 +665,11 @@ var questData = new QuestData
 QuestUtils.RegisterQuest(new Identifier("mymod", "coffee_run"), questData);
 ```
 
-> **数字 ID 已 internal 化**：`QuestData.ID`、`TaskRequireItem.itemTypeID`、`TaskKillCount.weaponTypeID` 等字段不再公开。
-> 所有物品引用使用 `itemIdentifier`（Identifier?），FML 内部自动解析为游戏原生 TypeID。
+> **数字 ID 全自分配**：`QuestData.ID`、`TaskData.id`、`RewardData.id` 均由 FML 在注册时自动分配：
+> - Quest ID 从 1000 起递增（避开原版任务）
+> - Task/Reward id 从 1 起递增（游戏原生 API 要求唯一）
+> 
+> modder 无需也无法手动设置这些字段（已 internal）。
 > `RewardUnlockEndowmentData` 在任务完成时自动解锁指定天赋（AutoClaim），无需 modder 手动处理解锁逻辑。
 
 ### 6.3 任务关系图

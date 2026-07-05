@@ -10,6 +10,7 @@ namespace FastModdingLib
     public static class QuestUtils
     {
         private static readonly QuestRegistry _questRegistry = new QuestRegistry();
+        private static int _nextQuestId = 1000;  // 自定义任务 ID 从 1000 起，避开原版任务
 
         /// <summary>暴露给外部用于元注册表注册等场景。</summary>
         public static QuestRegistry Registry => _questRegistry;
@@ -71,9 +72,19 @@ namespace FastModdingLib
 
         private static void RegisterQuestInternal(Identifier id, QuestData data, string modid)
         {
-            // 解析 task / reward 中的 itemIdentifier
+            // 解析 task / reward 中的 itemIdentifier → 内部 itemTypeID
             ResolveTaskItemRefs(data.tasks);
             ResolveRewardItemRefs(data.rewards);
+
+            // 自分配 Quest ID（从 1000 起，避开原版任务占用的低位 ID）
+            data.ID = _nextQuestId++;
+
+            // 自分配 Task/Reward 的 id（从 1 开始递增，游戏原生 API 要求唯一）
+            int nextId = 1;
+            foreach (var task in data.tasks)
+                task.id = nextId++;
+            foreach (var reward in data.rewards)
+                reward.id = nextId++;
 
             Quest quest = new GameObject($"Quest_{data.displayName}").AddComponent<Quest>();
             UnityEngine.Object.DontDestroyOnLoad(quest.gameObject);
