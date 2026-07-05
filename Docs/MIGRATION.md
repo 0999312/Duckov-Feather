@@ -161,7 +161,7 @@ modid **不再作为方法参数**，而是从 `id.Domain` 自动推导。modPat
 | `RegisterItemFromBundle` | `(AssetBundle bundle, string name, string modid)` | `(Identifier id, AssetBundle bundle, string name)` |
 | `CreateCustomBullet` | `(BulletData config, string modPath, string modid)` | `(Identifier id, BulletData config)` |
 | `UnregisterAllItem` | `(string modid)` | `(string? modid = null)` — 走 CurrentModid 兜底 |
-| `TryGetCustomItem` | — | `(int typeID, out Item? item)` — 不变 |
+| `TryGetCustomItem` | `(int typeID, out Item? item)` | `(Identifier id, out Item? item)` — 仅 Identifier 版本公开，int 版本 internal |
 
 ### 新增 API
 ```csharp
@@ -497,8 +497,8 @@ EconomyUtils.AddMoney(1000);
 EconomyUtils.RemoveMoney(500);
 EconomyUtils.SetMoney(5000);
 long money = EconomyUtils.GetMoney();
-EconomyUtils.UnlockItem(itemTypeId);
-bool unlocked = EconomyUtils.IsItemUnlocked(itemTypeId);
+EconomyUtils.UnlockItem(new Identifier("mymod", "coffee"));
+bool unlocked = EconomyUtils.IsItemUnlocked(new Identifier("mymod", "coffee"));
 
 // 订阅金钱变化
 EconomyUtils.OnMoneyChanged(handler);
@@ -510,8 +510,9 @@ EconomyUtils.RegisterMoneyChangedCallback((old, now) => { ... });
 // 注册 Buff（modid 从 id.Domain 自动推导）
 BuffUtils.RegisterBuff(new Identifier("mymod", "mybuff"), buffPrefab);
 
-// 按 ID 查找 Buff
-Buff buff = BuffUtils.FindBuff(buffID);
+// 按 ID 反查 Buff Identifier
+if (BuffUtils.TryGetBuffIdentifier(buffID, out var buffId))
+    Debug.Log($"Buff: {buffId}");
 
 // 批量卸载
 BuffUtils.UnregisterAllBuffs("MyMod");
@@ -695,7 +696,9 @@ public class MyGunMod : Duckov.Modding.ModBehaviour, IHasModid
 **A**: 旧版只有基本的读写，新版完整支持 CRUD + owner 追踪 + 批量卸载 + 遍历。所有模块（Quest/Shop/Buff/Building/Perk）均统一使用此接口。
 
 ### Q: `TryGetCustomItem` 的签名变了吗？
-**A**: 没变——仍然是 `TryGetCustomItem(int typeID, out Item? item)`。内部实现改为走 `RegistryManager.Instance.ItemID`（`ReverseLookupRegistry`），但对外接口保持一致。
+**A**: 变了——数字 ID 版本 `TryGetCustomItem(int typeID, out Item? item)` 已降级为 `internal`。
+modder 应使用 `TryGetCustomItem(Identifier id, out Item? item)`。
+原版物品可通过 `GameItemLookup.TryGetIdentifier(int typeId, out Identifier id)` 反查后传入。
 
 ---
 

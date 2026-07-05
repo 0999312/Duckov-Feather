@@ -429,6 +429,35 @@ Sprite? icon = ItemUtils.LoadSprite(
 
 ---
 
+### 4.x 原版物品反查（GameItemLookup）
+
+引用游戏原版物品时，使用 `duckov` 域。如果只知道数字 TypeID，可以通过反查 API 获取 Identifier：
+
+```csharp
+// 已知 displayName → 直接构造
+ItemEntry.Of(Identifier("duckov", "AK-47"), 1);
+
+// 只知道数字 TypeID → 反查
+if (GameItemLookup.TryGetIdentifier(1001, out var id))
+    ItemEntry.Of(id, 1);
+
+// 按标签浏览全部原版物品
+if (GameItemLookup.TryFindByTag("Gun", out var guns))
+{
+    foreach (var gun in guns)
+        Debug.Log($"Gun: {gun}");  // duckov:AK-47, duckov:M4A1, ...
+}
+
+// 遍历全部索引
+foreach (var id in GameItemLookup.GetAllIdentifiers())
+    Debug.Log($"Vanilla item: {id}");
+```
+
+> `GameItemLookup` 在 FML 启动时自动扫描全量原版物品（约数千条），建立 `Identifier ↔ TypeID` 双向映射。
+> 查询顺序：FML 注册的自定义物品 → 原版物品反查表。
+
+---
+
 ## 5. 合成配方（CraftingUtils）
 
 ### 5.1 数据模型
@@ -570,61 +599,54 @@ FML 提供 5 种任务类型和 4 种奖励类型：
 
 | 类 | 用途 | 关键属性 |
 |----|------|----------|
-| `TaskRequireItem` | 提交物品 | `itemTypeID`, `itemIdentifier` (Identifier?), `requiredAmount` |
+| `TaskRequireItem` | 提交物品 | `itemIdentifier` (Identifier?), `requiredAmount` |
 | `TaskRequireMoney` | 提交金钱 | `money` |
-| `TaskRequireUseItem` | 使用物品 | `itemTypeID`, `itemIdentifier` (Identifier?), `amount` |
-| `TaskKillCount` | 击杀目标 | `requireAmount`, `weaponTypeID`, `weaponIdentifier` (Identifier?), `requireEnemy`, `requireHeadshot` |
+| `TaskRequireUseItem` | 使用物品 | `itemIdentifier` (Identifier?), `amount` |
+| `TaskKillCount` | 击杀目标 | `requireAmount`, `weaponIdentifier` (Identifier?), `requireEnemy`, `requireHeadshot` |
 
 **可用 RewardData：**
 
 | 类 | 用途 | 关键属性 |
 |----|------|----------|
-| `RewardGiveItem` | 给予物品 | `itemTypeID`, `itemIdentifier` (Identifier?), `amount` |
+| `RewardGiveItem` | 给予物品 | `itemIdentifier` (Identifier?), `amount` |
 | `RewardEXP` | 给予经验 | `amount` |
 | `RewardMoney` | 给予金钱 | `amount` |
-| `RewardUnlockItem` | 解锁商店物品 | `itemTypeID`, `itemIdentifier` (Identifier?) |
+| `RewardUnlockItem` | 解锁商店物品 | `itemIdentifier` (Identifier?) |
 
 ### 6.2 注册任务
 
 ```csharp
 var questData = new QuestData
 {
-    ID = 1001,
+    // ID 由 Identifier 管理（不再使用数字 ID）
+    Id = new Identifier("mymod", "coffee_run"),
     displayName = "quest_coffee_run",
     description = "quest_coffee_run_desc",
     questGiver = QuestGiverID.Fence,
     requireLevel = 5,
-    requireItemID = -1,  // 不需要前置物品
     tasks = new List<TaskData>
     {
         new TaskRequireItem
         {
-            id = 1,
-            itemTypeID = 150001,
+            itemIdentifier = new Identifier("mymod", "coffee"),
             requiredAmount = 5
         },
         new TaskKillCount
         {
-            id = 2,
             requireAmount = 10,
-            requireEnemy = "Scav",
-            weaponTypeID = -1
+            requireEnemy = "Scav"
         }
     },
     rewards = new List<RewardData>
     {
-        new RewardMoney { id = 1, amount = 5000 },
-        new RewardEXP { id = 2, amount = 200 },
-        // 🆕 解锁天赋：任务完成时自动解锁指定天赋
+        new RewardMoney { amount = 5000 },
+        new RewardEXP { amount = 200 },
         new RewardUnlockEndowmentData
         {
-            id = 3,
             endowmentId = new Identifier("mymod", "assassin")
         },
-        // 🆕 解锁建筑：任务完成时开放建筑建造权限
         new RewardUnlockBuildingData
         {
-            id = 4,
             buildingId = new Identifier("mymod", "bounty_shop"),
             buildingInfo = new BuildingInfo
             {
@@ -639,43 +661,42 @@ var questData = new QuestData
     }
 };
 
-// 传统方式
-QuestUtils.RegisterQuest(questData, "mymod");
-
 // Identifier 方式（推荐）—— domain 自动推导为 owner modid
 QuestUtils.RegisterQuest(new Identifier("mymod", "coffee_run"), questData);
 ```
 
-> **新增**：`QuestData`、`TaskRequireItem`、`TaskRequireUseItem`、`TaskKillCount`、`RewardGiveItem`、`RewardUnlockItem`、`RewardUnlockEndowmentData` 均支持可选的 `Identifier?` 字段。
+> **数字 ID 已 internal 化**：`QuestData.ID`、`TaskRequireItem.itemTypeID`、`TaskKillCount.weaponTypeID` 等字段不再公开。
+> 所有物品引用使用 `itemIdentifier`（Identifier?），FML 内部自动解析为游戏原生 TypeID。
 > `RewardUnlockEndowmentData` 在任务完成时自动解锁指定天赋（AutoClaim），无需 modder 手动处理解锁逻辑。
->
-> ```csharp
-> // 使用 itemIdentifier 引用自定义物品
-> new TaskRequireItem
-> {
->     id = 1,
->     itemIdentifier = new Identifier("mymod", "coffee"),  // 优先解析
->     itemTypeID = 150001,  // 回退
->     requiredAmount = 5
-> }
-> ```
 
 ### 6.3 任务关系图
 
 ```csharp
-// 设置任务前置/后置关系
-QuestUtils.AddQuestRelation(
-    id: 1002,        // 当前任务 ID
-    before: 1001,    // 需要完成的前置任务（-1 表示无）
-    after: 1003      // 完成后解锁的任务（-1 表示无）
-);
+// 设置任务前置/后置关系（Identifier 版本）
+var current = new Identifier("mymod", "coffee_run");
+var preReq  = new Identifier("mymod", "intro_quest");
+var unlocks = new Identifier("mymod", "next_quest");
+
+QuestUtils.AddQuestRelation(current, before: preReq, after: unlocks);
 ```
 
-### 6.4 卸载任务
+### 6.4 任务 ID 反查
 
 ```csharp
-// 移除单个任务
-QuestUtils.UnregisterQuest(1001);
+// 数字 ID → Identifier
+if (QuestUtils.TryGetQuestIdentifier(1001, out var id))
+    QuestUtils.UnregisterQuest(id);
+
+// Identifier → 数字 ID（需传给游戏原生 API 时）
+if (QuestUtils.TryGetQuestId(id, out var questId))
+    QuestUtils.AddQuestRelation(questId, 1002);
+```
+
+### 6.5 卸载任务
+
+```csharp
+// 按 Identifier 移除单个任务
+QuestUtils.UnregisterQuest(new Identifier("mymod", "coffee_run"));
 
 // 批量卸载
 QuestUtils.UnregisterQuestAll("mymod");
@@ -1033,15 +1054,12 @@ EconomyUtils.RemoveMoney(500);
 // 直接设置
 EconomyUtils.SetMoney(5000);
 
-// 解锁物品
-EconomyUtils.UnlockItem(itemTypeId);                       // int 重载（原生 TypeID）
-EconomyUtils.UnlockItem(itemTypeId, needConfirm: false, showUI: true); // 可控制是否需要确认、是否弹 UI
-EconomyUtils.UnlockItem(new Identifier("mymod", "coffee")); // Identifier 重载（推荐）
+// 解锁物品（仅 Identifier 版本公开）
+EconomyUtils.UnlockItem(new Identifier("mymod", "coffee"));
 EconomyUtils.UnlockItem(new Identifier("mymod", "coffee"), needConfirm: false, showUI: true);
 
 // 查询解锁状态
-bool unlocked = EconomyUtils.IsItemUnlocked(itemTypeId);
-unlocked = EconomyUtils.IsItemUnlocked(new Identifier("mymod", "coffee"));
+bool unlocked = EconomyUtils.IsItemUnlocked(new Identifier("mymod", "coffee"));
 
 // 物品解锁确认流程（needConfirm = true 时使用）
 EconomyUtils.ConfirmUnlockItem(new Identifier("mymod", "coffee"));
@@ -1053,7 +1071,7 @@ if (EconomyUtils.IsItemWaitingForUnlockConfirm(new Identifier("mymod", "coffee")
 // 订阅金钱变化
 EconomyUtils.OnMoneyChanged(handler);
 EconomyUtils.OnItemUnlockStateChanged(e => {
-    Debug.Log($"Item unlock state changed: {e.ItemTypeID}");
+    Debug.Log($"Item unlock state changed.");
 });
 
 // 简化版回调
@@ -1074,8 +1092,11 @@ BuffUtils.RegisterBuff(
     buffPrefab  // Buff 预制体
 );
 
-// 按 ID 查找 Buff（自定义 + 游戏内置）
-Buff? buff = BuffUtils.FindBuff(buffID);
+// 按 ID 反查 Buff Identifier（自定义 + 游戏内置）
+if (BuffUtils.TryGetBuffIdentifier(buffID, out var buffId))
+{
+    // buffId = Identifier("duckov", buffName) 或自定义 buff 的 Identifier
+}
 
 // 移除单个 Buff
 BuffUtils.UnregisterBuff(new Identifier("mymod", "mybuff"));
@@ -1275,8 +1296,8 @@ QuestUtils.RegisterQuest(new QuestData
 EventBusManager.Instance.Sync.Register<QuestTaskFinishedEvent>(e =>
 {
     // 检查是否是我们关注的任务
-    var quest = QuestUtils.FindQuest(questId);
-    if (quest != null && e.QuestID == quest.ID)
+    // 通过 Identifier 反查任务
+    if (QuestUtils.TryGetQuestIdentifier(questId, out var questIdentifier))
     {
         EndowmentUtils.UnlockEndowment(endowmentId);
     }
