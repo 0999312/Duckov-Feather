@@ -1,6 +1,6 @@
 # 快速模组开发库 · Fast Modding Lib
 
-> *为《逃离鸭科夫》(Duckov) 量身打造的声明式 Mod 开发框架——让 Mod 开发快 10 倍。*
+> *为《逃离鸭科夫》(Escape From Duckov) 量身打造的声明式 Mod 开发框架——让 Mod 开发快 10 倍。*
 
 <p align="center">
   <img src="https://img.shields.io/badge/framework-.NET%20Standard%202.1-512BD4?style=flat-square&logo=.net" alt=".NET Standard 2.1">
@@ -59,7 +59,7 @@ ItemUtils.CreateCustomItem(50001, config);
 
 ```csharp
 // 已知物品名称
-ItemEntry.Of(Identifier("duckov", "AK-47"), 1)
+ItemEntry.Of(Identifier("duckov", "Waterbottle"), 1)
 
 // 只知道数字 TypeID → 反查
 GameItemLookup.TryGetIdentifier(1001, out var id);
@@ -95,7 +95,7 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
         {
             Id = new Identifier("MyMod", "brew_coffee"),
             Money = 100,
-            CostItems = new[] { ItemEntry.Of("duckov:Water", 1) },
+            CostItems = new[] { ItemEntry.Of("duckov:Waterbottle", 1) },
             Result = ItemEntry.Of("MyMod:coffee", 1)
         });
     }
@@ -338,7 +338,7 @@ FML 的开发离不开以下开源项目和社区的支持：
 | Phase 1 | 框架内核加固（EventBus + Registry） | ✅ 已完成 |
 | Phase 2 | 头部消费系统（Economy / Buff / Options） | ✅ 已完成 |
 | Phase 3 | 内容创作系统（Shop / Audio / Perk / Building / Enemy） | ✅ 已完成 |
-| Phase 4 | Building / Perk / Endowment / UI 深化 | ✅ 已完成 |
+| Phase 4 | Building / Perk / Endowment / UI 深化 | ⏳ 部分完成 |
 | Phase 5 | 长尾幂等系统 | ⏳ 待启动 |
 | Phase 6 | 质量（测试 / 示例 / CI/CD） | ⏳ 待启动 |
 
