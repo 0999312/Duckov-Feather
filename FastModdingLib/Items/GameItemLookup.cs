@@ -1,5 +1,9 @@
 using FastModdingLib.Utils;
+
+using ItemStatsSystem;
+
 using System.Collections.Generic;
+
 using UnityEngine;
 
 namespace FastModdingLib.Items
