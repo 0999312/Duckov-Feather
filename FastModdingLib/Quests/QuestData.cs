@@ -13,7 +13,7 @@ namespace FastModdingLib
     {
         public string displayName = string.Empty;
         public string description = string.Empty;
-        public int ID;
+        internal int ID;
 
         /// <summary>
         /// 可选：Quest 的 Identifier（domain = modid, path = 任务标识）。
@@ -23,7 +23,7 @@ namespace FastModdingLib
 
         public QuestGiverID questGiver;
         public int requireLevel;
-        public int requireItemID = -1;
+        internal int requireItemID = -1;
         public string requireScene = string.Empty;
         public List<TaskData> tasks = new List<TaskData>();
         public List<RewardData> rewards = new List<RewardData>();
@@ -32,11 +32,11 @@ namespace FastModdingLib
     public abstract class TaskData
     {
         public abstract Task SetTask(Quest quest);
-        public int id;
+        internal int id;
     }
     public class TaskRequireItem : TaskData
     {
-        public int itemTypeID;
+        internal int itemTypeID;
 
         /// <summary>
         /// 可选：物品 Identifier。设置后优先解析为 itemTypeID，
@@ -71,7 +71,7 @@ namespace FastModdingLib
 
     public class TaskRequireUseItem : TaskData
     {
-        public int itemTypeID;
+        internal int itemTypeID;
 
         /// <summary>
         /// 可选：物品 Identifier。设置后优先解析为 itemTypeID。
@@ -92,14 +92,14 @@ namespace FastModdingLib
     public class TaskKillCount : TaskData
     {
         public int requireAmount = 1;
-        public int weaponTypeID = -1;
+        internal int weaponTypeID = -1;
 
         /// <summary>
         /// 可选：武器 Identifier。设置后优先解析为 weaponTypeID。
         /// </summary>
         public Identifier? weaponIdentifier;
 
-        public int buffTypeID = -1;
+        internal int buffTypeID = -1;
         public bool requireHeadshot = false;
         public bool withoutHeadShot = false;
         public string requireEnemy = string.Empty;
@@ -178,12 +178,12 @@ namespace FastModdingLib
     public abstract class RewardData
     {
         public abstract Reward SetReward(Quest quest);
-        public int id;
+        internal int id;
     }
 
     public class RewardGiveItem : RewardData
     {
-        public int itemTypeID;
+        internal int itemTypeID;
 
         /// <summary>
         /// 可选：物品 Identifier。设置后优先解析为 itemTypeID。
@@ -228,7 +228,7 @@ namespace FastModdingLib
     }
     public class RewardUnlockItem : RewardData
     {
-        public int itemTypeID;
+        internal int itemTypeID;
 
         /// <summary>
         /// 可选：物品 Identifier。设置后优先解析为 itemTypeID。

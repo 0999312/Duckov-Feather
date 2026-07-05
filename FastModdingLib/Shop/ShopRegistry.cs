@@ -32,7 +32,7 @@ namespace FastModdingLib
         /// <summary>
         /// 写入主字典、owner 索引、反向 typeID 索引与 merchantProfileID 上下文。
         /// </summary>
-        public void Register(int typeID, Identifier id, StockShopDatabase.ItemEntry value, string merchantProfileID, string modid)
+        internal void Register(int typeID, Identifier id, StockShopDatabase.ItemEntry value, string merchantProfileID, string modid)
         {
             Set(id, value, modid);
             _byTypeId[typeID] = id;
@@ -40,7 +40,7 @@ namespace FastModdingLib
         }
 
         /// <summary>按 native typeID 反查 <see cref="Identifier"/>；不存在返回 false。</summary>
-        public bool TryGetIdentifier(int typeID, out Identifier? id)
+        internal bool TryGetIdentifier(int typeID, out Identifier? id)
         {
             return _byTypeId.TryGetValue(typeID, out id);
         }
@@ -50,7 +50,7 @@ namespace FastModdingLib
         /// 避免调用方手动构造 Identifier（后者依赖 domain 做 key，domain 随 modid 变化）。
         /// </summary>
         /// <returns>找到返回 true，id 为匹配的 Identifier；未找到返回 false。</returns>
-        public bool FindIdentifier(string merchantProfileID, int typeID, out Identifier? id)
+        internal bool FindIdentifier(string merchantProfileID, int typeID, out Identifier? id)
         {
             if (_byTypeId.TryGetValue(typeID, out id)
                 && _merchantProfileIds.TryGetValue(id, out var profile)

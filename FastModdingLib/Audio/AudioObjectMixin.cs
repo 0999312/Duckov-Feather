@@ -33,7 +33,7 @@ namespace FastModdingLib.Audio
                 }
             }
             if (!File.Exists(filePath))
-                Debug.Log("[Audio] File don't exist: " + filePath);
+                Debug.LogWarning("[Audio] File don't exist: " + filePath);
             if (!AudioManager.TryCreateEventInstance("SFX/custom", out var eventInstance))
             {
                 __result = null;

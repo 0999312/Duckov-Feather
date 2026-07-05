@@ -30,14 +30,14 @@ namespace FastModdingLib
         /// <see cref="SimpleRegistry{T}.Set(Identifier, T, string)"/> 后追加
         /// <c>_byItemId[itemId] = id</c>。
         /// </summary>
-        public void Register(int itemId, Identifier id, DecomposeFormula value, string modid)
+        internal void Register(int itemId, Identifier id, DecomposeFormula value, string modid)
         {
             Set(id, value, modid);
             _byItemId[itemId] = id;
         }
 
         /// <summary>按 native itemId 反查 <see cref="Identifier"/>；不存在返回 false。</summary>
-        public bool TryGetIdentifier(int itemId, out Identifier? id)
+        internal bool TryGetIdentifier(int itemId, out Identifier? id)
         {
             return _byItemId.TryGetValue(itemId, out id);
         }

@@ -119,6 +119,8 @@ StockShopDatabase 条目:
 | **PerkTreeUtils** | `AddPerk()`, `ConnectPerks()`, `RegisterPerkTree()` | ✅ 完备 |
 | **EndowmentUtils** | `RegisterEndowment()`, `SelectEndowment()` | ✅ 完备 |
 | **EnemyUtils** | `RegisterEnemy()`, `SpawnEnemy()` | ✅ 基础完备 |
+| **WeaponInjectionUtils** | `AddWeaponToPreset()`, `AddWeaponToTeam()` | ✅ 完备 |
+| **LotteryBoxUtils** | `AddItemToLotteryBox()` | ✅ 完备 |
 | **EconomyUtils** | `AddMoney()`, `UnlockItem()` | ✅ 完备 |
 | **BuffUtils** | `RegisterBuff()`, `FindBuff()` | ✅ 完备 |
 | **AudioUtil** | `PlayBGM()`, `SetMasterVolume()` | ✅ 完备 |
@@ -498,15 +500,45 @@ public static int[] FindItemsByTag(string tag, int? minQuality = null);
 public static ItemEntry ByTag(string tag, int amount, int? minQuality = null);
 ```
 
-### 5.3 武器分配实现思路
+### 5.3 NPC 武器注入（WeaponInjectionUtils）
 
-游戏 `CharacterRandomPreset.presets` 列表在 `GameplayDataSettings.CharacterRandomPresetData` 中。FML 通过反射修改已有 preset 的 `itemsToGenerate` 列表来注入新武器：
+零 Harmony Hook：直接操作 `CharacterRandomPreset.itemsToGenerate` 的 `RandomContainer<Entry>` 数据。
 
 ```csharp
-// Harmony Postfix CharacterRandomPreset.CreateCharacterAsync
-// 在角色生成前检查是否有 FML 注入的武器配置
-// 有则追加到 itemsToGenerate 或替换
+// 按预设名注入（前缀通配）
+WeaponInjectionUtils.AddWeaponToPreset("Cname_Scav*", ItemEntry.Of("mymod", "ak47"), chance: 0.3f);
+
+// 按阵营注入
+WeaponInjectionUtils.AddWeaponToTeam(Teams.scav, ItemEntry.Of("mymod", "shotgun"), chance: 0.4f);
+
+// 卸载
+WeaponInjectionUtils.RemoveWeaponFromPreset("Cname_Scav*", ItemEntry.Of("mymod", "ak47"));
+WeaponInjectionUtils.UnregisterAllWeaponInjections("mymod");
 ```
+
+**枪/刀互斥**：通过 `ItemSetting_Gun` / `ItemSetting_MeleeWeapon` 组件 + Tag 回退识别武器类型。枪只注入枪槽，刀只注入刀槽——严格隔离，不 fallback。
+
+### 5.4 抽奖箱注入（LotteryBoxUtils）
+
+Harmony Patch 自动延迟注入：modder 注册规则后，地图加载时由 `InteractableBase.Awake` Postfix 自动触发。
+
+```csharp
+// 注册规则（默认与原生条目等权，无需手动管理时机）
+LotteryBoxUtils.AddItemToLotteryBox("LotteryBox_Gun*", ItemEntry.Of("mymod", "ak47"));
+
+// 卸载
+LotteryBoxUtils.RemoveItemFromLotteryBox("LotteryBox_Gun*", ItemEntry.Of("mymod", "ak47"));
+LotteryBoxUtils.UnregisterAllLotteryInjections("mymod");
+```
+
+**权重机制**：`实际权重 = weight（默认 1.0）× 原生条目平均权重`。只追加，不缩放——原生条目权重和比例完全不变。
+
+**实现细节**：
+- 公开 API（`LotteryBoxUtils.cs`）零反射，仅存储规则
+- Harmony `InteractableBase.Awake` Postfix 自动触发，`is LotteryBox` 过滤
+- `CandidateBackup` 备份/恢复模式：注入时备份原始 entries，卸载时由 `OnRemoved` 恢复
+- `LotteryBox.ItemTypeID` 为 private 嵌套类，全部反射操作封装在 `LotteryBoxPatch.cs` 中
+- 枪/刀互斥同上，修正 `"Weapon"` Tag 近战兜底（游戏无标准 `"MeleeWeapon"` Tag）
 
 ---
 

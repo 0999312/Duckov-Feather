@@ -206,7 +206,7 @@ namespace FastModdingLib
         /// <summary>
         /// [兼容] 添加合成配方（formulaId 字符串）。
         /// </summary>
-        public static void AddCraftingFormula(
+        internal static void AddCraftingFormula(
             string formulaId, long money,
             (int id, long amount)[] costItems,
             int resultItemId, int resultItemAmount,
@@ -233,7 +233,7 @@ namespace FastModdingLib
         /// <summary>
         /// [兼容] 添加合成配方（Identifier + int 产物）。
         /// </summary>
-        public static void AddCraftingFormula(
+        internal static void AddCraftingFormula(
             Identifier id, long money,
             (int id, long amount)[] costItems,
             int resultItemId, int resultItemAmount,
@@ -258,7 +258,7 @@ namespace FastModdingLib
         /// <summary>
         /// [兼容] 添加合成配方（Identifier + Identifier 产物）。
         /// </summary>
-        public static void AddCraftingFormula(
+        internal static void AddCraftingFormula(
             Identifier id, long money,
             (int id, long amount)[] costItems,
             Identifier resultItemId, int resultItemAmount,
@@ -283,7 +283,7 @@ namespace FastModdingLib
         /// <summary>
         /// [兼容] 添加合成配方（Identifier cost + int 产物）。
         /// </summary>
-        public static void AddCraftingFormula(
+        internal static void AddCraftingFormula(
             Identifier id, long money,
             (Identifier itemId, int amount)[] costItems,
             int resultItemId, int resultItemAmount,
@@ -333,7 +333,7 @@ namespace FastModdingLib
         /// <summary>
         /// [兼容] 添加分解配方（int source）。
         /// </summary>
-        public static void AddDecomposeFormula(
+        internal static void AddDecomposeFormula(
             int itemId, long money,
             (int id, long amount)[] resultItems,
             string? modid = null)
@@ -351,7 +351,7 @@ namespace FastModdingLib
         /// <summary>
         /// [兼容] 添加分解配方（Identifier + int source）。
         /// </summary>
-        public static void AddDecomposeFormula(
+        internal static void AddDecomposeFormula(
             Identifier id, int sourceItemId, long money,
             (int id, long amount)[] resultItems)
         {

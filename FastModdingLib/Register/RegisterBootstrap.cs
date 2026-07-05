@@ -29,6 +29,8 @@ namespace FastModdingLib.Register
             PerkTreeUtils.Init();
             EnemyUtils.Init();
             EndowmentUtils.Init();
+            WeaponInjectionUtils.Init();
+            LotteryBoxUtils.Init();
 
             // —— Quests / Shop 由本 bootstrap 注册（不自注册，原因见模块文档） ——
             meta.SetIfAbsent(

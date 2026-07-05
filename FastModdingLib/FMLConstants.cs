@@ -7,5 +7,8 @@ namespace FastModdingLib
     {
         /// <summary>FML 自身的 modid，用于 Registry 元表注册。</summary>
         internal const string Domain = "fastmoddinglib";
+
+        /// <summary>原版游戏内容的 domain，用于 GameItemLookup 反查表。</summary>
+        internal const string DuckovDomain = "duckov";
     }
 }

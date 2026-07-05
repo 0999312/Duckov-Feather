@@ -76,7 +76,7 @@ namespace FastModdingLib
         /// false 时立即解锁。默认 false（立即解锁）。
         /// </param>
         /// <param name="showUI">是否显示解锁通知 UI。默认 true。</param>
-        public static void UnlockItem(int itemTypeId, bool needConfirm = false, bool showUI = true)
+        internal static void UnlockItem(int itemTypeId, bool needConfirm = false, bool showUI = true)
         {
             EconomyManager.Unlock(itemTypeId, needConfirm, showUI);
         }
@@ -98,7 +98,7 @@ namespace FastModdingLib
         /// 转发到 <c>EconomyManager.ConfirmUnlock(itemTypeID)</c>。
         /// </summary>
         /// <param name="itemTypeId">物品 ItemTypeID。</param>
-        public static void ConfirmUnlockItem(int itemTypeId)
+        internal static void ConfirmUnlockItem(int itemTypeId)
         {
             EconomyManager.ConfirmUnlock(itemTypeId);
         }
@@ -119,7 +119,7 @@ namespace FastModdingLib
         /// </summary>
         /// <param name="itemTypeId">物品 ItemTypeID。</param>
         /// <returns>已解锁返回 true；否则 false。</returns>
-        public static bool IsItemUnlocked(int itemTypeId)
+        internal static bool IsItemUnlocked(int itemTypeId)
         {
             return EconomyManager.IsUnlocked(itemTypeId);
         }
@@ -140,7 +140,7 @@ namespace FastModdingLib
         /// </summary>
         /// <param name="itemTypeId">物品 ItemTypeID。</param>
         /// <returns>在待确认队列中返回 true；否则 false。</returns>
-        public static bool IsItemWaitingForUnlockConfirm(int itemTypeId)
+        internal static bool IsItemWaitingForUnlockConfirm(int itemTypeId)
         {
             return EconomyManager.IsWaitingForUnlockConfirm(itemTypeId);
         }

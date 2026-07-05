@@ -84,7 +84,7 @@ namespace FastModdingLib
         /// <see cref="ShopRegistry.OnRemoved"/> 完成 native 侧 entries 列表善后。
         /// </summary>
         /// <returns>找到并移除返回 true；registry 中无此条目返回 false。</returns>
-        public static bool RemoveGoods(string merchantProfileID, int typeID)
+        internal static bool RemoveGoods(string merchantProfileID, int typeID)
         {
             if (_shopRegistry.FindIdentifier(merchantProfileID, typeID, out var id))
                 return _shopRegistry.Remove(id!);
@@ -107,10 +107,10 @@ namespace FastModdingLib
         /// 修改已注册 goods 的可变属性（maxStock / forceUnlock / priceFactor / possibility）。
         /// 通过 registry 找到已登记的 <see cref="StockShopDatabase.ItemEntry"/> 引用，
         /// 直接 mutate 其字段——同一对象引用同时存在于 native entries 列表，故 native 侧同步生效。
-        /// typeID / merchantProfileID 不可经此 API 变更；如需变更身份请先 <see cref="RemoveGoods"/> 再 <see cref="AddGoods"/>。
+        /// typeID / merchantProfileID 不可经此 API 变更；如需变更身份请先 RemoveGoods 再 AddGoods。
         /// </summary>
         /// <returns>找到并更新返回 true；registry 中无此条目返回 false。</returns>
-        public static bool EditGoods(string merchantProfileID, int typeID, ShopGoodsData newData)
+        internal static bool EditGoods(string merchantProfileID, int typeID, ShopGoodsData newData)
         {
             if (!_shopRegistry.FindIdentifier(merchantProfileID, typeID, out var id)
                 || id == null)
@@ -211,7 +211,7 @@ namespace FastModdingLib
         /// 查询指定商人 profile 下 typeID 对应的单个商品。从 native 侧 entries 列表读取，
         /// 覆盖 vanilla 与 FML 注册条目。
         /// </summary>
-        public static bool TryGetGoods(string merchantProfileID, int typeID, out ShopGoodsData data)
+        internal static bool TryGetGoods(string merchantProfileID, int typeID, out ShopGoodsData data)
         {
             var profile = GameplayDataSettings.StockshopDatabase.GetMerchantProfile(merchantProfileID);
             if (profile == null)

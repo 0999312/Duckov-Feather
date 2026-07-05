@@ -1,108 +1,148 @@
-# Fast-Modding-Lib 快速模组开发库
+# Fast-Modding-Lib
 
-_用于高效开发《逃离鸭科夫》模组。_
-
----
-
-## 文档 / Documentation
-
-详细文档请参阅 `Docs/` 目录：
-
-| 文档 | 说明 | 适用人群 |
-|------|------|----------|
-| [Docs/USAGE.md](Docs/USAGE.md) | 完整使用指南 — 快速开始、各模块 API、项目结构参考 | **新项目开发者** |
-| [Docs/MIGRATION.md](Docs/MIGRATION.md) | 迁移指南 — 从旧版 FML 迁移到最新 API | **已有模组开发者** |
+*用于高效开发《逃离鸭科夫》(Duckov) 模组的声明式 Mod 框架。*
 
 ---
 
-## 配置 C# 工程 / Configuring C# Project
+## 核心原则
 
-**注意：在上传 Steam Workshop 的时候，会覆写 info.ini。info.ini 中原有的信息可能会因此丢失。所以不建议在 info.ini 中存储除以上项目之外的其他信息。**
-
-1. 在电脑上准备好《逃离鸭科夫》本体。
-2. 通过 Visual Studio 软件创建一个 .NET 类库（Class Library）。
-3. 配置工程参数。
-   1) 框架（Target Framework）
-      - **TargetFramework 建议设置为 .NET Standard 2.1**。
-      - 注意删除 TargetFramework 不支持的功能，比如 `<ImplicitUsings>`。
-   2) 添加引用（Reference Include）
-      - 将《逃离鸭科夫》的 `\Duckov_Data\Managed\*.dll` 添加到引用中。
-      - 可通过 `DUCKOV_PATH` 环境变量指定游戏路径，或直接在 csproj 中设置 `DuckovPath`。
-      - 示例：
-      ```xml
-        <ItemGroup>
-          <Reference Include="$(DuckovPath)\Duckov_Data\Managed\TeamSoda.*" />
-          <Reference Include="$(DuckovPath)\Duckov_Data\Managed\ItemStatsSystem.dll" />
-          <Reference Include="$(DuckovPath)\Duckov_Data\Managed\Unity*" />
-          <Reference Include="$(DuckovPath)\Duckov_Data\Managed\Newtonsoft.Json.dll" />
-          <Reference Include="$(DuckovPath)\Duckov_Data\Managed\FMODUnity.dll" />
-          <Reference Include="$(DuckovPath)\Duckov_Data\Managed\ParadoxNotion.dll" />
-          <Reference Include="$(DuckovPath)\Duckov_Data\Managed\UniTask*" />
-        </ItemGroup>
-      ```
-
-4. 工程配置完成！现在在你 Mod 工程的 Namespace 中编写一个 `ModBehaviour` 主类（继承 `FastModdingLib.ModBehaviour`）。
-5. 手动导入本项目构建完成的 dll（可在 Steam 创意工坊或 Release 中获取）。
-6. 构建工程，即可得到你的 mod 的主要 dll。然后整理好文件夹结构，即可开始本地测试。
-
----
-
-## 快速上手 / Quick Start
-
-若您使用本库，请在配置完项目之后，在您的主类（`ModBehaviour`）里添加以下成员：
+**Identifier 优先**：所有 FML public API 统一使用 `Identifier("domain", "path")` 作为资源标识符。游戏原生的数字 ID（TypeID、EndowmentIndex 等）由 FML 内部自动管理，对 modder 完全透明。
 
 ```csharp
-string dllPath = Assembly.GetExecutingAssembly().Location;
+// ✅ 正确
+ItemUtils.CreateCustomItem(new Identifier("mymod", "coffee"), config);
+
+// ❌ 禁止：不再公开数字 ID API
+ItemUtils.CreateCustomItem(50001, config);
 ```
 
-用于在后续使用中正确调取模组目录。
+**引用原版内容**：通过 `duckov` 域引用游戏原版物品：
 
-> 完整 API 文档请参阅 **[Docs/USAGE.md](Docs/USAGE.md)**。
+```csharp
+// 已知物品名称
+ItemEntry.Of(Identifier("duckov", "AK-47"), 1)
+
+// 只知道数字 TypeID → 反查
+GameItemLookup.TryGetIdentifier(1001, out var id);
+
+// 按标签浏览
+GameItemLookup.TryFindByTag("Gun", out var guns);
+```
 
 ---
 
-## 模组功能速览 / Module Overview
+## 文档
 
-以下是 FML 提供的各模块快速索引。**完整 API 文档请参阅 [Docs/USAGE.md](Docs/USAGE.md)**。
-
-| 模块 | 示例 | 文档章节 |
-|------|------|----------|
-| **物品** `ItemUtils` | `CreateCustomItem(id, data)` | [§4](Docs/USAGE.md#4-物品系统itemutils) |
-| **合成** `CraftingUtils` | `AddCraftingFormula(id, money, cost, result, ...)` | [§5](Docs/USAGE.md#5-合成配方craftingutils) |
-| **任务** `QuestUtils` | `RegisterQuest(data, modid)` | [§6](Docs/USAGE.md#6-任务系统questutils) |
-| **商店** `ShopUtils` | `AddGoods(data, modid)` | [§7](Docs/USAGE.md#7-商店系统shoputils) |
-| **音频** `AudioUtil` | `AudioUtil.Instance.RegisterAudio(id, data)` | [§8](Docs/USAGE.md#8-音频系统audioutil) |
-| **本地化** `I18n` | `I18n.InitI18n()` | [§9](Docs/USAGE.md#9-本地化i18n) |
-| **事件总线** `EventBus` | `EventBusManager.Instance.Sync.Register<T>(h)` | [§10](Docs/USAGE.md#10-事件总线eventbus) |
-| **经济** `EconomyUtils` | `AddMoney(1000)` | [§11](Docs/USAGE.md#11-经济系统economyutils) |
-| **Buff** `BuffUtils` | `RegisterBuff(id, prefab)` | [§12](Docs/USAGE.md#12-buff-状态效果buffutils) |
-| **建筑** `BuildingUtils` | `RegisterBuilding(id, info, prefab)` | [§13](Docs/USAGE.md#13-建筑系统buildingutils) |
-| **Perk** `PerkTreeUtils` | `AddPerk(id, req, icon)` | [§14](Docs/USAGE.md#14-perk-技能树perktreeutils) |
-| **天赋** `EndowmentUtils` | `RegisterEndowment(id, entry)` | [§15](Docs/USAGE.md#15-天赋系统endowmentutils) |
-| **敌人** `EnemyUtils` | `RegisterEnemy(id, aiConfig, preset)` | [§16](Docs/USAGE.md#16-敌人系统enemyutils) |
-| **设置面板** `ModOptionsRegistry` | `RegisterPanel(modId, name, builder)` | [§17](Docs/USAGE.md#17-自定义设置面板modoptionsregistry) |
-| **AssetBundle** `AssetUtil` | `LoadBundle("weapons")` | [§18](Docs/USAGE.md#18-assetbundle-加载assetutil) |
-
-### 卸载生命周期
-
-模组卸载时，`OnBeforeDeactivate` 自动执行：
-
-```
-GameEventAdapters.TearDown()    → 解除原生事件
-EventBusManager.Clear()         → 清空 handler
-RegistryManager.RemoveAllByOwner() → 批量卸载全部资源
-```
-
-无需手动处理卸载逻辑。详见 [Docs/USAGE.md §20](Docs/USAGE.md#20-模组卸载生命周期)。
+| 文档 | 说明 |
+|------|------|
+| [Docs/USAGE.md](Docs/USAGE.md) | 完整使用指南 — 快速开始、全模块 API |
+| [Docs/MIGRATION.md](Docs/MIGRATION.md) | 迁移指南 — 从旧版 FML 升级 |
+| [Docs/PROGRESS.md](Docs/PROGRESS.md) | 项目进度 — Phase 完成状态与变更记录 |
 
 ---
 
-## 迁移指南 / Migration Guide
+## 模块速览
 
-已有模组从旧版 FML 迁移到最新 API，请参阅 **[Docs/MIGRATION.md](Docs/MIGRATION.md)**。
+| 模块 | 入口类 | 示例 |
+|------|--------|------|
+| **物品** | `ItemUtils` | `CreateCustomItem(id, config)` |
+| **合成** | `CraftingUtils` | `AddCraftingFormula(data)` |
+| **任务** | `QuestUtils` | `RegisterQuest(id, data)` |
+| **商店** | `ShopUtils` | `AddGoods(data)` |
+| **音频** | `AudioUtil` | `RegisterAudio(id, data)` |
+| **本地化** | `I18n` | `InitI18n()` |
+| **事件总线** | `EventBusManager` | `Sync.Register<T>(handler)` |
+| **经济** | `EconomyUtils` | `UnlockItem(id)` |
+| **Buff** | `BuffUtils` | `RegisterBuff(id, prefab)` |
+| **建筑** | `BuildingUtils` | `RegisterBuilding(id, info, prefab)` |
+| **Perk 技能树** | `PerkTreeUtils` | `AddPerk(id, req, icon)` |
+| **天赋** | `EndowmentUtils` | `RegisterEndowment(id, config)` |
+| **敌人** | `EnemyUtils` | `RegisterEnemy(id, aiConfig, preset)` |
+| **NPC 武器注入** | `WeaponInjectionUtils` | `AddWeaponToPreset(pattern, item, chance)` |
+| **抽奖箱注入** | `LotteryBoxUtils` | `AddItemToLotteryBox(pattern, item)` |
+| **设置面板** | `ModOptionsRegistry` | `RegisterPanel(modId, name, builder)` |
+| **AssetBundle** | `AssetUtil` | `LoadBundle("weapons")` |
+
+**原版内容反查**：
+
+| 模块 | 反查 API |
+|------|---------|
+| Item | `GameItemLookup.TryGetIdentifier(int, out Identifier)` |
+| Buff | `BuffUtils.TryGetBuffIdentifier(int, out Identifier)` |
+| Quest | `QuestUtils.TryGetQuestIdentifier(int, out Identifier)` |
+| Endowment | `EndowmentRegistry.TryGetIdentifier(EndowmentIndex, out Identifier)` |
 
 ---
 
-## 示例项目 / Sample Projects
+## 配置工程
 
-1. [Duckov FML Gun Example](https://github.com/0999312/Duckov-FML-Gun-Example) — 自定义武器示例
+1. 准备《逃离鸭科夫》游戏本体
+2. 创建 **.NET Standard 2.1** 类库项目
+3. 添加游戏 DLL 引用：
+
+```xml
+<ItemGroup>
+  <Reference Include="$(DuckovPath)\Duckov_Data\Managed\TeamSoda.*" />
+  <Reference Include="$(DuckovPath)\Duckov_Data\Managed\ItemStatsSystem.dll" />
+  <Reference Include="$(DuckovPath)\Duckov_Data\Managed\Unity*" />
+  <Reference Include="$(DuckovPath)\Duckov_Data\Managed\Newtonsoft.Json.dll" />
+  <Reference Include="$(DuckovPath)\Duckov_Data\Managed\FMODUnity.dll" />
+  <Reference Include="$(DuckovPath)\Duckov_Data\Managed\ParadoxNotion.dll" />
+  <Reference Include="$(DuckovPath)\Duckov_Data\Managed\UniTask*" />
+</ItemGroup>
+```
+
+4. 继承 `FastModdingLib.ModBehaviour` 编写主类，手动导入 FML 的 dll
+
+---
+
+## 快速开始
+
+```csharp
+public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
+{
+    public string GetModid() => "MyMod";
+
+    protected override void OnAfterSetup()
+    {
+        base.OnAfterSetup();
+
+        // 注册自定义物品
+        ItemUtils.CreateCustomItem(
+            new Identifier("MyMod", "coffee"),
+            new ItemData { itemId = 50001, maxStackCount = 10, ... });
+
+        // 引用原版物品作为合成材料
+        CraftingUtils.AddCraftingFormula(new CraftingFormulaData
+        {
+            Id = new Identifier("MyMod", "brew_coffee"),
+            Money = 100,
+            CostItems = new[] { ItemEntry.Of("duckov:Water", 1) },
+            Result = ItemEntry.Of("MyMod:coffee", 1)
+        });
+    }
+}
+```
+
+---
+
+## 卸载生命周期
+
+模组卸载时自动执行：
+
+```
+GameEventAdapters.TearDown()           → 解除原生事件
+EventBusManager.Clear()                → 清空 handler
+RegistryManager.RemoveAllByOwner()     → 批量卸载全部资源
+```
+
+无需手动处理。详见 [Docs/USAGE.md §20](Docs/USAGE.md)。
+
+---
+
+## 技术栈
+
+- **目标框架**：.NET Standard 2.1
+- **Harmony**：2.4.1.0（vendored）
+- **Publicizer**：Krafs.Publicizer
+- **异步**：UniTask

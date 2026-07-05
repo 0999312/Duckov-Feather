@@ -16,8 +16,8 @@ namespace FastModdingLib
         /// <summary>可选：物品 Identifier。设置后优先解析。</summary>
         public Identifier? ItemId;
 
-        /// <summary>物品 typeID。ItemId 解析失败时的回退值。</summary>
-        public int ItemTypeId;
+        /// <summary>物品 typeID（内部回退值）。通过 Identifier 或 Of(Identifier) 构造时自动设置为 0。</summary>
+        internal int ItemTypeId;
 
         /// <summary>数量。</summary>
         public int Amount;
@@ -33,8 +33,8 @@ namespace FastModdingLib
 
         // ── 工厂方法 ──
 
-        /// <summary>从 int typeID 创建。</summary>
-        public static ItemEntry Of(int typeId, int amount) => new ItemEntry()
+        /// <summary>从 int typeID 创建（内部使用，供 FML 框架内部构造回退条目）。</summary>
+        internal static ItemEntry Of(int typeId, int amount) => new ItemEntry()
         {
             ItemTypeId = typeId,
             Amount = amount
@@ -183,7 +183,7 @@ namespace FastModdingLib
 
             public CraftingFormulaBuilder Money(long money) { _data.Money = money; return this; }
 
-            public CraftingFormulaBuilder AddCost(int typeId, int amount)
+            internal CraftingFormulaBuilder AddCost(int typeId, int amount)
             {
                 _data.CostItems = Append(_data.CostItems, ItemEntry.Of(typeId, amount));
                 return this;
@@ -203,7 +203,7 @@ namespace FastModdingLib
 
             public CraftingFormulaBuilder CostItems(ItemEntry[] items) { _data.CostItems = items; return this; }
 
-            public CraftingFormulaBuilder Result(int typeId, int amount) { _data.Result = ItemEntry.Of(typeId, amount); return this; }
+            internal CraftingFormulaBuilder Result(int typeId, int amount) { _data.Result = ItemEntry.Of(typeId, amount); return this; }
             public CraftingFormulaBuilder Result(Identifier id, int amount) { _data.Result = ItemEntry.Of(id, amount); return this; }
             public CraftingFormulaBuilder Result(string idString, int amount) { _data.Result = ItemEntry.Of(idString, amount); return this; }
 
@@ -253,7 +253,7 @@ namespace FastModdingLib
         public Identifier? SourceItemId;
 
         /// <summary>被分解物品的 typeID（SourceItemId 解析失败时回退）。</summary>
-        public int SourceItemTypeId;
+        internal int SourceItemTypeId;
 
         /// <summary>返还金钱。</summary>
         public long Money;
@@ -296,13 +296,13 @@ namespace FastModdingLib
                 _data = new DecomposeFormulaData { Id = id };
             }
 
-            public DecomposeFormulaBuilder SourceItem(int typeId) { _data.SourceItemTypeId = typeId; return this; }
+            internal DecomposeFormulaBuilder SourceItem(int typeId) { _data.SourceItemTypeId = typeId; return this; }
             public DecomposeFormulaBuilder SourceItem(Identifier id) { _data.SourceItemId = id; return this; }
             public DecomposeFormulaBuilder SourceItem(string idString) { _data.SourceItemId = Identifier.Parse(idString); return this; }
 
             public DecomposeFormulaBuilder Money(long money) { _data.Money = money; return this; }
 
-            public DecomposeFormulaBuilder AddResult(int typeId, int amount)
+            internal DecomposeFormulaBuilder AddResult(int typeId, int amount)
             {
                 _data.ResultItems = Append(_data.ResultItems, ItemEntry.Of(typeId, amount));
                 return this;

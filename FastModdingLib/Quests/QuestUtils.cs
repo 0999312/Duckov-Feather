@@ -14,12 +14,45 @@ namespace FastModdingLib
         /// <summary>暴露给外部用于元注册表注册等场景。</summary>
         public static QuestRegistry Registry => _questRegistry;
 
+        // ═══════════════════════════════════════════════════
+        //  ID 反查
+        // ═══════════════════════════════════════════════════
+
+        /// <summary>按 quest 数字 ID 反查 Identifier。</summary>
+        public static bool TryGetQuestIdentifier(int questId, out Identifier id)
+        {
+            foreach (var kvp in _questRegistry)
+            {
+                if (kvp.Value != null && kvp.Value.id == questId)
+                {
+                    id = kvp.Key;
+                    return true;
+                }
+            }
+            id = default;
+            return false;
+        }
+
+        /// <summary>按 Identifier 解析为 quest 数字 ID。</summary>
+        public static bool TryGetQuestId(Identifier id, out int questId)
+        {
+            if (_questRegistry.TryGet(id, out var quest) && quest != null)
+            {
+                questId = quest.id;
+                return true;
+            }
+            questId = -1;
+            return false;
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  注册
+        // ═══════════════════════════════════════════════════
+
         /// <summary>
         /// 注册自定义任务。使用 <see cref="Identifier"/> 标识任务，
         /// domain 自动推导为 owner modid。
         /// </summary>
-        /// <param name="id">任务 Identifier（domain = modid）。</param>
-        /// <param name="data">任务数据。</param>
         public static void RegisterQuest(Identifier id, QuestData data)
         {
             string modid = id.Domain;
@@ -122,7 +155,7 @@ namespace FastModdingLib
             }
         }
 
-        public static void UnregisterQuest(int ID)
+        internal static void UnregisterQuest(int ID)
         {
             foreach (var entry in _questRegistry)
             {
@@ -135,12 +168,18 @@ namespace FastModdingLib
             }
         }
 
+        /// <summary>按 Identifier 卸载任务。</summary>
+        public static bool UnregisterQuest(Identifier id)
+        {
+            return _questRegistry.Remove(id);
+        }
+
         public static void UnregisterQuestAll(string modID)
         {
             _questRegistry.RemoveAllByOwner(modID);
         }
 
-        public static void AddQuestRelation(int id, int before = -1, int after = -1)
+        internal static void AddQuestRelation(int id, int before = -1, int after = -1)
         {
             QuestRelationNode item = new QuestRelationNode
             {
@@ -165,6 +204,20 @@ namespace FastModdingLib
             }
 
             GameplayDataSettings.QuestRelation.allNodes.Add(item);
+        }
+
+        /// <summary>按 Identifier 添加任务前后置关系。</summary>
+        public static void AddQuestRelation(Identifier id, Identifier? before = null, Identifier? after = null)
+        {
+            if (!TryGetQuestId(id, out var questId)) return;
+
+            var beforeId = -1;
+            if (before != null) TryGetQuestId(before, out beforeId);
+
+            var afterId = -1;
+            if (after != null) TryGetQuestId(after, out afterId);
+
+            AddQuestRelation(questId, beforeId, afterId);
         }
 
     }

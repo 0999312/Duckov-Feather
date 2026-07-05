@@ -1,4 +1,5 @@
 using FastModdingLib.Events;
+using FastModdingLib.Items;
 using FastModdingLib.Register;
 
 namespace FastModdingLib
@@ -30,6 +31,7 @@ namespace FastModdingLib
             RegisterBootstrap.Init();
             EventBusBootstrap.Init();
             I18n.InitI18n();
+            GameItemLookup.Init();
         }
 
         /// <summary>

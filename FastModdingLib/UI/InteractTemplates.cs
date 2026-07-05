@@ -45,16 +45,11 @@ namespace FastModdingLib.UI
             if (string.IsNullOrEmpty(perkTreeID)) return;
 
             var tree = PerkTreeManager.GetPerkTree(perkTreeID);
-            if (tree != null)
-            {
-                // 打开 PerkTreeView 并显示指定技能树
-                // PerkTreeView.Show(tree) —— 游戏原生 API
-                Debug.Log($"[PerkTreeInteractTemplate] Opening PerkTreeView for '{perkTreeID}'.");
-            }
-            else
+            if (tree == null)
             {
                 Debug.LogWarning($"[PerkTreeInteractTemplate] PerkTree '{perkTreeID}' not found.");
             }
+            // 打开 PerkTreeView — 游戏原生 API: PerkTreeView.Show(tree)
         }
     }
 
@@ -66,10 +61,7 @@ namespace FastModdingLib.UI
     {
         protected override void OnInteractFinished()
         {
-            // 打开 EndowmentSelectionPanel（游戏原生天赋选择面板）
-            // 注意：EndowmentSelectionPanel 是游戏原生 UI，FML 通过 patch 注入自定义天赋
-            Debug.Log("[EndowmentInteractTemplate] Opening EndowmentSelectionPanel.");
-            // EndowmentSelectionPanel.Show() —— 游戏原生 API
+            // EndowmentSelectionPanel 是游戏原生 UI，FML 通过 patch 注入自定义天赋
         }
     }
 }

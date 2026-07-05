@@ -22,11 +22,13 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 14. [Perk 技能树（PerkTreeUtils）](#14-perk-技能树perktreeutils)
 15. [天赋系统（EndowmentUtils）](#15-天赋系统endowmentutils)
 16. [敌人系统（EnemyUtils）](#16-敌人系统enemyutils)
-17. [自定义设置面板（ModOptionsRegistry）](#17-自定义设置面板modoptionsregistry)
-18. [AssetBundle 加载（AssetUtil）](#18-assetbundle-加载assetutil)
-19. [注册表系统（Registry）](#19-注册表系统registry)
-20. [模组卸载生命周期](#20-模组卸载生命周期)
-21. [附录：项目结构参考](#21-附录项目结构参考)
+17. [NPC 武器注入（WeaponInjectionUtils）](#17-npc-武器注入weaponinjectionutils)
+18. [抽奖箱注入（LotteryBoxUtils）](#18-抽奖箱注入lotteryboxutils)
+19. [自定义设置面板（ModOptionsRegistry）](#19-自定义设置面板modoptionsregistry)
+20. [AssetBundle 加载（AssetUtil）](#20-assetbundle-加载assetutil)
+21. [注册表系统（Registry）](#21-注册表系统registry)
+22. [模组卸载生命周期](#22-模组卸载生命周期)
+23. [附录：项目结构参考](#23-附录项目结构参考)
 
 ---
 
@@ -1443,7 +1445,90 @@ object bt = EnemyUtils.CompileStateMachine(aiConfig);
 
 ---
 
-## 17. 自定义设置面板（ModOptionsRegistry）
+## 17. NPC 武器注入（WeaponInjectionUtils）
+
+零 Harmony Hook，直接修改 `CharacterRandomPreset` 的 `itemsToGenerate` 数据，
+向 NPC 预设或整个阵营的角色注入自定义武器。
+
+### 按预设名注入
+
+```csharp
+using FastModdingLib;
+
+// 前缀通配：所有以 "Cname_Scav" 开头的 NPC 预设
+WeaponInjectionUtils.AddWeaponToPreset("Cname_Scav*", ItemEntry.Of("mymod", "ak47"), chance: 0.5f);
+
+// 精确匹配单个预设
+WeaponInjectionUtils.AddWeaponToPreset("Cname_Boss_Wolf", ItemEntry.Of("mymod", "sniper"), chance: 0.3f);
+```
+
+### 按阵营注入
+
+```csharp
+using Duckov.Utilities;
+
+// 向所有 Scav 阵营 NPC 注入武器
+WeaponInjectionUtils.AddWeaponToTeam(Teams.scav, ItemEntry.Of("mymod", "shotgun"), chance: 0.4f);
+```
+
+### 卸载
+
+```csharp
+WeaponInjectionUtils.RemoveWeaponFromPreset("Cname_Scav*", ItemEntry.Of("mymod", "ak47"));
+WeaponInjectionUtils.RemoveWeaponFromTeam(Teams.scav, ItemEntry.Of("mymod", "shotgun"));
+WeaponInjectionUtils.UnregisterAllWeaponInjections("mymod");
+```
+
+### 枪/刀互斥
+
+系统自动识别注入武器的类型（枪 / 近战），仅注入到兼容的预设槽位中——枪替换枪、
+刀替换刀，不跨类型 fallback。
+
+> **注意**：`AddWeaponToPreset` / `AddWeaponToTeam` 在调用时立即执行注入（修改 ScriptableObject 数据）。
+> 建议在 `OnAfterSetup` 中调用。
+
+---
+
+## 18. 抽奖箱注入（LotteryBoxUtils）
+
+通过 Harmony Patch 在 LotteryBox 被使用时自动注入物品到抽奖箱的候选池。
+modder 只需调用一次注册，后续场景加载时自动生效。
+
+### 注册
+
+```csharp
+using FastModdingLib;
+
+// 向所有名为 "LotteryBox_Gun" 开头的抽奖箱注入武器（默认与原生条目等权）
+LotteryBoxUtils.AddItemToLotteryBox("LotteryBox_Gun*", ItemEntry.Of("mymod", "ak47"));
+
+// 精确匹配
+LotteryBoxUtils.AddItemToLotteryBox("LotteryBox_Boss", ItemEntry.Of("mymod", "sniper"));
+```
+
+`weight` 参数（默认 1.0）为相对权重倍数：`实际权重 = weight × 原生条目平均权重`。只追加，不缩放原生条目。
+- `weight=1.0`（默认）→ 与原生条目等权
+- `weight=2.0` → 权重为原生条目均值的 2 倍
+- `weight=0.5` → 权重为原生条目均值的一半
+
+### 卸载
+
+```csharp
+LotteryBoxUtils.RemoveItemFromLotteryBox("LotteryBox_Gun*", ItemEntry.Of("mymod", "ak47"));
+LotteryBoxUtils.UnregisterAllLotteryInjections("mymod");
+```
+
+### 枪/刀互斥
+
+系统自动识别抽奖箱中现有物品的类型（遍历 `candidates.entries`），仅注入匹配类型的物品。
+枪只注入到枪箱，刀只注入到刀箱。类型不匹配时跳过并输出警告日志。
+
+> **注意**：`AddItemToLotteryBox` 仅存储规则，地图加载时由 Harmony `Awake` Postfix 自动触发注入。
+> 无需手动管理时机——比 WeaponInjection 更适合"场景未加载时提前注册"的场景。
+
+---
+
+## 19. 自定义设置面板（ModOptionsRegistry）
 
 ```csharp
 using FastModdingLib.Options;
@@ -1468,7 +1553,7 @@ ModOptionsRegistry.RegisterPanel("mymod", "My Mod Settings", builder =>
 
 ---
 
-## 18. AssetBundle 加载（AssetUtil）
+## 20. AssetBundle 加载（AssetUtil）
 
 ```csharp
 // 从 mod 目录加载（路径: assets/bundle/{bundleName}）
@@ -1516,7 +1601,7 @@ var panel = SimpleViewBuilder.Create("MyModPanel")
 
 ---
 
-## 19. 注册表系统（Registry）
+## 21. 注册表系统（Registry）
 
 ### 19.1 基本操作
 
@@ -1566,7 +1651,7 @@ meta.Set(new Identifier("mymod", "myregistry"), myRegistry, "mymod");
 
 ---
 
-## 20. 模组卸载生命周期
+## 22. 模组卸载生命周期
 
 FML 自动处理模组卸载时的清理工作，**无需手动编写卸载逻辑**。
 
@@ -1594,7 +1679,7 @@ FML 自动处理模组卸载时的清理工作，**无需手动编写卸载逻�
 
 ---
 
-## 21. 附录：项目结构参考
+## 23. 附录：项目结构参考
 
 ### 推荐目录结构
 

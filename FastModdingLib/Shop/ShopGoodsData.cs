@@ -6,7 +6,11 @@ namespace FastModdingLib
     public class ShopGoodsData
     {
         public string merchantProfileID = "Merchant_Normal";
-        public int typeID;
+
+        /// <summary>
+        /// 物品 typeID（内部回退值）。优先通过 <see cref="itemIdentifier"/> 解析。
+        /// </summary>
+        internal int typeID;
 
         /// <summary>
         /// 可选：物品 Identifier。设置后优先解析为 typeID，

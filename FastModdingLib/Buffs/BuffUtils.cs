@@ -56,7 +56,7 @@ namespace FastModdingLib
         /// 查找 Buff（自定义 + 游戏内置）。优先查 FML Registry，
         /// 再回退到 <see cref="GameplayDataSettings.Buffs.allBuffs"/>。
         /// </summary>
-        public static Buff? FindBuff(int buffID)
+        internal static Buff? FindBuff(int buffID)
         {
             // 先查 FML Registry
             foreach (var kvp in _buffRegistry)
@@ -67,6 +67,36 @@ namespace FastModdingLib
             // 回退到游戏内置列表
             var allBuffs = GameplayDataSettings.Buffs.allBuffs;
             return allBuffs?.Find(b => b != null && b.id == buffID);
+        }
+
+        /// <summary>
+        /// 按 buffID 反查 Identifier。优先 FML 注册表，回退原版 buff。
+        /// 原版 buff 返回 <c>Identifier("duckov", buffName)</c>。
+        /// </summary>
+        public static bool TryGetBuffIdentifier(int buffID, out Identifier id)
+        {
+            // 先查 FML Registry（自定义 buff 已有 Identifier）
+            foreach (var kvp in _buffRegistry)
+            {
+                if (kvp.Value != null && kvp.Value.id == buffID)
+                {
+                    id = kvp.Key;
+                    return true;
+                }
+            }
+            // 回退到游戏内置列表 → 构造 duckov Identifier
+            var allBuffs = GameplayDataSettings.Buffs.allBuffs;
+            if (allBuffs != null)
+            {
+                var buff = allBuffs.Find(b => b != null && b.id == buffID);
+                if (buff != null && !string.IsNullOrEmpty(buff.name))
+                {
+                    id = new Identifier(FMLConstants.DuckovDomain, buff.name);
+                    return true;
+                }
+            }
+            id = default;
+            return false;
         }
     }
 }

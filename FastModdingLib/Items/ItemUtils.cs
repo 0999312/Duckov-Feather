@@ -5,10 +5,10 @@ using FastModdingLib.Register;
 using FastModdingLib.Utils;
 using ItemStatsSystem;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Unity.VisualScripting;
 using UnityEngine;
 
 namespace FastModdingLib
@@ -254,24 +254,37 @@ namespace FastModdingLib
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static async UniTask CreateCustomItemAsync(Identifier id, ItemData config)
         {
-            var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-            ItemBuilder itemBuilder = ItemBuilder.New()
-                .TypeID(config.itemId)
-                .EnableStacking(config.maxStackCount, 1)
-                .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath));
+            // 在 await 前预定 TypeID，防止被低优先级同步加载抢占。
+            // 若首选 ID 冲突则自动分配空闲值。
+            int actualTypeId = ReserveTypeId(id, config.itemId);
 
-            config.modifiers.ForEach(modifier =>
+            try
             {
-                itemBuilder.Modifier(modifier.getModifier());
-            });
+                var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+                ItemBuilder itemBuilder = ItemBuilder.New()
+                    .TypeID(actualTypeId)
+                    .EnableStacking(config.maxStackCount, 1)
+                    .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath));
 
-            Item component = itemBuilder
-                .Instantiate();
+                config.modifiers.ForEach(modifier =>
+                {
+                    itemBuilder.Modifier(modifier.getModifier());
+                });
 
-            UnityEngine.Object.DontDestroyOnLoad(component);
-            SetItemProperties(component, config);
+                Item component = itemBuilder
+                    .Instantiate();
 
-            RegisterItem(id, component);
+                UnityEngine.Object.DontDestroyOnLoad(component);
+                SetItemProperties(component, config);
+
+                RegisterItem(id, component);
+            }
+            finally
+            {
+                // 无论成功失败，确保预定被清理。RegisterItem 成功时内部已 ConfirmReservation，
+                // 此处再清一次幂等无害；失败时（如 Sprite 加载异常）释放预定防止 TypeID 泄漏。
+                CancelReservation(id);
+            }
         }
 
         /// <summary>
@@ -349,18 +362,109 @@ namespace FastModdingLib
         private static int lastKnownUsed = -1;
 
         /// <summary>
+        /// TypeID 预定表：异步加载在 await 前预占 TypeID，防止被低优先级同步加载抢占。
+        /// key=TypeID, value=预定者 Identifier。RegisterItem 确认后清除。
+        /// </summary>
+        private static readonly Dictionary<int, Identifier> _reservedTypeIds = new Dictionary<int, Identifier>();
+        private static readonly object _reservationLock = new object();
+
+        /// <summary>
+        /// 二重检测：游戏原生静态表 + FML 已注册动态条目。
+        /// 不包含预定表检查（预定表由调用方在锁内检查以避免死锁）。
+        /// </summary>
+        private static bool IsTypeIdOccupied(int tid)
+        {
+            if (ItemAssetsCollection.Instance.GetEntry(tid) != null)
+                return true;
+            if (RegistryManager.Instance.ItemID.TryGetIdentifier(tid, out _))
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 检查 TypeID 是否被当前 Identifier 之外的其他人预定。
+        /// 自己预定的 TypeID 不视为冲突——允许异步加载自身完成后正常注册。
+        /// </summary>
+        private static bool IsTypeIdReservedByOther(int tid, Identifier currentId)
+        {
+            lock (_reservationLock)
+            {
+                if (_reservedTypeIds.TryGetValue(tid, out var reserver))
+                    return !reserver.Equals(currentId);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 预定 TypeID（供异步加载在 await 前调用）。如果首选 TypeID 已被占用或预定，
+        /// 自动通过 lastKnownUsed 分配空闲值。返回实际分配的 TypeID。
+        /// </summary>
+        internal static int ReserveTypeId(Identifier id, int preferredTypeId)
+        {
+            lock (_reservationLock)
+            {
+                int tid = preferredTypeId;
+                while (IsTypeIdOccupied(tid) || _reservedTypeIds.ContainsKey(tid))
+                {
+                    lastKnownUsed++;
+                    tid = lastKnownUsed;
+                    while (IsTypeIdOccupied(tid))
+                    {
+                        lastKnownUsed++;
+                        tid = lastKnownUsed;
+                    }
+                }
+                _reservedTypeIds[tid] = id;
+                return tid;
+            }
+        }
+
+        /// <summary>
+        /// 确认预定：移除该 Identifier 在预定表中的所有记录。
+        /// RegisterItem 成功后调用。
+        /// </summary>
+        private static void ConfirmReservation(Identifier id)
+        {
+            RemoveReservation(id);
+        }
+
+        /// <summary>
+        /// 取消预定：异步创建失败（如 Sprite 加载异常）时释放预定，防止 TypeID 永久泄漏。
+        /// </summary>
+        private static void CancelReservation(Identifier id)
+        {
+            RemoveReservation(id);
+        }
+
+        private static void RemoveReservation(Identifier id)
+        {
+            lock (_reservationLock)
+            {
+                var keysToRemove = new List<int>();
+                foreach (var kvp in _reservedTypeIds)
+                {
+                    if (kvp.Value.Equals(id))
+                        keysToRemove.Add(kvp.Key);
+                }
+                foreach (var key in keysToRemove)
+                    _reservedTypeIds.Remove(key);
+            }
+        }
+
+        /// <summary>
         /// 注册自定义物品到游戏系统。owner modid 从 <see cref="Identifier.Domain"/> 推导。
         /// </summary>
         public static void RegisterItem(Identifier id, Item item)
         {
             string owner = id.Domain;
-            Debug.Log($"Start Register custom item: {item.TypeID} - {item.DisplayName}");
-            if (ItemAssetsCollection.Instance.GetEntry(item.TypeID) != null)
+
+            // 冲突检测：游戏原生表 + FML 已注册 + 被其他 Identifier 预定，任一命中即重新分配
+            if (IsTypeIdOccupied(item.TypeID) || IsTypeIdReservedByOther(item.TypeID, id))
             {
                 do
                 {
                     lastKnownUsed++;
-                } while (ItemAssetsCollection.Instance.GetEntry(lastKnownUsed) != null);
+                } while (IsTypeIdOccupied(lastKnownUsed) || IsTypeIdReservedByOther(lastKnownUsed, id));
 
                 item.TypeID = lastKnownUsed;
             }
@@ -370,6 +474,7 @@ namespace FastModdingLib
             }
             ItemAssetsCollection.AddDynamicEntry(item);
             RegistryManager.Instance.ItemID.Register(item.TypeID, id, item.TypeID, owner);
+            ConfirmReservation(id);
             Debug.Log($"Registered custom item: {item.TypeID} - {item.DisplayName}");
         }
 
@@ -430,12 +535,13 @@ namespace FastModdingLib
         }
 
         /// <summary>
-        /// 按 TypeID 反查自定义 Item（R6 新增读路径）。
+        /// 按 TypeID 反查 Item（内部使用，仅供 FML 框架内部调用）。
         /// </summary>
-        public static bool TryGetCustomItem(int typeID, out Item? item)
+        internal static bool TryGetCustomItem(int typeID, out Item? item)
         {
             item = null;
-            if (!RegistryManager.Instance.ItemID.TryGetIdentifier(typeID, out var _))
+            if (!RegistryManager.Instance.ItemID.TryGetIdentifier(typeID, out _)
+                && !GameItemLookup.TryGetIdentifier(typeID, out _))
             {
                 return false;
             }
@@ -444,12 +550,9 @@ namespace FastModdingLib
         }
 
         /// <summary>
-        /// 按 Identifier 反查已注册的自定义物品。Identifier 版本。
-        /// 内部通过 <see cref="TryResolveTypeId"/> 将 Identifier 解析为原生 TypeID。
+        /// 【推荐】按 Identifier 反查已注册的自定义物品。
+        /// 内部查询 FML 注册表 + 原版反查表，解析为原生 TypeID 后获取 Item。
         /// </summary>
-        /// <param name="id">物品 Identifier（与 CreateCustomItem 注册时使用的 id 一致）。</param>
-        /// <param name="item">找到的物品实例；若未找到则为 null。</param>
-        /// <returns>找到物品返回 true；否则 false。</returns>
         public static bool TryGetCustomItem(Identifier id, out Item? item)
         {
             if (TryResolveTypeId(id, out int typeId))
@@ -459,14 +562,16 @@ namespace FastModdingLib
         }
 
         /// <summary>
-        /// 将 <see cref="Identifier"/> 解析为物品的 TypeID。
-        /// 供 ShopUtils / QuestUtils / CraftingUtils 等模块在注册时将 item Identifier 转为 int typeID。
-        /// 查询 <see cref="RegistryManager.Instance.ItemID"/> 中已注册的自定义物品。
+        /// 将 <see cref="Identifier"/> 解析为物品的 TypeID（内部使用）。
+        /// 查询顺序：FML 注册的自定义物品 → 原版物品反查表。
         /// </summary>
-        /// <returns>找到对应 typeID 返回 true；未找到返回 false。</returns>
-        public static bool TryResolveTypeId(Identifier id, out int typeId)
+        internal static bool TryResolveTypeId(Identifier id, out int typeId)
         {
-            return RegistryManager.Instance.ItemID.TryGet(id, out typeId);
+            if (RegistryManager.Instance.ItemID.TryGet(id, out typeId))
+                return true;
+            if (GameItemLookup.TryResolve(id, out typeId))
+                return true;
+            return false;
         }
 
         /// <summary>

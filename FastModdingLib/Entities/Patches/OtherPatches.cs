@@ -41,8 +41,6 @@ namespace FastModdingLib.Entities.Patches
                     {
                         if (kvp.Value == __instance)
                         {
-                            Debug.Log($"[FML Patch #1] FML-registered character being spawned: {kvp.Key}");
-                            // 注意：这里 callback 会被 game 在异步完成后调用
                             // FML 不劫持 callback——modder 可通过 EventBus 订阅后续事件
                             break;
                         }
@@ -139,7 +137,6 @@ namespace FastModdingLib.Entities.Patches
                 if (selected != null)
                 {
                     __result = selected;
-                    Debug.Log($"[FML Patch #4] Injected FML preset '{selected.nameKey}' into weight pool.");
                 }
             }
             catch (Exception e)
@@ -206,11 +203,8 @@ namespace FastModdingLib.Entities.Patches
                 var config = character.GetComponent<IStateConfig>();
                 if (config == null) return true;
 
-                // FML 注册的敌人受伤——记录日志便于调试
                 // 注意：GameEventAdapters 已桥接 Health.OnHurt → HurtEvent，
                 // 此处不再重复投递，仅标记 FML 上下文。
-                Debug.Log($"[FML Patch #7] FML-registered enemy '{character.name}' hurt, damage={info.damageValue}");
-
                 return true;
             }
             catch (Exception e)
@@ -233,13 +227,7 @@ namespace FastModdingLib.Entities.Patches
             {
                 if (__instance == null) return true;
 
-                // 检查是否为 FML 管理的角色
-                var config = __instance.GetComponent<IStateConfig>();
-                if (config != null)
-                {
-                    Debug.Log($"[FML Patch #8] FML enemy '{__instance.name}' switching team to {team}.");
-                }
-
+                // 检查是否为 FML 管理的角色（modder 可通过 EventBus 订阅）
                 return true;
             }
             catch (Exception e)

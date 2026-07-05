@@ -243,6 +243,75 @@
 
 ---
 
+## NPC 武器注入 API — ✅ 已完成
+
+**完成时间**: 2026-07-05
+**耗时**: 约 3 小时
+**策略**: Preset 数据层 — 合并到已有 Pool（零 Harmony Hook）
+
+### 文件变更清单
+| 操作 | 文件路径 | 改动摘要 |
+|------|----------|----------|
+| 新建 | `FastModdingLib/Entities/WeaponInjectionData.cs` | 数据结构：WeaponInjectionData + PoolBackup + PoolEntrySnapshot |
+| 新建 | `FastModdingLib/Entities/WeaponInjectionRegistry.cs` | 注册表：继承 SimpleRegistry，OnRemoved 自动恢复 Pool |
+| 新建 | `FastModdingLib/WeaponInjectionUtils.cs` | 公开 API：AddWeaponToPreset/Team, Remove*, UnregisterAll |
+| 修改 | `FastModdingLib/Register/RegisterBootstrap.cs` | +1行：WeaponInjectionUtils.Init() 元表注册 |
+
+### API
+```csharp
+public static void AddWeaponToPreset(string presetNameKey, ItemEntry weapon, float chance = 0.3f);
+public static void AddWeaponToTeam(Teams team, ItemEntry weapon, float chance = 0.3f);
+public static bool RemoveWeaponFromPreset(string presetNamePattern, ItemEntry weapon);
+public static bool RemoveWeaponFromTeam(Teams team, ItemEntry weapon);
+public static int UnregisterAllWeaponInjections(string modid);
+```
+
+### 设计偏离
+- 枪刀 fallback 被移除：枪刀敌人类型不兼容，改为严格隔离（不跨类型注入）
+- 无武器条目的 preset 直接跳过（不新建条目）
+- `PoolEntrySnapshot` 独立结构体替代 `RandomContainer<Entry>.Entry`（避免嵌套泛型类型混淆）
+
+### 遗留问题
+- 无
+
+---
+
+## LotteryBox 物品注入 API — ✅ 已完成
+
+**完成时间**: 2026-07-05
+**耗时**: 约 2 小时
+**策略**: Harmony Patch — Begin() Prefix 自动延迟注入；反射封装 ItemTypeID 私有类型访问
+
+### 文件变更清单
+| 操作 | 文件路径 | 改动摘要 |
+|------|----------|----------|
+| 新建 | `FastModdingLib/Entities/LotteryBoxData.cs` | 数据模型：LotteryBoxData + CandidateSnapshot + CandidateBackup |
+| 新建 | `FastModdingLib/Entities/LotteryBoxRegistry.cs` | 注册表：继承 SimpleRegistry，OnRemoved 自动恢复 candidates |
+| 新建 | `FastModdingLib/LotteryBoxUtils.cs` | 公开 API：AddItemToLotteryBox / Remove / UnregisterAll（零反射） |
+| 新建 | `FastModdingLib/LotteryBoxPatch.cs` | Harmony Patch：Begin() Prefix 自动延迟注入 + ClassifyWeapon + RestoreCandidates |
+| 修改 | `FastModdingLib/Register/RegisterBootstrap.cs` | +1行：LotteryBoxUtils.Init() 元表注册 |
+
+### API
+```csharp
+public static void AddItemToLotteryBox(string sceneNamePattern, ItemEntry item, float weight = 0.3f);
+public static bool RemoveItemFromLotteryBox(string sceneNamePattern, ItemEntry item);
+public static int UnregisterAllLotteryInjections(string modid);
+```
+
+### 枪/刀互斥
+- 复用 WeaponInjection 的 ClassifyWeapon 逻辑（组件优先 + Tag 回退）
+- 修正：无标准 `"MeleeWeapon"` Tag，用 `"Weapon"` Tag 兜底
+- 严格隔离：枪→枪箱，刀→刀箱；类型不匹配跳过
+
+### 设计偏离
+- LotteryBox.ItemTypeID 为 private 嵌套类，无法直接引用。全部 candidates 操作通过 Harmony Traverse + 反射封装在 LotteryBoxPatch 中，公开 API 层零反射。
+- LotteryBox 无全局集中列表（与 CharacterRandomPresetData.presets 不同），采用 Harmony Begin() Prefix 自动延迟注入，modder 无需手动管理时机。
+
+### 遗留问题
+- 无
+
+---
+
 ## Phase 5 — 长尾幂等系统 ⏳ 待启动
 
 **计划内容**（详见 PLAN.md §7）：
@@ -274,3 +343,66 @@
 
 ### 遗留问题
 - 待 Phase 6 正式启动时补充详细计划文档（PLAN-Phase6-*.md）
+
+---
+
+## ID 策略全面重构 — ✅ 已完成
+
+**完成时间**: 2026-07-06
+**耗时**: 约 4 小时
+
+### 核心原则落实
+- **所有 public API 数字 ID 降级为 internal**（ItemUtils/ShopUtils/EconomyUtils/CraftingData/QuestUtils/BuffUtils/DecomposeRegistry）
+- **ItemEntry.ItemTypeId** → `internal`，`Of(int)` 工厂 → `internal`
+- **GameItemLookup** 新建：原版 `duckov` 域反查表，扫描全量游戏物品建立 `displayName ↔ TypeID` 映射
+- **异步预注册机制**：`ReserveTypeId`/`ConfirmReservation`/`CancelReservation`，async 在 await 前占坑防抢占
+
+### 文件变更清单
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FastModdingLib/Items/GameItemLookup.cs` | duckov 域反查表 + 公开发现 API |
+| 新建 | `FastModdingLib/Utils/WildcardHelper.cs` | 消除 WeaponInjectionUtils/LotteryBoxPatch WildcardMatch 重复 |
+| 新建 | `FastModdingLib/Utils/WeaponClassifier.cs` | 消除两处 ClassifyWeapon+WeaponKind 重复 |
+| 修改 | `FastModdingLib/Items/ItemUtils.cs` | TryResolveTypeId/TryGetCustomItem(int)→internal；ReserveTypeId；IsTypeIdReservedByOther；集成 GameItemLookup |
+| 修改 | `FastModdingLib/CraftingData.cs` | ItemEntry.ItemTypeId/Of(int)→internal；Builder int 重载→internal；SourceItemTypeId→internal |
+| 修改 | `FastModdingLib/EconomyUtils.cs` | 4 个 int 重载→internal |
+| 修改 | `FastModdingLib/Shop/ShopGoodsData.cs` | typeID→internal |
+| 修改 | `FastModdingLib/Shop/ShopUtils.cs` | RemoveGoods/EditGoods/TryGetGoods(int)→internal |
+| 修改 | `FastModdingLib/Shop/ShopRegistry.cs` | Register/TryGetIdentifier/FindIdentifier(int)→internal |
+| 修改 | `FastModdingLib/DecomposeRegistry.cs` | Register/TryGetIdentifier(int)→internal |
+| 修改 | `FastModdingLib/Buffs/BuffUtils.cs` | FindBuff(int)→internal；新增 TryGetBuffIdentifier(int) public |
+| 修改 | `FastModdingLib/Quests/QuestUtils.cs` | 新增 TryGetQuestIdentifier/TryGetQuestId；UnregisterQuest/AddQuestRelation Identifier 版 |
+| 修改 | `FastModdingLib/Quests/QuestData.cs` | 全部 int 字段→internal |
+| 修改 | `FastModdingLib/Utils/WeaponClassifier.cs` | Classify(int)→internal |
+| 修改 | `FastModdingLib/FMLConstants.cs` | 新增 DuckovDomain="duckov" |
+| 修改 | `FastModdingLib/FMLBootstrap.cs` | EnsureInit 加入 GameItemLookup.Init() |
+| 修改 | 6 个文件 | 日志清理（12条高频 Debug.Log 删除） |
+| 修改 | `LotteryBoxPatch.cs` + `WeaponInjectionUtils.cs` | 重构使用共享 WildcardHelper/WeaponClassifier |
+
+### 日志清理
+- LotteryBoxPatch: 5 条 runtime 日志删除
+- OtherPatches: 4 条 runtime 日志删除
+- InteractTemplates: 2 条 UI 日志删除
+- ItemUtils: "Start Register" 重复日志合并
+- AudioObjectMixin: Log→LogWarning 级别修正
+
+---
+
+## 文档清理 — ✅ 已完成
+
+**完成时间**: 2026-07-06
+
+### 变更
+| 操作 | 路径 | 说明 |
+|------|------|------|
+| 新建 | `Docs/TODO/` | 未完成计划存放目录 |
+| 移入 | `PLAN.md` → `Docs/TODO/` | Phase 5/6 未完成 |
+| 移入 | `Docs/DESIGN-*.md` → `Docs/TODO/` | 设计文档 |
+| 移入 | `Docs/CASE-STUDIES.md` 等 5 文件 → `Docs/TODO/` | 参考/问题文档 |
+| 删除 | `.omo/plans/npc-weapon-injection*.md` | NPC 注入已完成 |
+| 重写 | `README.md` | 反映 Identifier 优先 + GameItemLookup + 全模块速览 |
+
+### 保留的公开文档
+- `Docs/USAGE.md` — 使用指南
+- `Docs/MIGRATION.md` — 迁移指南
+- `Docs/PROGRESS.md` — 进度文档
