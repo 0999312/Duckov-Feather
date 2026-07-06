@@ -356,6 +356,7 @@ namespace FastModdingLib
         public static void SetItemGraphic(Item item, AssetBundle assetBundle, string name)
         {
             GameObject graphic = assetBundle.LoadAsset<GameObject>(name);
+            ShaderReplacer.ApplyTo(graphic);
             item.itemGraphic = graphic.GetComponent<ItemGraphicInfo>();
         }
 
@@ -498,6 +499,7 @@ namespace FastModdingLib
         public static void RegisterGun(Identifier id, AssetBundle assetBundle, string name, int originGunID = 654)
         {
             var gameobject = assetBundle.LoadAsset<GameObject>(name);
+            ShaderReplacer.ApplyTo(gameobject);
             Item prefab = gameobject.GetComponent<Item>();
             Item rifle = ItemAssetsCollection.GetPrefab(originGunID);
 
@@ -529,6 +531,7 @@ namespace FastModdingLib
         public static void RegisterItemFromBundle(Identifier id, AssetBundle assetBundle, string name)
         {
             var gameobject = assetBundle.LoadAsset<GameObject>(name);
+            ShaderReplacer.ApplyTo(gameobject);
             Item prefab = gameobject.GetComponent<Item>();
             ItemUtils.RegisterItem(id, prefab);
         }

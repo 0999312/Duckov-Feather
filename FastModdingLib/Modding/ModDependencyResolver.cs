@@ -15,6 +15,7 @@ namespace FastModdingLib.Modding
         /// <summary>
         /// 对 <paramref name="modInfos"/> 原地排序。
         /// 排序键：声明式 priority（默认 int.MaxValue）→ 拓扑序（依赖者排在被依赖者之后）。
+        /// 用于 Rescan（初始化阶段），确保声明式优先级 + 依赖关系全部生效。
         /// </summary>
         public static void Sort(List<ModInfo> modInfos)
         {
@@ -49,6 +50,39 @@ namespace FastModdingLib.Modding
             modInfos.AddRange(sorted);
 
             LogSortResult(modInfos);
+        }
+
+        /// <summary>
+        /// 对 <paramref name="modInfos"/> 按依赖关系原地排序，但<span class="keyword">保持玩家手动顺序</span>。
+        /// 仅通过拓扑排序确保硬性依赖（dependencies / loadAfter / loadBefore），
+        /// <span class="keyword">不</span>按 fml.json 声明的 priority 重排。
+        /// 用于 Reorder（玩家手动拖拽排序后）修正依赖关系。
+        /// 未声明依赖关系的 mod 顺序完全不受影响。
+        /// </summary>
+        public static void SortByDependencyOnly(List<ModInfo> modInfos)
+        {
+            if (modInfos == null || modInfos.Count <= 1) return;
+
+            // 1. 构建索引（保持玩家当前顺序）
+            var nameToIndex = new Dictionary<string, int>();
+            for (int i = 0; i < modInfos.Count; i++)
+            {
+                nameToIndex[modInfos[i].name] = i;
+            }
+
+            // 2. 构建依赖图，检测循环
+            var graph = BuildGraph(modInfos, nameToIndex);
+            var cycle = DetectCycle(graph, modInfos);
+            if (cycle != null)
+            {
+                Debug.LogWarning($"[FML ModDependencyResolver] Circular dependency detected during reorder: {string.Join(" → ", cycle)}. Keeping player order.");
+                return;
+            }
+
+            // 3. 拓扑排序，保持玩家顺序
+            var sorted = TopologicalSortPreserveOrder(graph, modInfos);
+            modInfos.Clear();
+            modInfos.AddRange(sorted);
         }
 
         private static HashSet<int>[] BuildGraph(List<ModInfo> modInfos, Dictionary<string, int> nameToIndex)
@@ -241,6 +275,57 @@ namespace FastModdingLib.Modding
                 for (int i = 0; i < result.Count; i++) included.Add(i);
                 for (int i = 0; i < n; i++)
                     if (!included.Contains(i))
+                        result.Add(modInfos[i]);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 拓扑排序，尽量保持 modInfos 的原有顺序（玩家手动排序）。
+        /// 当多个节点入度均为 0 时，优先选择玩家排在前面（索引小）的节点。
+        /// 对于没有依赖关系的 mod，结果顺序与输入完全一致。
+        /// </summary>
+        private static List<ModInfo> TopologicalSortPreserveOrder(HashSet<int>[] graph, List<ModInfo> modInfos)
+        {
+            int n = modInfos.Count;
+            var indegree = new int[n];
+            for (int u = 0; u < n; u++)
+                foreach (int v in graph[u])
+                    indegree[v]++;
+
+            // 维护入度为 0 的节点，按玩家索引（小索引 = 排在前面）排序
+            var ready = new List<int>();
+            for (int i = 0; i < n; i++)
+                if (indegree[i] == 0)
+                    ready.Add(i);
+            ready.Sort();
+
+            var result = new List<ModInfo>(n);
+            var includedIndices = new HashSet<int>();
+            while (ready.Count > 0)
+            {
+                int u = ready[0];
+                ready.RemoveAt(0);
+                result.Add(modInfos[u]);
+                includedIndices.Add(u);
+                foreach (int v in graph[u])
+                {
+                    indegree[v]--;
+                    if (indegree[v] == 0)
+                    {
+                        int insertPos = ready.BinarySearch(v);
+                        if (insertPos < 0) insertPos = ~insertPos;
+                        ready.Insert(insertPos, v);
+                    }
+                }
+            }
+
+            // 有环时把未包含的节点按原顺序追加
+            if (result.Count < n)
+            {
+                for (int i = 0; i < n; i++)
+                    if (!includedIndices.Contains(i))
                         result.Add(modInfos[i]);
             }
 

@@ -7,7 +7,9 @@ namespace FastModdingLib.Modding
 {
     /// <summary>
     /// Harmony 补丁集合。Hook <c>ModManager</c> 的排序与激活逻辑，
-    /// 注入 fml.json 声明的优先级、依赖排序与自激活策略。
+    /// 注入 fml.json 声明的依赖排序与自激活策略。
+    /// 排序策略：仅保证拓扑依赖（dependencies / loadAfter / loadBefore），
+    /// 不强制按 fml.json priority 重排，尊重玩家手动排序。
     /// </summary>
     public static class ModManagerPatches
     {
@@ -26,7 +28,7 @@ namespace FastModdingLib.Modding
             harmony.Patch(
                 original: typeof(ModManager).GetMethod("SortModInfosByPriority",
                     BindingFlags.NonPublic | BindingFlags.Static),
-                prefix: new HarmonyMethod(typeof(ModManagerPatches), nameof(SortModInfosByPriority_Prefix)));
+                postfix: new HarmonyMethod(typeof(ModManagerPatches), nameof(SortModInfosByPriority_Postfix)));
             harmony.Patch(
                 original: typeof(ModManager).GetMethod("ShouldActivateMod",
                     BindingFlags.NonPublic | BindingFlags.Instance),
@@ -38,16 +40,16 @@ namespace FastModdingLib.Modding
         }
 
         /// <summary>
-        /// 前缀替换 <c>SortModInfosByPriority</c>：加载 fml.json 元数据，
-        /// 按声明式 priority + 拓扑依赖排序，跳过原方法。
+        /// 后置修正 <c>SortModInfosByPriority</c>（被 Rescan 调用）。
+        /// 原生排序已按 ES3 保存的 priority 恢复玩家手动顺序，
+        /// 此 Postfix 在此基础上叠加依赖拓扑排序，确保 fml.json 依赖关系成立。
+        /// 未声明依赖关系的 mod 保持原生排序结果（即玩家上次保存的顺序）。
         /// </summary>
-        public static bool SortModInfosByPriority_Prefix()
+        public static void SortModInfosByPriority_Postfix()
         {
-            // 每次 Rescan 后 modInfos 已重置，需重新加载所有 fml.json
             ModMetaCache.Clear();
             ModMetaCache.LoadAll(ModManager.modInfos);
-            ModDependencyResolver.Sort(ModManager.modInfos);
-            return false; // skip original
+            ModDependencyResolver.SortByDependencyOnly(ModManager.modInfos);
         }
 
         /// <summary>
@@ -87,15 +89,16 @@ namespace FastModdingLib.Modding
         }
 
         /// <summary>
-        /// 后置修正 <c>Reorder</c>：玩家在 UI 中拖拽排序后，
-        /// <c>RegeneratePriorities</c> 会用索引值覆盖 fml.json 声明的 priority。
-        /// 此 Postfix 重新按 fml.json priority + 拓扑依赖排序，确保声明式优先级始终生效。
+        /// 后置修正 <c>Reorder</c>（玩家 UI 拖拽排序后触发）。
+        /// Reorder 内部不调用 SortModInfosByPriority，故在此独立做依赖拓扑排序。
+        /// 仅保证 fml.json 声明的依赖关系（dependencies / loadAfter / loadBefore），
+        /// 不强制按 priority 重排。未声明依赖关系的 mod 顺序完全不受影响。
         /// </summary>
         public static void Reorder_Postfix()
         {
             ModMetaCache.Clear();
             ModMetaCache.LoadAll(ModManager.modInfos);
-            ModDependencyResolver.Sort(ModManager.modInfos);
+            ModDependencyResolver.SortByDependencyOnly(ModManager.modInfos);
             var onReorder = typeof(ModManager)
                 .GetField("OnReorder", BindingFlags.Public | BindingFlags.Static)
                 ?.GetValue(null) as System.Action;
