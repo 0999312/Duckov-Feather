@@ -1,6 +1,6 @@
-using Duckov.Modding;
+﻿using Duckov.Modding;
 
-namespace FastModdingLib.Modding
+namespace FeatherMod.Modding
 {
     /// <summary>
     /// fml.json 中声明的一条依赖项。可同时提供 <see cref="Name"/> 与 <see cref="WorkshopId"/>；

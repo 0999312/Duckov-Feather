@@ -1,4 +1,4 @@
-# Fast-Modding-Lib 使用文档 / Usage Guide
+# Feather 使用文档 / Usage Guide
 
 _面向全新模组项目的完整使用指南。如果你是第一次使用 FML 开发《逃离鸭科夫》模组，请从此处开始。_
 
@@ -60,7 +60,7 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
     <Reference Include="$(DUCKOV_PATH)\Duckov_Data\Managed\ParadoxNotion.dll" />
     <Reference Include="$(DUCKOV_PATH)\Duckov_Data\Managed\UniTask*" />
     <!-- FML dll -->
-    <Reference Include="path\to\FastModdingLib.dll" />
+    <Reference Include="path\to\FeatherMod.dll" />
   </ItemGroup>
 </Project>
 ```
@@ -70,8 +70,8 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 ### 1.3 编写第一个模组
 
 ```csharp
-using FastModdingLib;
-using FastModdingLib.Utils;
+using FeatherMod;
+using FeatherMod.Utils;
 using HarmonyLib;
 using System.Reflection;
 
@@ -97,7 +97,7 @@ public class MyFirstMod : Duckov.Modding.ModBehaviour, IHasModid
 ```
 
 > **关键点**：
-> - 继承 **`Duckov.Modding.ModBehaviour`**（游戏引擎基类），**不**继承 `FastModdingLib.ModBehaviour`
+> - 继承 **`Duckov.Modding.ModBehaviour`**（游戏引擎基类），**不**继承 `FeatherMod.ModBehaviour`
 > - 实现 **`IHasModid`** 接口 — FML 工具通过此接口获取你的 mod 身份
 > - `FMLBootstrap` 自动管理 Registry / EventBus 等游戏级单例——你只需调用 FML 工具方法即可
 
@@ -107,7 +107,7 @@ public class MyFirstMod : Duckov.Modding.ModBehaviour, IHasModid
 
 所有依赖 FML 的模组应直接继承 `Duckov.Modding.ModBehaviour`（游戏引擎基类）并实现 `IHasModid` 接口。
 
-> **注意**：`FastModdingLib.ModBehaviour` 是 FML 自身的入口类，由 ModManager 实例化。**外部模组不应继承它。**
+> **注意**：`FeatherMod.ModBehaviour` 是 FML 自身的入口类，由 ModManager 实例化。**外部模组不应继承它。**
 
 ```csharp
 public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
@@ -154,7 +154,7 @@ FML 在游戏 Rescan 模组列表时自动加载并应用。
     "modid": "MyMod",           // 必填：模组标识符，必须与 info.ini 中的 name 一致
     "priority": 100,            // 可选：加载优先级（越小越先加载，默认 int.MaxValue 即最低）
     "dependencies": [           // 可选：硬依赖，被依赖的 mod 必须存在且已激活
-        "FastModdingLib",
+        "FeatherMod",
         "SomeOtherMod"
     ],
     "loadAfter": [              // 可选：软依赖，仅排在目标之后加载（不要求目标存在或激活）
@@ -193,7 +193,7 @@ FML 在游戏 Rescan 模组列表时自动加载并应用。
 {
     "modid": "MyWeaponPack",
     "priority": 50,
-    "dependencies": ["FastModdingLib"],
+    "dependencies": ["FeatherMod"],
     "autoActivate": true
 }
 ```
@@ -203,7 +203,7 @@ FML 在游戏 Rescan 模组列表时自动加载并应用。
 {
     "modid": "MyOverhaul",
     "priority": 200,
-    "dependencies": ["FastModdingLib"],
+    "dependencies": ["FeatherMod"],
     "loadAfter": ["MyWeaponPack", "MyQuestPack"],
     "autoActivate": false
 }
@@ -660,8 +660,9 @@ var questData = new QuestData
 QuestUtils.RegisterQuest(new Identifier("mymod", "coffee_run"), questData);
 ```
 
-> **数字 ID 全自分配**：`QuestData.ID`（从 1000 起递增）、`TaskData.id`、`RewardData.id`（从 1 起递增）
-> 均由 FML 在注册时自动分配。modder 无需手动设置（已 internal）。
+> **数字 ID 全自分配 + 冲突检测**：`QuestData.ID`（从 1000 起递增）、`TaskData.id`、`RewardData.id`（从 1 起递增）
+> 均由 FML 在注册时自动分配，带 **冲突检测** — 若候选 ID 已被原生游戏任务或已注册 FML 任务占用，自动递增至空闲位置。
+> modder 无需手动设置（已 internal）。
 > `RewardUnlockEndowmentData` 在任务完成时自动解锁指定天赋（AutoClaim），无需 modder 手动处理解锁逻辑。
 
 ### 6.3 任务关系图
@@ -675,10 +676,10 @@ var unlocks = new Identifier("mymod", "next_quest");
 QuestUtils.AddQuestRelation(current, before: preReq, after: unlocks);
 ```
 
-### 6.4 任务 ID 反查
+### 6.4 任务 ID 反查（O(1)）
 
 ```csharp
-// 数字 ID → Identifier
+// 数字 ID → Identifier（O(1) 反查，通过内部反向索引）
 if (QuestUtils.TryGetQuestIdentifier(1001, out var id))
     QuestUtils.UnregisterQuest(id);
 
@@ -801,7 +802,7 @@ ShopUtils.CreateMerchantProfile("MyTrader");
 ### 8.1 SFX 注册
 
 ```csharp
-using FastModdingLib.Audio;
+using FeatherMod.Audio;
 
 AudioUtil.Instance.RegisterAudio(
     new Identifier("mymod", "gun_shot"),
@@ -910,8 +911,8 @@ FML 提供统一的同步事件总线，自动桥接了 15 个游戏原生事件
 ### 10.1 订阅事件
 
 ```csharp
-using FastModdingLib.Events;
-using FastModdingLib.Events.GameEvents;
+using FeatherMod.Events;
+using FeatherMod.Events.GameEvents;
 
 // 订阅玩家金钱变化
 EventBusManager.Instance.Sync.Register<MoneyChangedEvent>(e =>
@@ -955,7 +956,7 @@ EventBusManager.Instance.Sync.Register<HurtEvent>(
 #### 10.4.1 定义异步事件
 
 ```csharp
-using FastModdingLib.Events;
+using FeatherMod.Events;
 using System.Collections.Generic;
 
 /// <summary>Sprite 批量加载请求。</summary>
@@ -1389,7 +1390,7 @@ EnemyUtils.UnregisterAllEnemies("mymod");
 实现 `IStateConfig` 接口来定义敌人的 AI 行为：
 
 ```csharp
-using FastModdingLib.Entities;
+using FeatherMod.Entities;
 
 public class MyScavAI : IStateConfig
 {
@@ -1469,7 +1470,7 @@ object bt = EnemyUtils.CompileStateMachine(aiConfig);
 ### 按预设名注入
 
 ```csharp
-using FastModdingLib;
+using FeatherMod;
 
 // 前缀通配：所有以 "Cname_Scav" 开头的 NPC 预设
 WeaponInjectionUtils.AddWeaponToPreset("Cname_Scav*", ItemEntry.Of("mymod", "ak47"), chance: 0.5f);
@@ -1513,7 +1514,7 @@ modder 只需调用一次注册，后续场景加载时自动生效。
 ### 注册
 
 ```csharp
-using FastModdingLib;
+using FeatherMod;
 
 // 向所有名为 "LotteryBox_Gun" 开头的抽奖箱注入武器（默认与原生条目等权）
 LotteryBoxUtils.AddItemToLotteryBox("LotteryBox_Gun*", ItemEntry.Of("mymod", "ak47"));
@@ -1547,7 +1548,7 @@ LotteryBoxUtils.UnregisterAllLotteryInjections("mymod");
 ## 19. 自定义设置面板（ModOptionsRegistry）
 
 ```csharp
-using FastModdingLib.Options;
+using FeatherMod.Options;
 
 ModOptionsRegistry.RegisterPanel("mymod", "My Mod Settings", builder =>
 {
@@ -1600,7 +1601,7 @@ AssetUtil.UnloadAllBundles();
 可使用 `SimpleViewBuilder` 纯代码创建：
 
 ```csharp
-using FastModdingLib.UI;
+using FeatherMod.UI;
 
 // 创建简单面板
 var panel = SimpleViewBuilder.Create("MyModPanel")
@@ -1624,13 +1625,13 @@ var panel = SimpleViewBuilder.Create("MyModPanel")
 所有模块的数据都通过 `IRegistry<T>` 管理：
 
 ```csharp
-using FastModdingLib.Register;
+using FeatherMod.Register;
 
 // 获取元注册表
 var meta = RegistryManager.Instance.Registry;
 
 // 读取注册表
-var audioRegistry = meta.Get(new Identifier("fastmoddinglib", "audio"));
+var audioRegistry = meta.Get(new Identifier("FeatherMod", "audio"));
 
 // 遍历注册表
 foreach (var entry in meta)
@@ -1719,8 +1720,8 @@ MyMod/
 
 | 命名空间 | 包含 |
 |----------|------|
-| `FastModdingLib` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ModBehaviour` |
-| `FastModdingLib.Utils` | `Identifier`, `Singleton<T>`, `ModPathResolver` |
+| `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ModBehaviour` |
+| `FeatherMod.Utils` | `Identifier`, `Singleton<T>`, `ModPathResolver` |
 
 ### ModPathResolver — 路径注册
 
@@ -1736,15 +1737,15 @@ protected override void OnAfterSetup()
 ```
 
 > 未注册时，`ResolveDirectory(modid)` 返回 `null`，便捷重载将退回到 FML 自身 DLL 目录路径，可能导致资源加载失败。
-| `FastModdingLib.Register` | `IRegistry<T>`, `SimpleRegistry<T>`, `NonAlterableSimpleRegistry<T>`, `ReverseLookupRegistry<T,TKey>`, `RegistryManager` |
-| `FastModdingLib.Audio` | `AudioUtil`, `AudioData` |
-| `FastModdingLib.Events` | `EventBusManager`, `EventBus`, `AsyncEventBus` |
-| `FastModdingLib.Events.GameEvents` | `HurtEvent`, `MoneyChangedEvent`, 等 15 个事件类型 |
-| `FastModdingLib.Options` | `ModOptionsRegistry`, `ModOptionsBuilder` |
-| `FastModdingLib.Entities` | `IStateConfig`, `Transition`, `StateMachineToBT` |
-| `FastModdingLib.Items` | `ItemData`, `BulletData`, `BlueprintData`, `UsageData`, `ModifierData` |
-| `FastModdingLib.Quests` | `QuestData`, `TaskData`, `RewardData` 及其子类 |
-| `FastModdingLib.Shop` | `ShopGoodsData` |
+| `FeatherMod.Register` | `IRegistry<T>`, `SimpleRegistry<T>`, `NonAlterableSimpleRegistry<T>`, `ReverseLookupRegistry<T,TKey>`, `RegistryManager` |
+| `FeatherMod.Audio` | `AudioUtil`, `AudioData` |
+| `FeatherMod.Events` | `EventBusManager`, `EventBus`, `AsyncEventBus` |
+| `FeatherMod.Events.GameEvents` | `HurtEvent`, `MoneyChangedEvent`, 等 15 个事件类型 |
+| `FeatherMod.Options` | `ModOptionsRegistry`, `ModOptionsBuilder` |
+| `FeatherMod.Entities` | `IStateConfig`, `Transition`, `StateMachineToBT` |
+| `FeatherMod.Items` | `ItemData`, `BulletData`, `BlueprintData`, `UsageData`, `ModifierData` |
+| `FeatherMod.Quests` | `QuestData`, `TaskData`, `RewardData` 及其子类 |
+| `FeatherMod.Shop` | `ShopGoodsData` |
 
 ---
 

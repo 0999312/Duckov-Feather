@@ -1,7 +1,7 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib.Utils
+namespace FeatherMod.Utils
 {
     /// <summary>
     /// 运行时 Shader 自动替换工具。

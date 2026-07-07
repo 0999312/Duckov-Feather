@@ -1,10 +1,10 @@
-using Duckov.Quests;
+﻿using Duckov.Quests;
 using ItemStatsSystem;
 using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace FastModdingLib.Quests
+namespace FeatherMod.Quests
 {
     /// <summary>
     /// FML 扩展击杀任务：支持按武器标签匹配击杀。

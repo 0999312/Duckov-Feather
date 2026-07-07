@@ -1,4 +1,4 @@
-﻿using FastModdingLib.Events.GameEvents;
+﻿using FeatherMod.Events.GameEvents;
 using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
@@ -7,7 +7,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using UnityEngine;
 
-namespace FastModdingLib.Events.Adapters
+namespace FeatherMod.Events.Adapters
 {
     /// <summary>
     /// 游戏原生 C# 事件 → FML EventBus 桥接层（PLAN-EventBus §6）。

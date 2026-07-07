@@ -81,7 +81,7 @@ FML 将合成配方的成本分为两层处理：
 ### 3.1 `TagCostRegistry`
 
 ```csharp
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>标签成本注册表。存储每个 FML 注册配方的标签成本。</summary>
     internal static class TagCostRegistry
@@ -129,7 +129,7 @@ namespace FastModdingLib
 ### 3.2 `CraftingManagerPatch` — 合成拦截
 
 ```csharp
-namespace FastModdingLib.Crafting.Patches
+namespace FeatherMod.Crafting.Patches
 {
     /// <summary>
     /// Harmony Prefix 拦截 CraftingManager.Craft。
@@ -163,7 +163,7 @@ namespace FastModdingLib.Crafting.Patches
 ### 3.3 `TagCostValidator` — 标签验证与扣除
 
 ```csharp
-namespace FastModdingLib.Crafting
+namespace FeatherMod.Crafting
 {
     /// <summary>标签成本验证器：搜索、验证、扣除标签匹配物品。</summary>
     internal static class TagCostValidator
@@ -386,7 +386,7 @@ CostItems = new[] {
 ## 6. 文件布局
 
 ```
-FastModdingLib/
+FeatherMod/
 ├── Crafting/
 │   ├── TagCostRegistry.cs           (~60 LOC)  标签成本注册表
 │   ├── TagCostValidator.cs          (~100 LOC) 标签验证与扣除引擎
@@ -410,4 +410,4 @@ FastModdingLib/
 
 ---
 
-*本设计的核心模块（`TagCostRegistry`、`TagCostValidator`、`CraftingManagerPatch`）及 `ItemEntry.ByTag()`/`WithDurabilityCost()` 字段已在 `FastModdingLib/Crafting/` 中实现。运行时行为验收（合成消耗逻辑、耐久度折算）留待 Phase 5。*
+*本设计的核心模块（`TagCostRegistry`、`TagCostValidator`、`CraftingManagerPatch`）及 `ItemEntry.ByTag()`/`WithDurabilityCost()` 字段已在 `FeatherMod/Crafting/` 中实现。运行时行为验收（合成消耗逻辑、耐久度折算）留待 Phase 5。*

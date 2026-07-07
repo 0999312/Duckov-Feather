@@ -1,9 +1,9 @@
-﻿using FastModdingLib.Modding;
-using FastModdingLib.Options;
+using FeatherMod.Modding;
+using FeatherMod.Options;
 using HarmonyLib;
 using System.Reflection;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// FML 自身的 mod 入口类。由游戏 ModManager 实例化并调用生命周期方法。
@@ -23,9 +23,9 @@ namespace FastModdingLib
         private Harmony? _harmony;
 
         /// <summary>
-        /// FML 自身的模组标识符，固定返回 <c>"FastModdingLib"</c>。
+        /// FML 自身的模组标识符，固定返回 <c>"FeatherMod"</c>。
         /// </summary>
-        public string GetModid() => "FastModdingLib";
+        public string GetModid() => "FeatherMod";
 
         public void Awake() { }
 

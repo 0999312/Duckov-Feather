@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Register
+﻿namespace FeatherMod.Register
 {
     /// <summary>
     /// 元注册表标记接口。所有可注册到 <see cref="RegistryManager.Registry"/> 的注册表

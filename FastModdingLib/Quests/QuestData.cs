@@ -2,12 +2,12 @@
 using Duckov.Quests;
 using Duckov.Quests.Rewards;
 using Duckov.Quests.Tasks;
-using FastModdingLib.Quests;
-using FastModdingLib.Utils;
+using FeatherMod.Quests;
+using FeatherMod.Utils;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public class QuestData
     {
@@ -17,7 +17,7 @@ namespace FastModdingLib
 
         /// <summary>
         /// 可选：Quest 的 Identifier（domain = modid, path = 任务标识）。
-        /// 设置后 Registry 使用此 Identifier 而非硬编码 "fastmoddinglib:quest_{ID}"。
+        /// 设置后 Registry 使用此 Identifier 而非硬编码 "feather:quest_{ID}"。
         /// </summary>
         public Identifier? Id;
 

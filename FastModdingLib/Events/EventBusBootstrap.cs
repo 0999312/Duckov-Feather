@@ -1,6 +1,6 @@
-using FastModdingLib.Events.Adapters;
+﻿using FeatherMod.Events.Adapters;
 
-namespace FastModdingLib.Events
+namespace FeatherMod.Events
 {
     /// <summary>
     /// EventBus 模块启动/卸载入口。

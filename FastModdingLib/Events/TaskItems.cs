@@ -1,8 +1,8 @@
-using Cysharp.Threading.Tasks;
+﻿using Cysharp.Threading.Tasks;
 using System;
 using System.Threading;
 
-namespace FastModdingLib.Events
+namespace FeatherMod.Events
 {
     /// <summary>
     /// 所有 handler 包装的基类。持有 <see cref="Priority"/> 与全局自增的

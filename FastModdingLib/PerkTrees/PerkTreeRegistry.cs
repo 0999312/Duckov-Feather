@@ -1,8 +1,8 @@
 ﻿using Duckov.PerkTrees;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// Perk 注册表。维护 Identifier → Perk 主映射，

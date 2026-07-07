@@ -1,5 +1,5 @@
 ﻿using Duckov;
-using FastModdingLib.Utils;
+using FeatherMod.Utils;
 using FMOD.Studio;
 using FMODUnity;
 using HarmonyLib;
@@ -7,7 +7,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace FastModdingLib.Audio
+namespace FeatherMod.Audio
 {
     [HarmonyPatch(typeof(AudioObject), nameof(AudioObject.Post))]
     public class AudioObjectMixin

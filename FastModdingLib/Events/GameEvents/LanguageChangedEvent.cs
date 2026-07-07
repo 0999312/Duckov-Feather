@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace FastModdingLib.Events.GameEvents
+namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 游戏语言变更事件。当玩家切换游戏语言时触发。

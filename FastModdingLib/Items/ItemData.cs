@@ -6,7 +6,7 @@ using ItemStatsSystem.Stats;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public class ItemData
     {

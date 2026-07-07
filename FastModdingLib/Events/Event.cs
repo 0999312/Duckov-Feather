@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace FastModdingLib.Events
+namespace FeatherMod.Events
 {
     /// <summary>
     /// 所有 FML 事件的基类。handler 间通过 priority 协作：高优先级先执行，

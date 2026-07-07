@@ -1,8 +1,8 @@
-using ItemStatsSystem.Stats;
+﻿using ItemStatsSystem.Stats;
 using System;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// 天赋效果修饰符。modder 用此类型描述天赋效果，无需接触游戏内部类型。

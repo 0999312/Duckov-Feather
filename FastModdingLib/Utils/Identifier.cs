@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace FastModdingLib.Utils
+namespace FeatherMod.Utils
 {
     public class Identifier : IEquatable<Identifier>
     {

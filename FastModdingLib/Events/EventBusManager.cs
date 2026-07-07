@@ -1,6 +1,6 @@
-using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 
-namespace FastModdingLib.Events
+namespace FeatherMod.Events
 {
     /// <summary>
     /// EventBus 总管单例。承载同步与异步两条总线。

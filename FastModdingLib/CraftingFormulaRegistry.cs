@@ -1,7 +1,7 @@
-﻿using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using FeatherMod.Register;
+using FeatherMod.Utils;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// 合成配方注册表。<see cref="Identifier"/>.Path = formulaId；

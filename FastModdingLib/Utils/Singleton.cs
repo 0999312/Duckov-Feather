@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace FastModdingLib.Utils
+namespace FeatherMod.Utils
 {
     public abstract class Singleton<T> where T : Singleton<T>
     {

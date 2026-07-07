@@ -1,7 +1,7 @@
-using Duckov.PerkTrees;
+﻿using Duckov.PerkTrees;
 using HarmonyLib;
 
-namespace FastModdingLib.PerkTrees.Patches
+namespace FeatherMod.PerkTrees.Patches
 {
     /// <summary>
     /// PerkTree.Collect 前缀补丁。

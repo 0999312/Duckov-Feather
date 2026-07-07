@@ -1,10 +1,10 @@
 ﻿using Duckov.Utilities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using System;
 using System.Collections.Generic;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public static class ShopUtils
     {

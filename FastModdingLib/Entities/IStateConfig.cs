@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace FastModdingLib.Entities
+namespace FeatherMod.Entities
 {
     /// <summary>
     /// 状态机中的一条转换规则。

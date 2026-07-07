@@ -1,7 +1,7 @@
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using FeatherMod.Register;
+using FeatherMod.Utils;
 
-namespace FastModdingLib.Entities
+namespace FeatherMod.Entities
 {
     /// <summary>
     /// LotteryBox 注入注册表。维护 Identifier → LotteryBoxData 映射，

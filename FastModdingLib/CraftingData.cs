@@ -1,6 +1,6 @@
-﻿using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     // ═══════════════════════════════════════════════════════════════
     //  ItemEntry — 单个物品引用（消耗材料 / 产物 / 分解结果通用）

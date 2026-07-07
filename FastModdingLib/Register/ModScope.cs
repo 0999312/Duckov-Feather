@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace FastModdingLib.Register
+namespace FeatherMod.Register
 {
     /// <summary>
     /// <see cref="RegistryManager.EnterModScope"/> 返回的作用域对象。

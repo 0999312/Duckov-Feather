@@ -1,8 +1,8 @@
-using Duckov.Endowment;
+﻿using Duckov.Endowment;
 using HarmonyLib;
 using UnityEngine;
 
-namespace FastModdingLib.Endowment.Patches
+namespace FeatherMod.Endowment.Patches
 {
     /// <summary>
     /// Harmony 补丁：EndowmentManager 生命周期注入。

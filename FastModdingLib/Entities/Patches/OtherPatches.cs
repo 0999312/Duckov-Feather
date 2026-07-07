@@ -1,12 +1,12 @@
-﻿using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using FeatherMod.Register;
+using FeatherMod.Utils;
 using HarmonyLib;
 using System;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
-namespace FastModdingLib.Entities.Patches
+namespace FeatherMod.Entities.Patches
 {
     /// <summary>
     /// Phase 3 EnemyUtils 剩余 Harmony patch 点（PLAN-EnemyUtils §4.1 表）。

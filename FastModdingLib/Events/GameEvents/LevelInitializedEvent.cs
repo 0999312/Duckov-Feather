@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 关卡初始化完成事件。桥接自游戏原生 <c>LevelManager.OnLevelInitialized</c> 事件。

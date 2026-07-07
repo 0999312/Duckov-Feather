@@ -1,4 +1,4 @@
-using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 
 using ItemStatsSystem;
 
@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-namespace FastModdingLib.Items
+namespace FeatherMod.Items
 {
     /// <summary>
     /// 原版游戏物品反查表。建立 <c>Identifier("duckov", displayName)</c> ↔ <c>int TypeID</c> 的双向映射。

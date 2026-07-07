@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-namespace FastModdingLib.Modding
+namespace FeatherMod.Modding
 {
     /// <summary>
     /// fml.json 加载器与缓存。在 ModManager.Rescan 后调用 <see cref="LoadAll"/> 批量加载，

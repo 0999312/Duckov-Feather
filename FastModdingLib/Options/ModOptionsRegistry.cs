@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib.Options
+namespace FeatherMod.Options
 {
     /// <summary>
     /// Mod 设置面板注册表。监听 <see cref="CustomOptionsPanel.OnPanelEnabled"/>，

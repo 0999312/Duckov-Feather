@@ -1,8 +1,8 @@
-using FastModdingLib.Events;
-using FastModdingLib.Items;
-using FastModdingLib.Register;
+﻿using FeatherMod.Events;
+using FeatherMod.Items;
+using FeatherMod.Register;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// FML 全局单例生命周期入口。

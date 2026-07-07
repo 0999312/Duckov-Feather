@@ -4,7 +4,7 @@ using SodaCraft.Localizations;
 using System;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public class ReturnItem : UsageBehavior
     {

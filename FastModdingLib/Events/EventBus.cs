@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
-namespace FastModdingLib.Events
+namespace FeatherMod.Events
 {
     /// <summary>
     /// 同步事件总线。handler 按 Priority 降序执行（数值大者先），

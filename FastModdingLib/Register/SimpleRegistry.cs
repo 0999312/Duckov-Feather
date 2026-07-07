@@ -1,11 +1,11 @@
-﻿using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace FastModdingLib.Register
+namespace FeatherMod.Register
 {
     /// <summary>
     /// <see cref="IRegistry{T}"/> 的薄包装实现。维护 entry→owner 映射，

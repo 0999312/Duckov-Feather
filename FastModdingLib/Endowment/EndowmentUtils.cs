@@ -1,12 +1,12 @@
-using Duckov.Endowment;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using Duckov.Endowment;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using ItemStatsSystem.Stats;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// 天赋系统公共 API。所有注册、查询、选择操作均使用 <see cref="Identifier"/>

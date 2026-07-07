@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Audio
+﻿namespace FeatherMod.Audio
 {
     public class AudioData
     {

@@ -1,7 +1,7 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
-namespace FastModdingLib.UI
+namespace FeatherMod.UI
 {
     /// <summary>
     /// 代码端 Canvas 构建器。让 modder 用纯 C# 代码创建基本 UI 面板，

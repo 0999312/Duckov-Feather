@@ -74,7 +74,7 @@ modder **不需要**在 Unity 编辑器中手动创建 `CustomFacePreset`。FML 
 ### 2.2 `FaceRef` 设计
 
 ```csharp
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>捏脸引用。支持引用已有预设、玩家捏脸或自定义部件组合。</summary>
     public struct FaceRef
@@ -247,4 +247,4 @@ var custom = new EnemyPresetData
 
 ---
 
-*本设计的核心类型（`FaceRef`、`FacePartIds`、`FaceRefMode` 枚举、`NpcRole` 枚举）已在 `FastModdingLib/Entities/` 中实现，并已集成到 `EnemyPresetData` DTO。完整的捏脸预设创建和运行时面部定制留待 Phase 5。*
+*本设计的核心类型（`FaceRef`、`FacePartIds`、`FaceRefMode` 枚举、`NpcRole` 枚举）已在 `FeatherMod/Entities/` 中实现，并已集成到 `EnemyPresetData` DTO。完整的捏脸预设创建和运行时面部定制留待 Phase 5。*

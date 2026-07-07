@@ -1,7 +1,7 @@
-using ItemStatsSystem;
+﻿using ItemStatsSystem;
 using UnityEngine;
 
-namespace FastModdingLib.Utils
+namespace FeatherMod.Utils
 {
     /// <summary>
     /// 武器分类工具。供 WeaponInjectionUtils / LotteryBoxPatch 等模块共用。

@@ -1,6 +1,6 @@
-using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 
-namespace FastModdingLib.Register
+namespace FeatherMod.Register
 {
     /// <summary>
     /// Register 模块启动/卸载入口（PLAN-Register §6）。由 <c>ModBehaviour.OnAfterSetup</c>

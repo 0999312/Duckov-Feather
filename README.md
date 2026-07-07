@@ -1,6 +1,6 @@
-# 快速模组开发库 · Fast Modding Lib
+# Feather · Feather Modding Lib
 
-> *为《逃离鸭科夫》(Escape From Duckov) 量身打造的声明式 Mod 开发框架——让 Mod 开发快 10 倍。*
+> *为《逃离鸭科夫》(Escape From Duckov) 量身打造的声明式 Mod 开发框架——轻如羽毛，快 10 倍。*
 
 <p align="center">
   <img src="https://img.shields.io/badge/framework-.NET%20Standard%202.1-512BD4?style=flat-square&logo=.net" alt=".NET Standard 2.1">
@@ -15,7 +15,7 @@
 
 ## 简介
 
-**快速模组开发库**（Fast Modding Lib，简称 FML）将《逃离鸭科夫》Mod 开发中常见的底层复杂性——数字 ID 映射、Harmony 补丁冲突、资源生命周期追踪、事件桥接——全部封装到框架内部。模组作者只需写**纯 C# 代码**，即可完成从物品、合成、任务到天赋、技能树、自定义敌人的全部开发。
+**Feather**（Feather Modding Lib，简称 FML）将《逃离鸭科夫》Mod 开发中常见的底层复杂性——数字 ID 映射、Harmony 补丁冲突、资源生命周期追踪、事件桥接——全部封装到框架内部。模组作者只需写**纯 C# 代码**，即可完成从物品、合成、任务到天赋、技能树、自定义敌人的全部开发。
 
 **核心价值**：用 `Identifier("mymod", "coffee")` 替代游戏原生的神秘数字 ID；用声明式 API 注册替代冗长的样板代码；用自动卸载替代手动的资源清理。
 
@@ -293,7 +293,7 @@ FML 的所有 22 个补丁均使用独立的 `try/catch` 包裹，单个补丁�
 
 | 模组 | 简介 | 链接 |
 |------|------|------|
-| **鸭科夫武器示例工程** | 快速模组开发库的示例模组之一，展示如何用 FML 快速构建武器模组 | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3610492072) |
+| **鸭科夫武器示例工程** | Feather 的示例模组之一，展示如何用 FML 快速构建武器模组 | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3610492072) |
 | **PLA 武器拓展** | 添加严格遵循原版美术风格的 PLA 现役经典枪族，广受好评 | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3610492072) |
 | **顶级战术武器拓展** | 为鸭科夫注入多元现代火力，广受好评的顶级武器模组 | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3610492072) |
 | **粽子** | 非常简单的粽子 Mod，解决了鸭星端午节没有粽子的问题 | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3747820901) |

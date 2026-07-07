@@ -1,9 +1,9 @@
-using Duckov.Buildings.UI;
+﻿using Duckov.Buildings.UI;
 using Duckov.PerkTrees;
 using Duckov.UI;
 using UnityEngine;
 
-namespace FastModdingLib.UI
+namespace FeatherMod.UI
 {
     /// <summary>
     /// Building 系统交互入口模板。挂载到 Building Prefab 的 functionContainer 上。

@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
-namespace FastModdingLib.Events
+namespace FeatherMod.Events
 {
     /// <summary>
     /// EventBus 同步总线测试。覆盖 PLAN-EventBus.md §10 的 6 类用例 + Clear。

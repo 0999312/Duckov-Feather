@@ -51,7 +51,7 @@ if (withWeapon && info.fromWeaponItemID != weaponTypeID)
 ### 1.2 新增文件
 
 ```
-FastModdingLib/Crafting/
+FeatherMod/Crafting/
 ├── TagCostRegistry.cs              (~60 LOC)  标签成本注册表
 ├── Patches/
 │   └── CraftingManagerPatch.cs     (~80 LOC)  Craft 方法 Prefix + 标签成本验证
@@ -60,7 +60,7 @@ FastModdingLib/Crafting/
 ### 1.3 `TagCostRegistry.cs`
 
 ```csharp
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>标签成本条目：每个 formula 的标签匹配成本。</summary>
     public class TagCostEntry
@@ -232,7 +232,7 @@ static bool HasTag(Item item, string tag)
 
 > **2026-07-02 决策**：击杀任务武器标签匹配**不使用 Harmony Patch 实现**，
 > 改为通过 `FMLTask_KillCountByTag` 子类方案（详见 `DESIGN-QuestTaskExtension.md`）。
-> 该子类已在 `FastModdingLib/Quests/FMLTask_KillCountByTag.cs` 中实现。
+> 该子类已在 `FeatherMod/Quests/FMLTask_KillCountByTag.cs` 中实现。
 > 本节保留原始 Patch 设计方案供参考，**不会实际实施**。
 
 ### 2.1 策略（已废弃）
@@ -242,7 +242,7 @@ static bool HasTag(Item item, string tag)
 ### 2.2 新增文件
 
 ```
-FastModdingLib/Quests/Patches/
+FeatherMod/Quests/Patches/
 └── KillCountWeaponTagPatch.cs     (~60 LOC)  Health_OnDead 方法 Prefix
 ```
 

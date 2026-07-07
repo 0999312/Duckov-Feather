@@ -1,7 +1,7 @@
-using HarmonyLib;
+﻿using HarmonyLib;
 using UnityEngine;
 
-namespace FastModdingLib.Crafting.Patches
+namespace FeatherMod.Crafting.Patches
 {
     /// <summary>
     /// Harmony Prefix 拦截 CraftingManager.Craft。

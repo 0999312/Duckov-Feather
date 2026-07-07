@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 收集存档数据事件。桥接自游戏原生 <c>SavesSystem.OnCollectSaveData</c> 静态事件。

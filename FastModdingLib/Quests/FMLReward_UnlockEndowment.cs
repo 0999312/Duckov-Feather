@@ -1,11 +1,11 @@
-using Duckov.Endowment;
+﻿using Duckov.Endowment;
 using Duckov.Quests;
-using FastModdingLib.Utils;
+using FeatherMod.Utils;
 using SodaCraft.Localizations;
 using System.Reflection;
 using UnityEngine;
 
-namespace FastModdingLib.Quests
+namespace FeatherMod.Quests
 {
     /// <summary>
     /// FML 扩展奖励：任务完成时自动解锁指定天赋。

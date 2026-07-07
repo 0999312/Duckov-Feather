@@ -1,4 +1,4 @@
-namespace FastModdingLib
+﻿namespace FeatherMod
 {
     /// <summary>
     /// 统一 mod 标识符接口。

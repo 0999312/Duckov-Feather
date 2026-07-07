@@ -1,10 +1,10 @@
-using Duckov.Buildings;
+﻿using Duckov.Buildings;
 using Duckov.Buildings.UI;
 using Duckov.Utilities;
 using HarmonyLib;
 using System.Linq;
 
-namespace FastModdingLib.Buildings.Patches
+namespace FeatherMod.Buildings.Patches
 {
     /// <summary>
     /// Harmony Patch 集合，确保自定义建筑在游戏原生 UI 和数据查询中可见。

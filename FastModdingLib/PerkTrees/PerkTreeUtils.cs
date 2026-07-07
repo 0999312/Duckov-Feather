@@ -1,13 +1,13 @@
 ﻿using Duckov.PerkTrees;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using NodeCanvas.Framework;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public static class PerkTreeUtils
     {

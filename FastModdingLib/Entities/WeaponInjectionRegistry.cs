@@ -1,7 +1,7 @@
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using FeatherMod.Register;
+using FeatherMod.Utils;
 
-namespace FastModdingLib.Entities
+namespace FeatherMod.Entities
 {
     /// <summary>
     /// 武器注入注册表。维护 Identifier → WeaponInjectionData 映射，

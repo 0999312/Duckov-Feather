@@ -1,6 +1,70 @@
-# Fast-Modding-Lib 迁移指南 / Migration Guide
+# Feather 迁移指南 / Migration Guide
 
 _面向已有模组作者，帮助将基于旧版 FML 的模组迁移到最新 API。_
+
+---
+
+## 0. 项目改名迁移（FeatherMod）
+
+**生效版本**：自 2026-07-06 起，FML 正式更名为 **Feather**（全称 Feather Modding Lib）。
+
+### 变更摘要
+
+| 旧 | 新 |
+|---|---|
+| 命名空间 `FastModdingLib` | `FeatherMod` |
+| 程序集 `FastModdingLib.dll` | `FeatherMod.dll` |
+| 框架 modid `"FastModdingLib"` | `"Feather"` |
+| 内部 domain `"fastmoddinglib"` | `"feather"` |
+| `I18n.InitI18n()` 默认参数 | `"Feather"` |
+| `RegistryManager.CurrentModid` 默认值 | `"Feather"` |
+
+### 迁移步骤
+
+**1. 更新引用**
+
+将 `.csproj` 中的 DLL 引用从 `FastModdingLib.dll` 改为 `FeatherMod.dll`：
+
+```xml
+<!-- 旧 -->
+<Reference Include="path\to\FastModdingLib.dll" />
+
+<!-- 新 -->
+<Reference Include="path\to\FeatherMod.dll" />
+```
+
+**2. 更新 using 语句**
+
+```csharp
+// 旧
+using FastModdingLib;
+using FastModdingLib.Utils;
+using FastModdingLib.Events;
+
+// 新
+using FeatherMod;
+using FeatherMod.Utils;
+using FeatherMod.Events;
+```
+
+**3. 更新 ModBehaviour 引用**
+
+```csharp
+// 旧（代码注释 / 文档引用中）
+// 不继承 FastModdingLib.ModBehaviour
+
+// 新
+// 不继承 FeatherMod.ModBehaviour
+```
+
+> 你的 mod 主类**依然继承 `Duckov.Modding.ModBehaviour`**（游戏引擎基类）——这一层不变。仅框架自身的 `ModBehaviour` 类所在的命名空间变了。
+
+**4. 无需修改**
+
+- 所有 public API 签名不变（仅命名空间前缀变更）
+- `IHasModid` 接口不变
+- `Identifier` 使用方式不变
+- `fml.json` 文件名和格式不变
 
 ---
 
@@ -58,7 +122,7 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
 ```
 
 **变化说明**：
-- 继承 **`Duckov.Modding.ModBehaviour`**（与旧版相同），**不再**继承 `FastModdingLib.ModBehaviour`
+- 继承 **`Duckov.Modding.ModBehaviour`**（与旧版相同），**不再**继承 `FeatherMod.ModBehaviour`
 - 实现 **`IHasModid`** 接口 — FML 工具通过此接口获取你的 mod 身份
 - **不再调用** `base.OnAfterSetup()` — FML 的单例（Registry / EventBus）由 `FMLBootstrap` 自动管理
 - 自行创建 Harmony 实例并 `PatchAll` 自身程序集（不再自动）
@@ -73,7 +137,7 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
 | 旧版 | 新版 |
 |------|------|
 | `GetModid()` 自动从程序集名推导 | 实现 `IHasModid` 接口，显式返回自身 modid |
-| 继承 `FastModdingLib.ModBehaviour` | 继承 `Duckov.Modding.ModBehaviour` + 实现 `IHasModid` |
+| 继承 `FeatherMod.ModBehaviour` | 继承 `Duckov.Modding.ModBehaviour` + 实现 `IHasModid` |
 | 各模块 `UnregisterAll` 需手动传 modid | `FMLBootstrap.TearDownMod(GetModid())` 自动按 modid 卸载 |
 
 ### 推荐用法
@@ -103,7 +167,7 @@ using (RegistryManager.EnterModScope("MyMod"))
 ### 迁移操作
 1. 搜索所有 `"old_fml_version"` 调用，替换为 `null` 或你的 mod 名称。
 2. 搜索 `"TopTierWeaponExpansion"`，同样替换。
-3. 搜索 `"FastModdingLib"`（某些模块的默认值），同样替换。
+3. 搜索 `"FeatherMod"`（某些模块的默认值），同样替换。
 
 ---
 
@@ -242,9 +306,9 @@ if (craftingFormulaRegistry.TryGet(new Identifier("crafting", "ammo_pack"), out 
 
 | 方法 | 变化 |
 |------|------|
-| `RegisterQuest(QuestData data, string modid)` | modid 默认值从 `"FastModdingLib"` 改为建议显式传入 |
+| `RegisterQuest(QuestData data, string modid)` | modid 默认值从 `"FeatherMod"` 改为建议显式传入 |
 
-**建议**：之前如果不传 modid，默认值是 `"FastModdingLib"`，所有任务会被注册到 FML 自身名下。现在请显式传入你的 mod 名称：
+**建议**：之前如果不传 modid，默认值是 `"FeatherMod"`，所有任务会被注册到 FML 自身名下。现在请显式传入你的 mod 名称：
 ```csharp
 QuestUtils.RegisterQuest(questData, "MyWeaponPack");
 ```

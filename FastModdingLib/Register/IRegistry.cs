@@ -1,7 +1,7 @@
-﻿using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 using System.Collections.Generic;
 
-namespace FastModdingLib.Register
+namespace FeatherMod.Register
 {
     /// <summary>
     /// 统一注册表抽象。扩能后支持删除 / 清空 / 遍历 / owner 索引 / 批量卸载。

@@ -18,8 +18,8 @@
 ### 1.1 创建饮品物品
 
 ```csharp
-using FastModdingLib;
-using FastModdingLib.Utils;
+using FeatherMod;
+using FeatherMod.Utils;
 
 public class DrinkMod : Duckov.Modding.ModBehaviour, IHasModid
 {

@@ -1,7 +1,7 @@
-﻿using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 using System;
 
-namespace FastModdingLib.Register
+namespace FeatherMod.Register
 {
     /// <summary>
     /// Register 一体化模块测试。覆盖 PLAN-Register.md §8 验收清单 DOD 全部用例。

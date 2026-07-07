@@ -1,10 +1,10 @@
-﻿using FastModdingLib.Register;
+﻿using FeatherMod.Register;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-namespace FastModdingLib.Utils
+namespace FeatherMod.Utils
 {
     /// <summary>
     /// Mod 目录路径解析器。替代手工传递 <c>dllPath</c> / <c>modPath</c> 的模式。

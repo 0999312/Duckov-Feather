@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace FastModdingLib.Events.GameEvents
+namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 物品合成事件。桥接自游戏原生 <c>CraftingManager.OnItemCrafted</c> 静态事件。

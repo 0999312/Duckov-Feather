@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace FastModdingLib.Events.GameEvents
+namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 物品解锁状态变更事件。桥接自游戏原生 <c>EconomyManager.OnItemUnlockStateChanged</c> 静态事件。

@@ -1,10 +1,10 @@
-using Duckov.Utilities;
-using FastModdingLib.Utils;
+﻿using Duckov.Utilities;
+using FeatherMod.Utils;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     // ═══════════════════════════════════════════════════════════════
     //  ModelRef — 模型引用

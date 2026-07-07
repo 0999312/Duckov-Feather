@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 控制角色变更事件。桥接自游戏原生 <c>LevelManager.OnControllingCharacterChanged</c> 静态事件。

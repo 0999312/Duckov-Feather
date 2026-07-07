@@ -1,10 +1,10 @@
 ﻿using Duckov.Buildings;
 using Duckov.Utilities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using System.Collections.Generic;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// 建筑注册表。维护 Identifier → BuildingInfo 主映射和 id → prefab 字典。

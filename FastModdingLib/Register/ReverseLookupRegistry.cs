@@ -1,8 +1,8 @@
-﻿using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 using System;
 using System.Collections.Generic;
 
-namespace FastModdingLib.Register
+namespace FeatherMod.Register
 {
     /// <summary>
     /// 有 native 键（如 Audio eventName、Item TypeID）的 registry。

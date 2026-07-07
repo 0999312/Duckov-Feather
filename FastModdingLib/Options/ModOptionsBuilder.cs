@@ -3,7 +3,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace FastModdingLib.Options
+namespace FeatherMod.Options
 {
     /// <summary>
     /// 用 builder 模式逐行向设置面板添加 UI 元素。

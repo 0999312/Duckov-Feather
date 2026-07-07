@@ -1,10 +1,10 @@
-﻿using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using FeatherMod.Register;
+using FeatherMod.Utils;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// 分解配方注册表。反向 key = <see cref="DecomposeFormula"/>.item (int itemId)；

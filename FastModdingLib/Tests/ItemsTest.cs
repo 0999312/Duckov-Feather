@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
-using FastModdingLib.Utils;
+using FeatherMod.Utils;
 
-namespace FastModdingLib.Tests
+namespace FeatherMod.Tests
 {
     public static class ItemsTest
     {
@@ -43,7 +43,7 @@ namespace FastModdingLib.Tests
 
         public static void TestItem()
         {
-            ItemUtils.CreateCustomItem(new Identifier("fastmoddinglib", "test_drink"), drink01);
+            ItemUtils.CreateCustomItem(new Identifier("feather", "test_drink"), drink01);
         }
     }
 }

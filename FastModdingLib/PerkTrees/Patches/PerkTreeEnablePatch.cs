@@ -1,7 +1,7 @@
 ﻿using Duckov.PerkTrees;
 using HarmonyLib;
 
-namespace FastModdingLib.PerkTrees.Patches
+namespace FeatherMod.PerkTrees.Patches
 {
     /// <summary>
     /// LevelConfig.IsPerkTreeEnabled 前缀补丁。

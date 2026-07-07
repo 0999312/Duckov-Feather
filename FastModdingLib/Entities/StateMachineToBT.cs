@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
-namespace FastModdingLib.Entities
+namespace FeatherMod.Entities
 {
     /// <summary>
     /// 将 C# IStateConfig 编译为 NodeCanvas BehaviourTree（PLAN-EnemyUtils §3）。

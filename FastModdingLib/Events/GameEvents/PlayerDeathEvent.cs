@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 玩家死亡事件。桥接自游戏原生 <c>LevelManager.OnMainCharacterDead</c> 静态事件。

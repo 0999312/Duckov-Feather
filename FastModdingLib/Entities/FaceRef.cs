@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     // ═══════════════════════════════════════════════════════════════
     //  FaceRef — 捏脸引用

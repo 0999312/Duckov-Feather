@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 击杀计数变更事件。桥接自游戏原生 <c>SavesCounter.OnKillCountChanged</c> 静态事件。

@@ -1,11 +1,11 @@
 ﻿using Duckov.Quests;
 using Duckov.Quests.Relations;
 using Duckov.Utilities;
-using FastModdingLib.Utils;
+using FeatherMod.Utils;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public static class QuestUtils
     {
@@ -19,19 +19,10 @@ namespace FastModdingLib
         //  ID 反查
         // ═══════════════════════════════════════════════════
 
-        /// <summary>按 quest 数字 ID 反查 Identifier。</summary>
+        /// <summary>按 quest 数字 ID 反查 Identifier（O(1)）。</summary>
         public static bool TryGetQuestIdentifier(int questId, out Identifier id)
         {
-            foreach (var kvp in _questRegistry)
-            {
-                if (kvp.Value != null && kvp.Value.id == questId)
-                {
-                    id = kvp.Key;
-                    return true;
-                }
-            }
-            id = default;
-            return false;
+            return _questRegistry.TryGetIdentifier(questId, out id);
         }
 
         /// <summary>按 Identifier 解析为 quest 数字 ID。</summary>
@@ -63,7 +54,7 @@ namespace FastModdingLib
         /// <summary>
         /// 注册自定义任务（兼容旧 API）。
         /// </summary>
-        public static void RegisterQuest(QuestData data, string modid = "FastModdingLib")
+        public static void RegisterQuest(QuestData data, string modid = "FeatherMod")
         {
             // 优先使用 data.Id（如果设置），否则使用旧式 Identifier
             Identifier id = data.Id ?? new Identifier(modid, $"quest_{data.ID}");
@@ -76,8 +67,13 @@ namespace FastModdingLib
             ResolveTaskItemRefs(data.tasks);
             ResolveRewardItemRefs(data.rewards);
 
-            // 自分配 Quest ID（从 1000 起递增）
-            data.ID = _nextQuestId++;
+            // 自分配 Quest ID（从 1000 起递增），检测与原生/FML 任务的 ID 冲突
+            int candidateId = _nextQuestId++;
+            while (QuestRegistry.IsQuestIdInCollection(candidateId) || _questRegistry.IsQuestIdOccupied(candidateId))
+            {
+                candidateId = _nextQuestId++;
+            }
+            data.ID = candidateId;
 
             // 自分配 Task/Reward 的 id（从 1 开始递增，游戏原生 API 要求唯一）
             int nextId = 1;
@@ -168,14 +164,10 @@ namespace FastModdingLib
 
         internal static void UnregisterQuest(int ID)
         {
-            foreach (var entry in _questRegistry)
+            if (_questRegistry.TryGetIdentifier(ID, out var id))
             {
-                if (entry.Value.id == ID)
-                {
-                    _questRegistry.Remove(entry.Key);
-                    Debug.Log($"Unregistered custom quest: {ID}");
-                    break;
-                }
+                _questRegistry.Remove(id);
+                Debug.Log($"Unregistered custom quest: {ID}");
             }
         }
 

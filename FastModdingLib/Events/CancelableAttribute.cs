@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace FastModdingLib.Events
+namespace FeatherMod.Events
 {
     /// <summary>
     /// 标记一个 <see cref="Event"/> 子类为可取消事件。

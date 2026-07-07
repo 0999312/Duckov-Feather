@@ -1,9 +1,9 @@
-﻿using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib.Entities
+namespace FeatherMod.Entities
 {
     /// <summary>
     /// EnemyUtils 模块测试。覆盖 PLAN-EnemyUtils.md §7 的基本用例。

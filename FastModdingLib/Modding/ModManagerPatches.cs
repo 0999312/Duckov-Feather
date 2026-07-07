@@ -3,7 +3,7 @@ using HarmonyLib;
 using System.Reflection;
 using UnityEngine;
 
-namespace FastModdingLib.Modding
+namespace FeatherMod.Modding
 {
     /// <summary>
     /// Harmony 补丁集合。Hook <c>ModManager</c> 的排序与激活逻辑，
@@ -24,7 +24,7 @@ namespace FastModdingLib.Modding
             if (_sortPatchApplied) return;
             _sortPatchApplied = true;
 
-            var harmony = new Harmony("FastModdingLib.ModOrdering");
+            var harmony = new Harmony("Feather.ModOrdering");
             harmony.Patch(
                 original: typeof(ModManager).GetMethod("SortModInfosByPriority",
                     BindingFlags.NonPublic | BindingFlags.Static),

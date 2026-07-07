@@ -1,7 +1,7 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Duckov.Utilities;
 
-namespace FastModdingLib.Entities
+namespace FeatherMod.Entities
 {
     /// <summary>
     /// 记录单条武器注入规则及其备份数据，用于卸载时恢复到原始状态。

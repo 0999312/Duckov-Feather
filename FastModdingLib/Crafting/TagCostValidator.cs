@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using ItemStatsSystem;
 using UnityEngine;
 
-namespace FastModdingLib.Crafting
+namespace FeatherMod.Crafting
 {
     /// <summary>标签成本验证器：搜索、验证、扣除标签匹配物品。</summary>
     internal static class TagCostValidator

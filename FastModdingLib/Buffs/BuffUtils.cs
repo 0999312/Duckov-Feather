@@ -1,9 +1,9 @@
 ﻿using Duckov.Buffs;
 using Duckov.Utilities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public static class BuffUtils
     {

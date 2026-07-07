@@ -1,6 +1,6 @@
-﻿using FastModdingLib.Events;
-using FastModdingLib.Events.GameEvents;
-using FastModdingLib.Utils;
+﻿using FeatherMod.Events;
+using FeatherMod.Events.GameEvents;
+using FeatherMod.Utils;
 using Newtonsoft.Json.Linq;
 using SodaCraft.Localizations;
 using System.Collections.Generic;
@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public static class I18n
     {
@@ -31,9 +31,9 @@ namespace FastModdingLib
         /// 初始化 I18n。mod 目录从 <see cref="ModPathResolver"/> 自动探测。
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void InitI18n(string modid = "FastModdingLib")
+        public static void InitI18n(string modid = "FeatherMod")
         {
-            if (modid != "FastModdingLib")
+            if (modid != "FeatherMod")
             {
                 string? modPath = ModPathResolver.ResolveDirectory(modid);
                 _modDirectory = modPath != null ? modPath : Assembly.GetExecutingAssembly().Location;

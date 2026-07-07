@@ -1,9 +1,9 @@
 ﻿using Duckov;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using UnityEngine;
 
-namespace FastModdingLib.Audio
+namespace FeatherMod.Audio
 {
     public class AudioUtil : Singleton<AudioUtil>
     {

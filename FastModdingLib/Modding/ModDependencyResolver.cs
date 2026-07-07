@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 
-namespace FastModdingLib.Modding
+namespace FeatherMod.Modding
 {
     /// <summary>
     /// Mod 依赖排序器。先按声明式 priority 排序，再通过拓扑排序解析 dependencies 约束，

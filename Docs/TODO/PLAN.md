@@ -120,7 +120,7 @@ Buildings / PerkTrees / CustomOptions / Entities(待 EnemyUtils) 等模块。
 
 - [x] 根 `.gitignore` 写入（覆盖 `DecompiledDLL/` / `.vs/` 等）
 - [x] `git rm -r --cached .vs/` 脱离索引
-- [x] 删除嵌套子目录 `FastModdingLib/FastModdingLib.sln`
+- [x] 删除嵌套子目录 `FeatherMod/FeatherMod.sln`
 - [x] 🚫 `0Harmony.dll` 改 PackageReference `Lib.Harmony` → **不执行**（版本硬性锁定 2.4.1.0，详见 §1 仓库卫生说明）；保持 vendored `<HintPath>` 现状
 - [x] `DuckovPath` 改 env var fallback（新增 `$(DUCKOV_PATH)` 环境变量优先）
 - [x] README 文档全面更新（反映全模块 API）
@@ -135,17 +135,17 @@ Buildings / PerkTrees / CustomOptions / Entities(待 EnemyUtils) 等模块。
 **内部依赖顺序**：1.A (EventBus) → 1.B (Register 一体化 + ModBehaviour 生命周期)
 
 #### 1.A — EventBus ✅
-> 详见 [`PLAN-EventBus.md`](./PLAN-EventBus.md)。已落地 `FastModdingLib/Events/`。
+> 详见 [`PLAN-EventBus.md`](./PLAN-EventBus.md)。已落地 `FeatherMod/Events/`。
 
 - B1~B6 全部落地：核心总线（修复参考设计两处缺陷——同优先级 handler 不互相覆盖、
    新增 `Unregister` / `UnregisterAll`）+ 15 个游戏事件桥接（14 个用 `DynamicMethod`
    反射订阅绕过 Publicizer 二义性）+ I18n 内部迁移 + `EventBusTest` 7 用例
 - 协程由 `EventBusRunner : MonoBehaviour` 宿主
-- 代码位置：`FastModdingLib/Events/`
+- 代码位置：`FeatherMod/Events/`
 
 #### 1.B — 其他内核加固 ✅
 
-- **[Register 一体化]** R1~R8 全部落地。代码位置：`FastModdingLib/Register/`。
+- **[Register 一体化]** R1~R8 全部落地。代码位置：`FeatherMod/Register/`。
   - `IRegistry<T>` 扩能 + `ReverseLookupRegistry<T,TKey>` +
     `RegistryManager.CurrentModid` + `EnterModScope`
   - Audio / Quests / Shop / Items / Crafting 五模块旁路字典全部收编
@@ -180,14 +180,14 @@ Buildings / PerkTrees / CustomOptions / Entities(待 EnemyUtils) 等模块。
 - ✅ **PerkTreeUtils**：`AddPerk`/`ConnectPerks`/`ForceUnlock`/`RemovePerk`
 - ✅ **BuildingUtils**：`RegisterBuilding`/`GetBuildingInfo`/`UnregisterBuilding`/
   `PlaceBuilding`(占位)
-- ✅ **EnemyUtils**：已实现（方案 A — Hybrid，`IStateConfig` → `StateMachineToBT.Compile()`），代码位置：`FastModdingLib/Entities/`
+- ✅ **EnemyUtils**：已实现（方案 A — Hybrid，`IStateConfig` → `StateMachineToBT.Compile()`），代码位置：`FeatherMod/Entities/`
 
 > 已撤回子任务确认：CropUtils 仍等官方实装；BlackMarket 不封装
 
 ---
 
 ### Phase 4 — Building / PerkTree / Endowment / UI 深化 ✅
-**状态**：全部完成。代码位置：`FastModdingLib/Buildings/`、`FastModdingLib/PerkTrees/`、`FastModdingLib/Endowment/`、`FastModdingLib/UI/`。
+**状态**：全部完成。代码位置：`FeatherMod/Buildings/`、`FeatherMod/PerkTrees/`、`FeatherMod/Endowment/`、`FeatherMod/UI/`。
 
 Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐了全部功能缺口：
 
@@ -221,7 +221,7 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 ## 3. EnemyUtils 架构方案 ✅（Phase 3 已完成）
 
 > **已实现**：方案 A — Hybrid（modder 实现 `IStateConfig`，FML 编译为 NodeCanvas `BehaviourTree`）。
-> 代码位置：`FastModdingLib/Entities/`。
+> 代码位置：`FeatherMod/Entities/`。
 
 ### 方案 A — Hybrid（FML 推荐）
 - **modder 视角**：实现 `IStateConfig` C# 接口（state + onUpdate/onEnter/onExit 回调 + transition 条件）
@@ -320,10 +320,10 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
 
 ## 6. 关键子模块代码索引
 
-- **EventBus →** `FastModdingLib/Events/` ✅ 已完成
-- **Register 一体化 →** `FastModdingLib/Register/` ✅ 已完成
-- **EnemyUtils 三方案 →** `FastModdingLib/Entities/` ✅ 已完成（方案 A — Hybrid）
-- **Phase 4 深化 →** `FastModdingLib/Buildings/`、`FastModdingLib/PerkTrees/`、`FastModdingLib/Endowment/`、`FastModdingLib/UI/` ✅ 已完成
+- **EventBus →** `FeatherMod/Events/` ✅ 已完成
+- **Register 一体化 →** `FeatherMod/Register/` ✅ 已完成
+- **EnemyUtils 三方案 →** `FeatherMod/Entities/` ✅ 已完成（方案 A — Hybrid）
+- **Phase 4 深化 →** `FeatherMod/Buildings/`、`FeatherMod/PerkTrees/`、`FeatherMod/Endowment/`、`FeatherMod/UI/` ✅ 已完成
 - EnemyUtils 三方案对比 → 本文 §3（已归档）
 
 ---

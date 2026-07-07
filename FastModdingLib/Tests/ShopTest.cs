@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace FastModdingLib.Tests
+namespace FeatherMod.Tests
 {
     public static class ShopTest
     {

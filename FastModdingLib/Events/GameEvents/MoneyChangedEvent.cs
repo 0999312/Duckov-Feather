@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 玩家金钱变更事件。桥接自游戏原生 <c>EconomyManager.OnMoneyChanged</c> 事件。

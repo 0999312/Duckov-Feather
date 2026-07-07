@@ -2,7 +2,7 @@
 using System;
 using UnityEngine;
 
-namespace FastModdingLib.Entities.Patches
+namespace FeatherMod.Entities.Patches
 {
     /// <summary>
     /// Patch #6：<see cref="AICharacterController.Init"/> Postfix。

@@ -1,10 +1,10 @@
-using Cysharp.Threading.Tasks;
+﻿using Cysharp.Threading.Tasks;
 using Duckov.ItemBuilders;
 using Duckov.Utilities;
 
-using FastModdingLib.Items;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Items;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using ItemStatsSystem;
 using System;
 using System.Collections.Generic;
@@ -16,7 +16,7 @@ using Unity.VisualScripting;
 
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public static class ItemUtils
     {

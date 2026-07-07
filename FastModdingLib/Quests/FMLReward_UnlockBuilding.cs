@@ -1,11 +1,11 @@
-using Duckov.Buildings;
+﻿using Duckov.Buildings;
 using Duckov.Quests;
 using Duckov.Utilities;
-using FastModdingLib.Utils;
+using FeatherMod.Utils;
 using SodaCraft.Localizations;
 using UnityEngine;
 
-namespace FastModdingLib.Quests
+namespace FeatherMod.Quests
 {
     /// <summary>
     /// FML 扩展奖励：任务完成时解锁指定建筑的建造权限。

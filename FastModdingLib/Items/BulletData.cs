@@ -1,5 +1,5 @@
 ﻿
-namespace FastModdingLib
+namespace FeatherMod
 {
     public class BulletData : ItemData
     {

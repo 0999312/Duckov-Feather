@@ -1,7 +1,7 @@
 ﻿
-using FastModdingLib.Utils;
+using FeatherMod.Utils;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     public class ShopGoodsData
     {

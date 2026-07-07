@@ -1,4 +1,4 @@
-namespace FastModdingLib.Utils
+﻿namespace FeatherMod.Utils
 {
     /// <summary>
     /// 前缀通配符匹配工具。供 WeaponInjectionUtils / LotteryBoxPatch 等模块共用。

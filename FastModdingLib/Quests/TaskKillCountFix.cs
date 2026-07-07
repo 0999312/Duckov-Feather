@@ -1,6 +1,6 @@
 ﻿using Duckov.Quests.Tasks;
 
-namespace FastModdingLib.Quests
+namespace FeatherMod.Quests
 {
     public class TaskKillCountFix : QuestTask_KillCount
     {

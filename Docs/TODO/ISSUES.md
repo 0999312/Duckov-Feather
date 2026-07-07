@@ -60,10 +60,10 @@ RegisterEndowment(Identifier id, object[] modifiers, ...);
 
 #### 第一步：创建 FML 自有 DTO
 
-新建 `FastModdingLib/Endowment/EndowmentConfig.cs`：
+新建 `FeatherMod/Endowment/EndowmentConfig.cs`：
 
 ```csharp
-namespace FastModdingLib
+namespace FeatherMod
 {
     public class EndowmentModifier
     {
@@ -251,7 +251,7 @@ public static EndowmentRegistry Registry => _endowmentRegistry;
 
 ## 附录 A：Publicizer 覆盖范围
 
-`FastModdingLib.csproj` 第 65-68 行：
+`FeatherMod.csproj` 第 65-68 行：
 
 ```xml
 <Publicize Include="TeamSoda.Duckov.Core" IncludeVirtualMembers="false" />

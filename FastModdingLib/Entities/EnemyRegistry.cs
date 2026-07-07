@@ -1,9 +1,9 @@
 ﻿using Duckov.Utilities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using System.Collections.Generic;
 
-namespace FastModdingLib.Entities
+namespace FeatherMod.Entities
 {
     /// <summary>
     /// 敌人注册表。维护 Identifier → CharacterRandomPreset 主映射，

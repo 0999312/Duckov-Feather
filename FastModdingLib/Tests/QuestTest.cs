@@ -1,8 +1,8 @@
 ﻿using Duckov.Quests;
-using FastModdingLib.Utils;
+using FeatherMod.Utils;
 
 
-namespace FastModdingLib.Tests
+namespace FeatherMod.Tests
 {
     public static class QuestTest
     {
@@ -16,12 +16,12 @@ namespace FastModdingLib.Tests
                 tags = { "Formula", "Formula_Blueprint" },
                 formulaID = "example_formula"
             };
-            ItemUtils.CreateCustomBluePrint(new Identifier("fastmoddinglib", "test_blueprint"), blueprint);
+            ItemUtils.CreateCustomBluePrint(new Identifier("feather", "test_blueprint"), blueprint);
             QuestData exampleQuestData = new QuestData
             {
                 ID = 114515,
                 displayName = "Example Quest",
-                description = "This is an example quest added by FastModdingLib.",
+                description = "This is an example quest added by Feather.",
                 questGiver = QuestGiverID.Jeff,
                 requireLevel = 1,
                 tasks = {
@@ -46,7 +46,7 @@ namespace FastModdingLib.Tests
             {
                 ID = 114516,
                 displayName = "Example Quest 2",
-                description = "This is an example quest added by FastModdingLib.",
+                description = "This is an example quest added by Feather.",
                 questGiver = QuestGiverID.Jeff,
                 requireLevel = 1,
                 tasks = {

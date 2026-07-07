@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using UnityEngine;
 
-namespace FastModdingLib.Entities.Patches
+namespace FeatherMod.Entities.Patches
 {
     /// <summary>
     /// NodeCanvas Graph 序列化修复 transpiler（PLAN-EnemyUtils §3.3）。

@@ -1,7 +1,7 @@
-﻿using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 using System;
 
-namespace FastModdingLib.Register
+namespace FeatherMod.Register
 {
     /// <summary>
     /// "加完了不能改"语义的 <see cref="SimpleRegistry{T}"/>。

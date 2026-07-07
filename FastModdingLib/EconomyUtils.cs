@@ -1,11 +1,11 @@
 ﻿using Duckov.Economy;
-using FastModdingLib.Events;
-using FastModdingLib.Events.GameEvents;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Events;
+using FeatherMod.Events.GameEvents;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using System;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// 游戏经济系统封装（PLAN.md Phase 2）。

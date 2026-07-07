@@ -1,9 +1,9 @@
-using Duckov.Buffs;
+﻿using Duckov.Buffs;
 using Duckov.Utilities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// Buff 注册表。维护 Identifier → Buff 主映射，OnRemoved 时从

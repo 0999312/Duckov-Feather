@@ -1,13 +1,13 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Duckov.Utilities;
-using FastModdingLib.Entities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Entities;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// NPC 武器注入 API。

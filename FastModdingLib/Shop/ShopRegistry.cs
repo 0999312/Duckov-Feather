@@ -1,9 +1,9 @@
 ﻿using Duckov.Utilities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using System.Collections.Generic;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// Shop 模块注册表。维护 <see cref="Identifier"/> → <see cref="StockShopDatabase.ItemEntry"/>

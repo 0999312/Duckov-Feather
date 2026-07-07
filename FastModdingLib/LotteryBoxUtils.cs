@@ -1,10 +1,10 @@
-using System;
-using FastModdingLib.Entities;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using System;
+using FeatherMod.Entities;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// LotteryBox 物品注入 API。

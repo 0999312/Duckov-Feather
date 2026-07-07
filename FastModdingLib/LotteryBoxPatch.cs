@@ -1,14 +1,14 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using FastModdingLib.Entities;
-using FastModdingLib.Utils;
+using FeatherMod.Entities;
+using FeatherMod.Utils;
 using HarmonyLib;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// Harmony Patch：在 InteractableBase.Awake() 时自动注入 FML 注册的物品到 LotteryBox.candidates 池。

@@ -70,7 +70,7 @@ QuestData.tasks[] → Quest GameObject
 ### 3.1 `FMLTask_KillCountByTag`
 
 ```csharp
-namespace FastModdingLib.Quests
+namespace FeatherMod.Quests
 {
     /// <summary>
     /// FML 扩展击杀任务：支持按武器标签匹配击杀。
@@ -138,7 +138,7 @@ namespace FastModdingLib.Quests
 ### 3.2 `FMLTask_SubmitItemByTag`
 
 ```csharp
-namespace FastModdingLib.Quests
+namespace FeatherMod.Quests
 {
     /// <summary>
     /// FML 扩展提交物品任务：支持按标签匹配物品，支持耐久度折算。
@@ -323,4 +323,4 @@ QuestUtils.RegisterQuest(new Identifier("mymod", "drink_hunter"), quest);
 
 ---
 
-*本设计的核心类型（`FMLTask_KillCountByTag`、`FMLTask_SubmitItemByTag`、`TaskKillByTagData`、`TaskSubmitItemByTagData`）已在 `FastModdingLib/Quests/` 中实现。完整的任务系统集成和验收标准待 Phase 5。*
+*本设计的核心类型（`FMLTask_KillCountByTag`、`FMLTask_SubmitItemByTag`、`TaskKillByTagData`、`TaskSubmitItemByTagData`）已在 `FeatherMod/Quests/` 中实现。完整的任务系统集成和验收标准待 Phase 5。*

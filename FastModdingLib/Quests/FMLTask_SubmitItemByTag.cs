@@ -1,11 +1,11 @@
-using Duckov.Quests;
+﻿using Duckov.Quests;
 using ItemStatsSystem;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
-namespace FastModdingLib.Quests
+namespace FeatherMod.Quests
 {
     public class FMLTask_SubmitItemByTag : Task
     {

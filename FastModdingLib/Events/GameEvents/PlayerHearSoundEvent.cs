@@ -1,4 +1,4 @@
-﻿namespace FastModdingLib.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// 玩家听到声音事件。桥接自游戏原生 <c>AIMainBrain.OnPlayerHearSound</c> 静态事件。

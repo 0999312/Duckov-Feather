@@ -1,10 +1,10 @@
-using Duckov.Endowment;
-using FastModdingLib.Register;
-using FastModdingLib.Utils;
+﻿using Duckov.Endowment;
+using FeatherMod.Register;
+using FeatherMod.Utils;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastModdingLib
+namespace FeatherMod
 {
     /// <summary>
     /// 天赋注册表。维护 Identifier → EndowmentEntry 主映射，

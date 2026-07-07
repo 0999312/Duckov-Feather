@@ -1,7 +1,7 @@
-using FastModdingLib.Utils;
+﻿using FeatherMod.Utils;
 using System.Collections.Generic;
 
-namespace FastModdingLib.Crafting
+namespace FeatherMod.Crafting
 {
     /// <summary>标签成本注册表。存储每个 FML 注册配方的标签匹配成本。</summary>
     internal static class TagCostRegistry

@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace FastModdingLib.Events.GameEvents
+namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
     /// <see cref="LanguageChangedEvent"/> 的手动测试方法。
