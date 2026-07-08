@@ -10,7 +10,7 @@
              2. 用户自定义 props 文件 $(DuckovUserProps) 中的 DuckovPath
              3. 本文件内硬编码路径（兜底） -->
         <DuckovPath Condition="'$(DuckovPath)' == '' AND '$(DUCKOV_PATH)' != ''">$(DUCKOV_PATH)</DuckovPath>
-        <DuckovPath Condition="'$(DuckovPath)' == '' AND '$(IsMac)' != 'true'">D:\SteamLibrary\steamapps\common\Escape from Duckov</DuckovPath>
+        <DuckovPath Condition="'$(DuckovPath)' == '' AND '$(IsMac)' != 'true'">E:\SteamLibrary\steamapps\common\Escape from Duckov</DuckovPath>
 
         <!-- For Mac users, please fill the folder path which contains Duckov.app below -->
         <!-- Mac 用户请在下面这行填写你的鸭科夫安装路径（包含 Duckov.app 的目录）-->
@@ -18,7 +18,7 @@
 
         <SubPath>\Duckov_Data\Managed\</SubPath>
         <SubPath Condition="'$(IsMac)'">/Duckov.app/Contents/Resources/Data/Managed/</SubPath>
-
+        <LangVersion>12.0</LangVersion>
     </PropertyGroup>
     <ItemGroup>
         <Reference Include="$(DuckovPath)$(SubPath)TeamSoda.*">
@@ -59,7 +59,7 @@
 			<HintPath>0Harmony.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
-    </ItemGroup>
+  </ItemGroup>
 	<ItemGroup>
 		<!-- All members in an assembly -->
 		<Publicize Include="TeamSoda.Duckov.Core" IncludeVirtualMembers="false" />

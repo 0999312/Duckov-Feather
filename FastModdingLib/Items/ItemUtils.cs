@@ -318,6 +318,66 @@ namespace FeatherMod
             RegisterItem(id, component);
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void CreateCustomCartridge(Identifier id, Identifier gameId, ItemData config)
+        {
+            var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+            ItemBuilder itemBuilder = ItemBuilder.New()
+                .TypeID(config.itemId)
+                .EnableStacking(config.maxStackCount, 1)
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath))
+                .SetConstant("GameID", gameId.ToString());
+
+            config.modifiers.ForEach(modifier =>
+            {
+                itemBuilder.Modifier(modifier.getModifier());
+            });
+
+            Item component = itemBuilder
+                .Instantiate();
+
+            UnityEngine.Object.DontDestroyOnLoad(component);
+            SetItemProperties(component, config);
+            RegisterItem(id, component);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static async UniTask CreateCustomCartridgeAsync(Identifier id, Identifier gameId, ItemData config)
+        {
+            // 在 await 前预定 TypeID，防止被低优先级同步加载抢占。
+            // 若首选 ID 冲突则自动分配空闲值。
+            int actualTypeId = ReserveTypeId(id, config.itemId);
+
+            try
+            {
+                var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+                ItemBuilder itemBuilder = ItemBuilder.New()
+                    .TypeID(actualTypeId)
+                    .EnableStacking(config.maxStackCount, 1)
+                    .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath))
+                    .SetConstant("GameID", gameId.ToString());
+
+                config.modifiers.ForEach(modifier =>
+                {
+                    itemBuilder.Modifier(modifier.getModifier());
+                });
+
+                Item component = itemBuilder
+                    .Instantiate();
+
+                UnityEngine.Object.DontDestroyOnLoad(component);
+                SetItemProperties(component, config);
+
+                RegisterItem(id, component);
+            }
+            finally
+            {
+                // 无论成功失败，确保预定被清理。RegisterItem 成功时内部已 ConfirmReservation，
+                // 此处再清一次幂等无害；失败时（如 Sprite 加载异常）释放预定防止 TypeID 泄漏。
+                CancelReservation(id);
+            }
+        }
+
         /// <summary>
         /// 创建并注册自定义蓝图。modid 从 <see cref="Identifier.Domain"/> 推导。
         /// </summary>
