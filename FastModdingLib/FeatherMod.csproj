@@ -18,7 +18,7 @@
 
         <SubPath>\Duckov_Data\Managed\</SubPath>
         <SubPath Condition="'$(IsMac)'">/Duckov.app/Contents/Resources/Data/Managed/</SubPath>
-
+        <LangVersion>12.0</LangVersion>
     </PropertyGroup>
     <ItemGroup>
         <Reference Include="$(DuckovPath)$(SubPath)TeamSoda.*">
@@ -59,7 +59,7 @@
 			<HintPath>0Harmony.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
-    </ItemGroup>
+  </ItemGroup>
 	<ItemGroup>
 		<!-- All members in an assembly -->
 		<Publicize Include="TeamSoda.Duckov.Core" IncludeVirtualMembers="false" />
