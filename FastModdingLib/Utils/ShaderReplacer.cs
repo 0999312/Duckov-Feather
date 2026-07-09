@@ -1,92 +1,151 @@
 ﻿using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 namespace FeatherMod.Utils
 {
     /// <summary>
     /// 运行时 Shader 自动替换工具。
-    /// Modder 在 Unity 编辑器中用官方 .shader 源文件设置模型材质，
-    /// 但 AssetBundle 中的 Shader 引用与游戏运行时通过 GUID 绑定，
-    /// 二者为不同资产实例——Bundle 加载后材质 Shader 会变粉色。
-    /// 本工具在模型加载后自动将材质 Shader 替换为游戏已编译的对应 Shader。
+    ///
+    /// 提供两个层级的替换：
+    /// 1. ApplyToBundle(AssetBundle) — 替换 Bundle 中所有 Material 资产的 Shader（主要路径）。
+    /// 2. ApplyTo(GameObject) — 遍历 GameObject 子级的所有 Renderer 替换（兜底）。
+    ///
+    /// 自动跳过已使用 Unity URP 内置 Shader 的 Material（如 "Universal Render Pipeline/Lit"）。
     /// </summary>
-    /// <remarks>
-    /// 材质属性（_MainTex、_Tint、_Metallic 等）按属性名自动保留，无需手动迁移。
-    /// 替换后自动清空 shaderKeywords，避免源 Shader 的关键字在目标 Shader 上无效。
-    /// </remarks>
     public static class ShaderReplacer
     {
-        /// <summary>
-        /// Shader 名称映射表：源 shader.name → 目标 Shader.Find 的 key。
-        /// 自动替换时，遍历 Renderer 的材质，若 shader.name 命中此表则执行替换。
-        /// </summary>
         private static readonly Dictionary<string, string> ShaderMap = new Dictionary<string, string>()
         {
             { "SodaCraft/SodaLit",       "SodaCraft/SodaLit" },
             { "SodaCraft/SodaCharacter", "SodaCraft/SodaCharacter" },
         };
 
-        /// <summary>
-        /// 注册自定义 Shader 映射。用于未来新增 Shader 类型。
-        /// </summary>
-        /// <param name="sourceShaderName">源 Shader 名称（shader.name，编辑器中的值）</param>
-        /// <param name="targetShaderName">目标 Shader 名称（Shader.Find 的 key）</param>
+        // Shader.Find 缓存
+        private static readonly Dictionary<string, Shader> ShaderCache = new Dictionary<string, Shader>();
+
+        // Unity URP 内置 Shader 前缀 — 直接跳过，不替换
+        private const string URP_PREFIX = "Universal Render Pipeline/";
+
+        /// <summary>注册自定义 Shader 映射。</summary>
         public static void RegisterMapping(string sourceShaderName, string targetShaderName)
         {
             ShaderMap[sourceShaderName] = targetShaderName;
+            ShaderCache.Remove(targetShaderName);
         }
 
-        /// <summary>
-        /// 检查指定的 shader.name 是否在映射表中。
-        /// </summary>
+        /// <summary>检查 shader.name 是否在映射表中。</summary>
         public static bool IsKnownShader(string shaderName)
         {
             return ShaderMap.ContainsKey(shaderName);
         }
 
+        // ═══════════════════════════════════════════════════════
+        //  层级 1：AssetBundle 级别
+        // ═══════════════════════════════════════════════════════
+
         /// <summary>
-        /// 对 GameObject 及其所有子物体（含 inactive）执行自动 Shader 替换。
-        /// 遍历所有 Renderer 的 sharedMaterial，若 shader.name 命中映射表则替换。
+        /// 对 AssetBundle 中所有 Material 资产执行 Shader 替换。
+        /// LoadAllAssets&lt;Material&gt; 直接获取 Material，修改后所有
+        /// 后续 LoadAsset 引用的 Renderer 自动获得正确 Shader。
+        /// 自动跳过 Unity URP 内置 Shader。
         /// </summary>
-        /// <param name="root">模型根 GameObject</param>
-        /// <returns>替换成功的 Material 数量</returns>
-        public static int ApplyTo(GameObject root)
+        public static int ApplyToBundle(AssetBundle bundle)
         {
-            if (root == null) return 0;
+            if (bundle == null) return 0;
+
+            var materials = bundle.LoadAllAssets<Material>();
+            if (materials == null || materials.Length == 0) return 0;
 
             int replaced = 0;
-            var renderers = root.GetComponentsInChildren<Renderer>(includeInactive: true);
+            int skipped = 0;
 
-            foreach (var renderer in renderers)
+            foreach (var mat in materials)
             {
-                replaced += ReplaceMaterials(renderer.sharedMaterials, ShaderMap);
+                if (mat == null) continue;
+
+                string sourceName = mat.shader.name;
+
+                // 跳过 Unity URP 内置 Shader
+                if (IsUrpBuiltin(sourceName))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                if (TryReplace(mat, sourceName))
+                    replaced++;
             }
 
-            if (replaced > 0)
+            if (replaced > 0 || skipped > 0)
             {
-                Debug.Log($"[ShaderReplacer] Replaced {replaced} material(s) on '{root.name}'.");
+                Debug.Log($"[ShaderReplacer] Bundle '{bundle.name}': replaced {replaced}, skipped {skipped} URP built-in.");
             }
 
             return replaced;
         }
 
+        // ═══════════════════════════════════════════════════════
+        //  层级 2：GameObject 级别（兜底）
+        // ═══════════════════════════════════════════════════════
+
         /// <summary>
-        /// 对 GameObject 及其所有子物体强制使用指定 Shader（跳过映射表）。
-        /// 用于 Modder 需要手动指定 Shader 的边缘情况。
+        /// 对 GameObject 及其子物体执行自动 Shader 替换。
+        /// 遍历所有 Renderer.sharedMaterial。
         /// </summary>
-        /// <param name="root">模型根 GameObject</param>
-        /// <param name="targetShaderName">目标 Shader 名称（Shader.Find 的 key）</param>
-        /// <returns>替换成功的 Material 数量</returns>
+        public static int ApplyTo(GameObject root)
+        {
+            if (root == null) return 0;
+
+            var renderers = root.GetComponentsInChildren<Renderer>(includeInactive: true);
+            if (renderers.Length == 0) return 0;
+
+            int replaced = 0;
+            int skipped = 0;
+            var unmatched = new StringBuilder();
+
+            foreach (var renderer in renderers)
+            {
+                var materials = renderer.sharedMaterials;
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    var mat = materials[i];
+                    if (mat == null) continue;
+
+                    string sourceName = mat.shader.name;
+                    if (string.IsNullOrEmpty(sourceName)) continue;
+
+                    if (IsUrpBuiltin(sourceName))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (TryReplace(mat, sourceName))
+                        replaced++;
+                    else if (unmatched.Length < 500)
+                        unmatched.AppendLine($"  [{renderer.name}] #{i}: '{sourceName}'");
+                }
+            }
+
+            if (replaced > 0 || skipped > 0)
+                Debug.Log($"[ShaderReplacer] '{root.name}': replaced {replaced}, skipped {skipped} URP built-in.");
+
+            if (unmatched.Length > 0)
+                Debug.Log($"[ShaderReplacer] '{root.name}': unmatched shader names:\n{unmatched}");
+
+            return replaced;
+        }
+
+        /// <summary>
+        /// 对 GameObject 强制使用指定 Shader（跳过映射表和 URP 检查）。
+        /// </summary>
         public static int ApplyTo(GameObject root, string targetShaderName)
         {
             if (root == null || string.IsNullOrEmpty(targetShaderName)) return 0;
 
-            var targetShader = Shader.Find(targetShaderName);
-            if (targetShader == null)
-            {
-                Debug.LogWarning($"[ShaderReplacer] Target shader '{targetShaderName}' not found.");
-                return 0;
-            }
+            var targetShader = FindShader(targetShaderName);
+            if (targetShader == null) return 0;
 
             int replaced = 0;
             var renderers = root.GetComponentsInChildren<Renderer>(includeInactive: true);
@@ -106,43 +165,43 @@ namespace FeatherMod.Utils
             }
 
             if (replaced > 0)
-            {
-                Debug.Log($"[ShaderReplacer] Force-replaced {replaced} material(s) on '{root.name}' with '{targetShaderName}'.");
-            }
+                Debug.Log($"[ShaderReplacer] '{root.name}': force-replaced {replaced} → '{targetShaderName}'.");
 
             return replaced;
         }
 
-        /// <summary>
-        /// 按映射表替换一组 Material 的 Shader。
-        /// </summary>
-        private static int ReplaceMaterials(Material[] materials, Dictionary<string, string> map)
+        // ═══════════════════════════════════════════════════════
+        //  内部
+        // ═══════════════════════════════════════════════════════
+
+        private static bool TryReplace(Material mat, string sourceName)
         {
-            int count = 0;
+            if (!ShaderMap.TryGetValue(sourceName, out string targetName)) return false;
 
-            for (int i = 0; i < materials.Length; i++)
+            var targetShader = FindShader(targetName);
+            if (targetShader == null) return false;
+
+            mat.shader = targetShader;
+            mat.shaderKeywords = null;
+            return true;
+        }
+
+        private static Shader FindShader(string name)
+        {
+            if (!ShaderCache.TryGetValue(name, out var shader))
             {
-                var mat = materials[i];
-                if (mat == null) continue;
-
-                string sourceName = mat.shader.name;
-                if (string.IsNullOrEmpty(sourceName)) continue;
-
-                if (!map.TryGetValue(sourceName, out string targetName)) continue;
-
-                var targetShader = Shader.Find(targetName);
-                if (targetShader == null)
-                {
-                    Debug.LogWarning($"[ShaderReplacer] Shader '{targetName}' not found. Is the game fully loaded?");
-                    continue;
-                }
-
-                mat.shader = targetShader;
-                mat.shaderKeywords = null;
-                count++;
+                shader = Shader.Find(name);
+                if (shader != null)
+                    ShaderCache[name] = shader;
+                else
+                    Debug.LogWarning($"[ShaderReplacer] Shader.Find(\"{name}\") → null. Game not fully loaded?");
             }
+            return shader;
+        }
 
-            return count;
+        private static bool IsUrpBuiltin(string shaderName)
+        {
+            return shaderName.StartsWith(URP_PREFIX);
         }
     }
 }

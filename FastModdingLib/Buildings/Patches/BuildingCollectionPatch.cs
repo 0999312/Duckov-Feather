@@ -22,6 +22,10 @@ namespace FeatherMod.Buildings.Patches
             if (__result.Valid)
                 return;
 
+            // null/空 id 无意义，不搜索（避免匹配到 id 同为 null 的 BuildingInfo）
+            if (string.IsNullOrEmpty(id))
+                return;
+
             // 从 BuildingRegistry 回退查找
             var registry = BuildingUtils.Registry;
             foreach (var kvp in registry)
@@ -40,6 +44,10 @@ namespace FeatherMod.Buildings.Patches
         {
             // 原生已找到，不干预
             if (__result != null)
+                return;
+
+            // null/空 prefabName 不搜索（Dictionary.TryGetValue 不接受 null key）
+            if (string.IsNullOrEmpty(prefabName))
                 return;
 
             // 从 BuildingRegistry 的 prefab 字典查找

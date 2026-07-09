@@ -355,8 +355,8 @@ namespace FeatherMod
 
         public static void SetItemGraphic(Item item, AssetBundle assetBundle, string name)
         {
+            ShaderReplacer.ApplyToBundle(assetBundle);
             GameObject graphic = assetBundle.LoadAsset<GameObject>(name);
-            ShaderReplacer.ApplyTo(graphic);
             item.itemGraphic = graphic.GetComponent<ItemGraphicInfo>();
         }
 
@@ -498,8 +498,8 @@ namespace FeatherMod
         /// </summary>
         public static void RegisterGun(Identifier id, AssetBundle assetBundle, string name, int originGunID = 654)
         {
+            ShaderReplacer.ApplyToBundle(assetBundle);
             var gameobject = assetBundle.LoadAsset<GameObject>(name);
-            ShaderReplacer.ApplyTo(gameobject);
             Item prefab = gameobject.GetComponent<Item>();
             Item rifle = ItemAssetsCollection.GetPrefab(originGunID);
 
@@ -530,8 +530,8 @@ namespace FeatherMod
         /// </summary>
         public static void RegisterItemFromBundle(Identifier id, AssetBundle assetBundle, string name)
         {
+            ShaderReplacer.ApplyToBundle(assetBundle);
             var gameobject = assetBundle.LoadAsset<GameObject>(name);
-            ShaderReplacer.ApplyTo(gameobject);
             Item prefab = gameobject.GetComponent<Item>();
             ItemUtils.RegisterItem(id, prefab);
         }
