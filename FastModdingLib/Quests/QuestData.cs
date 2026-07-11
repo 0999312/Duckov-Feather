@@ -1,4 +1,6 @@
-﻿using Duckov.Buildings;
+﻿using System;
+
+using Duckov.Buildings;
 using Duckov.Quests;
 using Duckov.Quests.Rewards;
 using Duckov.Quests.Tasks;
@@ -34,6 +36,22 @@ namespace FeatherMod
         public abstract Task SetTask(Quest quest);
         internal int id;
     }
+
+    public class TaskCustomTask<T> : TaskData where T: Task
+    {
+        public Action<T>? Initialization = null;
+
+        public override Task SetTask(Quest quest)
+        {
+            T mono = quest.gameObject.AddComponent<T>();
+            mono.id = id;
+            mono.master = quest;
+            Initialization?.Invoke(mono);
+
+            return mono;
+        }
+    }
+
     public class TaskRequireItem : TaskData
     {
         internal int itemTypeID;
