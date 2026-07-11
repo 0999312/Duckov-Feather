@@ -55,6 +55,10 @@
 			<Private>False</Private>
 		</Reference>
 
+    <Reference Include="$(DuckovPath)$(SubPath)EasySave3.dll">
+      <Private>False</Private>
+    </Reference>
+      
 		<Reference Include="0Harmony">
 			<HintPath>0Harmony.dll</HintPath>
 			<Private>False</Private>

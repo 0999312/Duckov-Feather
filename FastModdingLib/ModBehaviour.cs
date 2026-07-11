@@ -22,10 +22,12 @@ namespace FeatherMod
     {
         private Harmony? _harmony;
 
+        public const string FrameworkName = "FeatherMod";
+
         /// <summary>
         /// FML 自身的模组标识符，固定返回 <c>"FeatherMod"</c>。
         /// </summary>
-        public string GetModid() => "FeatherMod";
+        public string GetModid() => FrameworkName;
 
         public void Awake() { }
 
