@@ -14,7 +14,7 @@ namespace FeatherMod.Register
         /// 当前线程的 mod 身份。无显式 <see cref="EnterModScope"/> 时兜底为 "FeatherMod"。
         /// 写入 API 无 modid 重载时取此值作为 owner。
         /// </summary>
-        public static string CurrentModid => s_currentModid ?? "FeatherMod";
+        public static string CurrentModid => s_currentModid ?? ModBehaviour.FrameworkName;
 
         /// <summary>
         /// 进入指定 mod 的注册作用域。返回 <see cref="IDisposable"/>，Dispose 时还原进入前的 modid。

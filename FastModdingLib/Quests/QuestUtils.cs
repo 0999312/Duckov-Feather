@@ -54,7 +54,7 @@ namespace FeatherMod
         /// <summary>
         /// 注册自定义任务（兼容旧 API）。
         /// </summary>
-        public static void RegisterQuest(QuestData data, string modid = "FeatherMod")
+        public static void RegisterQuest(QuestData data, string modid = ModBehaviour.FrameworkName)
         {
             // 优先使用 data.Id（如果设置），否则使用旧式 Identifier
             Identifier id = data.Id ?? new Identifier(modid, $"quest_{data.ID}");
