@@ -31,9 +31,9 @@ namespace FeatherMod
         /// 初始化 I18n。mod 目录从 <see cref="ModPathResolver"/> 自动探测。
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void InitI18n(string modid = "FeatherMod")
+        public static void InitI18n(string modid = ModBehaviour.FrameworkName)
         {
-            if (modid != "FeatherMod")
+            if (modid != ModBehaviour.FrameworkName)
             {
                 string? modPath = ModPathResolver.ResolveDirectory(modid);
                 _modDirectory = modPath != null ? modPath : Assembly.GetExecutingAssembly().Location;
