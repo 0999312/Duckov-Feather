@@ -106,7 +106,7 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
 
 ## 模块速览
 
-FML 提供 **17 个功能模块**，覆盖 Mod 开发的大部分场景：
+FML 提供 **22 个功能模块**，覆盖 Mod 开发的大部分场景：
 
 | 模块 | 入口类 | 示例 API |
 |------|--------|---------|
@@ -125,6 +125,11 @@ FML 提供 **17 个功能模块**，覆盖 Mod 开发的大部分场景：
 | **敌人** | `EnemyUtils` | `RegisterEnemy(id, aiConfig, preset)` |
 | **NPC 武器注入** | `WeaponInjectionUtils` | `AddWeaponToPreset(pattern, item, chance)` |
 | **抽奖箱注入** | `LotteryBoxUtils` | `AddItemToLotteryBox(pattern, item)` |
+| **交互系统** | `InteractionUtils` | `SpawnViewInteract(id, pos, view)` |
+| **View 调度** | `ViewDispatcher` | `Register(viewType, handler, modid)` |
+| **UI 桥接** | `GameUIUtils` | `CloneButton(parent, label, onClick)` |
+| **UI 构建器** | `SimpleViewBuilder` | `Create(name).AddGameButton().Build()` |
+| **物品容器** | `ContainerUtils` | `CreateContainer(id, slots, modid)` |
 | **设置面板** | `ModOptionsRegistry` | `RegisterPanel(modId, name, builder)` |
 | **AssetBundle** | `AssetUtil` | `LoadBundle("weapons")` |
 

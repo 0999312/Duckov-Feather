@@ -1,6 +1,6 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-06
+> 最后更新：2026-07-11
 
 ---
 
@@ -559,3 +559,44 @@ Quest 模块 Identifier 化后，数字 ID 自增分配（从 1000 起）缺少�
 |------|---------|---------|
 | 修改 | `FeatherMod/Quests/QuestRegistry.cs` | ~90 行新增（反向索引 + 4 个 override + 3 个新方法） |
 | 修改 | `FeatherMod/Quests/QuestUtils.cs` | 3 处重构（反查 O(1)、冲突检测 while、卸载 O(1)） |
+
+---
+
+## 交互与 UI 系统 — ✅ 已完成
+
+**完成时间**: 2026-07-11
+**耗时**: 约 2 小时
+**基础**: `Docs/DESIGN_INTERACTION_API.md` + `Docs/DESIGN_UI_SYSTEM_API.md` + 反编译审计
+
+### 新增文件（7 个）
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FeatherMod/Interaction/InteractionUtils.cs` | 交互系统主入口：Spawn / Attach / Query / Cleanup。Init 注册到元表 + 内置 View |
+| 新建 | `FeatherMod/Interaction/InteractionRegistry.cs` | `SimpleRegistry<InteractionEntry>`，OnRemoved 自动 `Destroy(GameObject)` |
+| 新建 | `FeatherMod/Interaction/Components/ViewInteractHandler.cs` | 继承 InteractableBase，交互→`ViewDispatcher.Open(ViewType, param)` |
+| 新建 | `FeatherMod/Interaction/Components/DelegateInteractHandler.cs` | 继承 InteractableBase，交互→`OnInteract?.Invoke()` |
+| 新建 | `FeatherMod/Interaction/ViewDispatcher.cs` | View 打开方法注册/调度 + `GameViews` 常量类（6 个内置 View） |
+| 新建 | `FeatherMod/UI/GameUIUtils.cs` | 游戏原生 UI 桥接：5 个控件克隆 + 字体/配色提取 + 过滤合成/库存打开 |
+| 新建 | `FeatherMod/Containers/ContainerUtils.cs` | 轻量容器管理：CRUD + 物品转移 + 绑定到建筑。含 `ItemContainerConfig` DTO |
+
+### 修改文件（4 个）
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `FeatherMod/UI/InteractTemplates.cs` | `perkTreeID`→`public PerkTreeID`；三个模板 `OnInteractFinished` 改为 `ViewDispatcher.Open` |
+| 修改 | `FeatherMod/Register/RegisterBootstrap.cs` | `Init()` 末尾新增 `InteractionUtils.Init()` |
+| 修改 | `FeatherMod/UI/SimpleViewBuilder.cs` | 新增 `AddGameButton(text, onClick)` + `AddGamePanel(title)` 方法 |
+| 修改 | `FeatherMod/CraftingUtils.cs` | 新增 `OpenFilteredCraftingView(params string[] tags)` → `GameUIUtils.OpenCraftingView` |
+
+### 设计偏离
+
+- **`InventorySlot` 类型不存在于反编译 DLL**：`GameUIUtils.OpenInventoryDevice` 移除 `slots` 参数，改为通过 `FindObjectOfType<InventoryDisplay>` 获取（`InventoryDisplay` 是 `MonoBehaviour` 非 `View` 子类，不能用 `GetViewInstance<T>`）
+- **`ItemUtilities.SendToPlayer` 签名不匹配**：实际 API 为 `SendToPlayerCharacterInventory(Item)` / `SendToPlayerStorage(Item)`，`ContainerUtils.TakeItem` 改为调用前者
+- **`CraftingFormula` 为值类型（struct）**：`OpenCraftingView` 中 Predicate 的 null 检查改为 `formula.tags == null`（不能对 struct 用 `== null`）
+- **`PerkTreeView.Show` 方法待运行时确认**：`InteractionUtils.RegisterBuiltInViews` 中对 PerkTree 的注册保留调用，需在游戏运行时验证 API 可用性
+
+### 验证结果
+- [x] `dotnet build` 通过（0 错误，0 警告）
+- [ ] 功能测试（待游戏运行时验证）
+- [ ] `GamePlayDataSettings.UIPrefabs` 克隆测试（待实际游戏环境）

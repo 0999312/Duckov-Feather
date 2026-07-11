@@ -1,6 +1,7 @@
 ﻿using Duckov.Economy;
 using FeatherMod.Crafting;
 using FeatherMod.Register;
+using FeatherMod.UI;
 using FeatherMod.Utils;
 using System.Collections.Generic;
 using System.Linq;
@@ -393,5 +394,14 @@ namespace FeatherMod
 
         public static void RemoveAllAddedDecomposeFormulas(string? modid = null)
             => decomposeRegistry.RemoveAllByOwner(modid ?? RegistryManager.CurrentModid);
+
+        /// <summary>
+        /// 打开过滤式合成界面。tags 为工作台标签（如 "Forge"、"WorkBenchAdvanced"）。
+        /// 若未指定标签则显示全部合成配方。
+        /// </summary>
+        public static void OpenFilteredCraftingView(params string[] tags)
+        {
+            GameUIUtils.OpenCraftingView(tags?.Length > 0 ? tags : null);
+        }
     }
 }

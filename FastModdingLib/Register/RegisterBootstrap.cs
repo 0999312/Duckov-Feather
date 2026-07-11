@@ -1,4 +1,5 @@
-﻿using FeatherMod.Utils;
+﻿using FeatherMod.Interaction;
+using FeatherMod.Utils;
 
 namespace FeatherMod.Register
 {
@@ -31,6 +32,7 @@ namespace FeatherMod.Register
             EndowmentUtils.Init();
             WeaponInjectionUtils.Init();
             LotteryBoxUtils.Init();
+            InteractionUtils.Init();
 
             // —— Quests / Shop 由本 bootstrap 注册（不自注册，原因见模块文档） ——
             meta.SetIfAbsent(

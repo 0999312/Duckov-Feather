@@ -1,6 +1,7 @@
 ﻿using Duckov.Buildings.UI;
 using Duckov.PerkTrees;
 using Duckov.UI;
+using FeatherMod.Interaction;
 using UnityEngine;
 
 namespace FeatherMod.UI
@@ -11,21 +12,20 @@ namespace FeatherMod.UI
     /// </summary>
     public class BuildingInteractTemplate : InteractableBase
     {
-        [SerializeField]
-        [Tooltip("目标 View 类型名称，如 \"BuilderView\" 或自定义 View 名称。")]
-        private string targetViewType = "BuilderView";
-
         /// <summary>建筑 Identifier（由 BuildingUtils.RegisterBuilding 注册时的 id）。</summary>
         [SerializeField]
         private string? buildingIdentifier;
 
         protected override void OnInteractFinished()
         {
-            // 默认行为：打开 BuilderView
-            // modder 可重写此方法以打开自定义 View（如 StockShopView）
-            if (!string.IsNullOrEmpty(targetViewType) && targetViewType == "BuilderView")
+            // 默认行为：通过 ViewDispatcher 打开 Building View
+            if (!string.IsNullOrEmpty(buildingIdentifier))
             {
-                BuilderView.Show(null); // 打开 BuilderView，不含特定 area
+                ViewDispatcher.Open(GameViews.Building, buildingIdentifier);
+            }
+            else
+            {
+                BuilderView.Show(null); // 兜底：直接打开 BuilderView
             }
         }
     }
@@ -38,18 +38,12 @@ namespace FeatherMod.UI
     {
         [SerializeField]
         [Tooltip("对应 Identifier.Path（由 PerkTreeUtils.RegisterPerkTree 注册时的 Path）。")]
-        private string? perkTreeID;
+        public string? PerkTreeID;
 
         protected override void OnInteractFinished()
         {
-            if (string.IsNullOrEmpty(perkTreeID)) return;
-
-            var tree = PerkTreeManager.GetPerkTree(perkTreeID);
-            if (tree == null)
-            {
-                Debug.LogWarning($"[PerkTreeInteractTemplate] PerkTree '{perkTreeID}' not found.");
-            }
-            // 打开 PerkTreeView — 游戏原生 API: PerkTreeView.Show(tree)
+            if (string.IsNullOrEmpty(PerkTreeID)) return;
+            ViewDispatcher.Open(GameViews.PerkTree, PerkTreeID);
         }
     }
 
@@ -61,7 +55,7 @@ namespace FeatherMod.UI
     {
         protected override void OnInteractFinished()
         {
-            // EndowmentSelectionPanel 是游戏原生 UI，FML 通过 patch 注入自定义天赋
+            ViewDispatcher.Open(GameViews.Endowment);
         }
     }
 }

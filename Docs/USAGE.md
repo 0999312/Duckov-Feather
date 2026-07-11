@@ -24,11 +24,14 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 16. [敌人系统（EnemyUtils）](#16-敌人系统enemyutils)
 17. [NPC 武器注入（WeaponInjectionUtils）](#17-npc-武器注入weaponinjectionutils)
 18. [抽奖箱注入（LotteryBoxUtils）](#18-抽奖箱注入lotteryboxutils)
-19. [自定义设置面板（ModOptionsRegistry）](#19-自定义设置面板modoptionsregistry)
-20. [AssetBundle 加载（AssetUtil）](#20-assetbundle-加载assetutil)
-21. [注册表系统（Registry）](#21-注册表系统registry)
-22. [模组卸载生命周期](#22-模组卸载生命周期)
-23. [附录：项目结构参考](#23-附录项目结构参考)
+19. [交互系统（InteractionUtils）](#19-交互系统interactionutils)
+20. [UI 系统与控件桥接（GameUIUtils）](#20-ui-系统与控件桥接gameuiutils)
+21. [物品容器（ContainerUtils）](#21-物品容器containerutils)
+22. [自定义设置面板（ModOptionsRegistry）](#22-自定义设置面板modoptionsregistry)
+23. [AssetBundle 加载（AssetUtil）](#23-assetbundle-加载assetutil)
+24. [注册表系统（Registry）](#24-注册表系统registry)
+25. [模组卸载生命周期](#25-模组卸载生命周期)
+26. [附录：项目结构参考](#26-附录项目结构参考)
 
 ---
 
@@ -667,6 +670,11 @@ QuestUtils.RegisterQuest(new Identifier("mymod", "coffee_run"), questData);
 
 ### 6.3 任务关系图
 
+> **⚠️ 重要约束**：注册任务后，modder **必须手动调用 `AddQuestRelation`** 才能在游戏中正确管理任务的前后置关系。
+> `RegisterQuest` 只负责将任务登入 `QuestCollection`，**不会自动建立关系图**。
+> 如果忘记调用 `AddQuestRelation`，任务将不会出现在任何前置/后续任务的关联中，
+> 导致任务链断裂、后续任务无法解锁。
+
 ```csharp
 // 设置任务前置/后置关系（Identifier 版本）
 var current = new Identifier("mymod", "coffee_run");
@@ -674,7 +682,17 @@ var preReq  = new Identifier("mymod", "intro_quest");
 var unlocks = new Identifier("mymod", "next_quest");
 
 QuestUtils.AddQuestRelation(current, before: preReq, after: unlocks);
+//                            ↑ 当前任务      ↑ 前置任务       ↑ 后置任务（完成当前后解锁）
+
+// 也可省略前后置（只有前置或只有后置）：
+QuestUtils.AddQuestRelation(current, before: preReq);      // 仅设置前置
+QuestUtils.AddQuestRelation(current, after: unlocks);      // 仅设置后置
 ```
+
+> 参数说明：
+> - `before`：前置任务 Identifier — 完成 `before` 后，`current` 才解锁
+> - `after`：后置任务 Identifier — 完成 `current` 后，`after` 才解锁
+> - 至少需要设置 `before` 或 `after` 中的一个，否则调用无意义
 
 ### 6.4 任务 ID 反查（O(1)）
 
@@ -1545,7 +1563,231 @@ LotteryBoxUtils.UnregisterAllLotteryInjections("mymod");
 
 ---
 
-## 19. 自定义设置面板（ModOptionsRegistry）
+## 19. 交互系统（InteractionUtils）
+
+`InteractionUtils` 是 FML 的交互点管理系统。提供在世界中创建/绑定交互点、关联 View 打开方法、
+按 NPC 名称查找并挂载交互等完整 API。
+
+### 19.1 交互点两种模式
+
+| 模式 | Handler | 用途 |
+|------|---------|------|
+| **View 模式** | `ViewInteractHandler` | 交互→通过 `ViewDispatcher` 打开指定 View |
+| **Delegate 模式** | `DelegateInteractHandler` | 交互→调用自定义委托 |
+
+### 19.2 Spawn（创建新交互点）
+
+```csharp
+using FeatherMod.Interaction;
+using UnityEngine;
+
+// 在世界坐标创建 View 交互点
+var point = InteractionUtils.SpawnViewInteract(
+    new Identifier("mymod", "trading_post"),
+    position: new Vector3(10, 0, 5),
+    viewType: GameViews.Shop,
+    viewParam: "merchant_stock");
+// → 自动创建 GameObject + BoxCollider(Trigger) + "Interact" 图层
+
+// 在世界坐标创建自定义委托交互点
+InteractionUtils.SpawnCustomInteract(
+    new Identifier("mymod", "secret_button"),
+    position: new Vector3(3, 1, 8),
+    onInteract: () => Debug.Log("Secret triggered!"));
+```
+
+### 19.3 Attach（挂载到已有对象）
+
+```csharp
+// 给已有 GameObject 挂载交互
+InteractionUtils.AttachViewInteract(
+    new Identifier("mymod", "door_terminal"),
+    target: someGameObject,
+    viewType: GameViews.PerkTree,
+    viewParam: "mymod_perktree");
+
+// 按名称查找 NPC 并挂载交互
+InteractionUtils.AttachToNPC(
+    new Identifier("mymod", "talk_to_merchant"),
+    npcName: "Merchant_Fence",
+    viewType: GameViews.Shop);
+```
+
+### 19.4 查询与卸载
+
+```csharp
+// 查询已注册交互点
+if (InteractionUtils.TryGetInteractPoint(id, out var go))
+    Debug.Log($"Found: {go.name}");
+
+// 移除单个交互点（自动 Destroy GameObject）
+InteractionUtils.RemoveInteract(id);
+
+// 批量卸载指定 mod 的全部交互点
+InteractionUtils.RemoveAllInteracts("mymod");
+```
+
+### 19.5 内置 View 类型（GameViews）
+
+```csharp
+// 以下 6 个内置 View 类型已由 InteractionUtils.Init() 自动注册打开方法：
+GameViews.PerkTree   // Perk 技能树
+GameViews.Building   // 建造面板（BuilderView）
+GameViews.Endowment  // 天赋选择面板
+GameViews.Crafting   // 过滤式合成界面
+GameViews.Shop       // 商店（需自行注册打开方法）
+GameViews.Quest      // 任务（需自行注册打开方法）
+
+// 自定义 View 注册打开方法：
+ViewDispatcher.Register(
+    new Identifier("mymod", "custom_view"),
+    param => MyCustomView.Open(param),
+    "mymod");
+```
+
+---
+
+## 20. UI 系统与控件桥接（GameUIUtils）
+
+`GameUIUtils` 桥接游戏原生 UI 系统，提供控件克隆（继承原生视觉风格）、
+样式提取和快捷 View 打开。
+
+### 20.1 控件克隆
+
+克隆自 `GameplayDataSettings.UIPrefabs`，自动继承精灵/材质/字体/着色器，视觉与游戏原生一致：
+
+```csharp
+using FeatherMod.UI;
+
+// 克隆游戏原生按钮（含正确颜色/字体/精灵）
+GameUIUtils.CloneButton(parentTransform, "确认", () => Debug.Log("Clicked"));
+
+// 克隆物品图标显示
+var itemDisplay = GameUIUtils.CloneItemDisplay(parentTransform);
+
+// 克隆物品槽位
+var slot = GameUIUtils.CloneSlotDisplay(parentTransform);
+
+// 克隆库存条目
+var inventoryEntry = GameUIUtils.CloneInventoryEntry(parentTransform);
+
+// 克隆滚动区域
+var scrollRect = GameUIUtils.CloneScrollRect(parentTransform);
+```
+
+### 20.2 样式查询
+
+```csharp
+// 获取游戏主字体（从活跃 View 的 TextMeshProUGUI 提取）
+var font = GameUIUtils.GetGameFont();
+
+// 提取 UI 配色方案（从活跃 View 的 [SerializeField] Color 字段）
+var palette = GameUIUtils.GetColorPalette();
+// palette.TextPrimary    → 主文本色
+// palette.PanelBackground → 面板背景色
+// palette.ButtonNormal   → 按钮常态色
+// palette.ButtonHighlight→ 按钮高亮色
+```
+
+### 20.3 快捷 View 打开
+
+```csharp
+// 打开过滤式合成界面（仅显示指定工作台的配方）
+GameUIUtils.OpenCraftingView(new[] { "Forge", "WorkBenchAdvanced" });
+
+// 打开库存设备面板
+GameUIUtils.OpenInventoryDevice(playerInventory);
+```
+
+### 20.4 代码端 UI 构建器（SimpleViewBuilder）
+
+`SimpleViewBuilder` 适用于简单面板场景，已内置游戏原生按钮支持：
+
+```csharp
+using FeatherMod.UI;
+
+var panel = SimpleViewBuilder.Create("MyModPanel")
+    .AddTitle("欢迎使用")
+    .AddText("这是一个代码创建的 UI 面板。")
+    .AddGameButton("游戏风格按钮", () => Debug.Log("Clicked!"))
+    //      ↑ 克隆自 GameplayDataSettings.UIPrefabs.Button
+    //        视觉与游戏原生按钮完全一致
+    .AddGamePanel("子面板标题")
+    //      ↑ 创建半透明背景面板
+    .AddButton("普通按钮", () => Debug.Log("Basic"))
+    .AddCloseButton()
+    .Build();
+```
+
+> **注意**：`SimpleViewBuilder` 适用于 15% 的简单 UI 场景。对于更复杂的 UI，
+> 推荐使用 Harmony Postfix 注入模式或 `GameUIUtils` 控件克隆。
+
+---
+
+## 21. 物品容器（ContainerUtils）
+
+`ContainerUtils` 提供轻量级物品容器管理，包装游戏原生 API，不实现完整的 Inventory 系统。
+
+### 21.1 容器 CRUD
+
+```csharp
+using FeatherMod;
+
+// 创建容器
+var config = ContainerUtils.CreateContainer(
+    new Identifier("mymod", "storage_box"),
+    slotCount: 20,
+    modid: "mymod");
+
+// 查询容器
+var existing = ContainerUtils.GetContainer(new Identifier("mymod", "storage_box"));
+if (existing != null)
+    Debug.Log($"Container has {existing.SlotCount} slots");
+
+// 销毁容器（注意：不转移容器内物品）
+ContainerUtils.DestroyContainer(new Identifier("mymod", "storage_box"));
+```
+
+### 21.2 物品转移
+
+```csharp
+// 放入物品
+ContainerUtils.PutItem(
+    containerId: new Identifier("mymod", "storage_box"),
+    slot: 0,
+    item: ItemEntry.Of("mymod:coffee", 5));
+
+// 取出物品（自动通过 ItemUtilities 转移到玩家库存）
+ItemEntry? taken = ContainerUtils.TakeItem(
+    containerId: new Identifier("mymod", "storage_box"),
+    slot: 0,
+    amount: 3);
+```
+
+### 21.3 绑定到建筑
+
+容器可绑定到已有建筑——建筑建造完成时自动挂载交互处理器：
+
+```csharp
+ContainerUtils.BindDeviceToBuilding(
+    buildingId: new Identifier("mymod", "storage_warehouse"),
+    containerId: new Identifier("mymod", "storage_box"),
+    viewType: GameViews.Crafting);
+// → 建筑建成后，functionContainer 上自动挂载 ViewInteractHandler
+```
+
+### 21.4 批量卸载
+
+```csharp
+ContainerUtils.RemoveAllContainers("mymod");
+```
+
+> **注意**：`RemoveAllContainers` 仅清除 FML 内部跟踪的容器数据，
+> 不负责销毁容器中的游戏内物品对象。
+
+---
+
+## 22. 自定义设置面板（ModOptionsRegistry）
 
 ```csharp
 using FeatherMod.Options;
@@ -1570,7 +1812,7 @@ ModOptionsRegistry.RegisterPanel("mymod", "My Mod Settings", builder =>
 
 ---
 
-## 20. AssetBundle 加载（AssetUtil）
+## 23. AssetBundle 加载（AssetUtil）
 
 ```csharp
 // 从 mod 目录加载（路径: assets/bundle/{bundleName}）
@@ -1595,32 +1837,9 @@ AssetUtil.UnloadAllBundles();
 
 ---
 
-## 18.1 代码端 UI 构建器（SimpleViewBuilder）
+## 24. 注册表系统（Registry）
 
-当只需要简单面板（标题+文本+按钮）且不想用 Unity 编辑器搭建 Canvas 时，
-可使用 `SimpleViewBuilder` 纯代码创建：
-
-```csharp
-using FeatherMod.UI;
-
-// 创建简单面板
-var panel = SimpleViewBuilder.Create("MyModPanel")
-    .AddTitle("欢迎使用")
-    .AddText("这是一个代码创建的 UI 面板。")
-    .AddButton("执行操作", () => Debug.Log("Button clicked!"))
-    .AddCloseButton()
-    .Build();
-```
-
-> **注意**：`SimpleViewBuilder` 适用于 15% 的简单 UI 场景。对于更复杂的 UI，
-> 推荐使用 Harmony Postfix 注入模式——在已有游戏 View 的 `Setup()` 中追加按钮/条目。
-> 详见 [FML-REFERENCE.md](FML-REFERENCE.md) §2.3 的"UI 注入辅助"条目及 §3 案例方案。
-
----
-
-## 21. 注册表系统（Registry）
-
-### 19.1 基本操作
+### 24.1 基本操作
 
 所有模块的数据都通过 `IRegistry<T>` 管理：
 
@@ -1640,7 +1859,7 @@ foreach (var entry in meta)
 }
 ```
 
-### 19.2 三种 Registry 实现
+### 24.2 三种 Registry 实现
 
 | 实现 | 特点 | 使用场景 |
 |------|------|----------|
@@ -1648,7 +1867,7 @@ foreach (var entry in meta)
 | `NonAlterableSimpleRegistry<T>` | 写入后不可覆盖 | 元注册表 |
 | `ReverseLookupRegistry<T, TKey>` | 按 native key 反查 Identifier | Audio / Items |
 
-### 19.3 创建自定义 Registry
+### 24.3 创建自定义 Registry
 
 ```csharp
 // 创建自定义注册表
@@ -1668,7 +1887,7 @@ meta.Set(new Identifier("mymod", "myregistry"), myRegistry, "mymod");
 
 ---
 
-## 22. 模组卸载生命周期
+## 25. 模组卸载生命周期
 
 FML 自动处理模组卸载时的清理工作，**无需手动编写卸载逻辑**。
 
@@ -1696,7 +1915,7 @@ FML 自动处理模组卸载时的清理工作，**无需手动编写卸载逻�
 
 ---
 
-## 23. 附录：项目结构参考
+## 26. 附录：项目结构参考
 
 ### 推荐目录结构
 
@@ -1720,8 +1939,11 @@ MyMod/
 
 | 命名空间 | 包含 |
 |----------|------|
-| `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ModBehaviour` |
+| `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ModBehaviour`, `ContainerUtils` |
 | `FeatherMod.Utils` | `Identifier`, `Singleton<T>`, `ModPathResolver` |
+| `FeatherMod.Interaction` | `InteractionUtils`, `ViewDispatcher`, `GameViews`, `InteractionRegistry`, `InteractionEntry` |
+| `FeatherMod.Interaction.Components` | `ViewInteractHandler`, `DelegateInteractHandler` |
+| `FeatherMod.UI` | `GameUIUtils`, `GameUIColorPalette`, `SimpleViewBuilder`, `InteractTemplates` |
 
 ### ModPathResolver — 路径注册
 

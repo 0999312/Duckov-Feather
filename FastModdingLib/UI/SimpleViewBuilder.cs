@@ -133,6 +133,66 @@ namespace FeatherMod.UI
             return this;
         }
 
+        /// <summary>
+        /// 添加游戏原生风格按钮（克隆自 GameplayDataSettings.UIPrefabs.Button）。
+        /// 自动继承游戏原生的精灵、颜色和字体，视觉与游戏内按钮完全一致。
+        /// 如果 GameUIUtils 克隆失败（如预制体不可用），降级为纯色按钮。
+        /// </summary>
+        public SimpleViewBuilder AddGameButton(string text, System.Action onClick)
+        {
+            try
+            {
+                GameUIUtils.CloneButton(_contentParent, text, onClick);
+            }
+            catch
+            {
+                // 降级：使用纯色按钮
+                AddButton(text, onClick);
+            }
+            _yOffset -= 50;
+            return this;
+        }
+
+        /// <summary>
+        /// 添加游戏原生风格面板。尝试克隆游戏原生面板模板，
+        /// 降级为纯色半透明背景面板。
+        /// </summary>
+        public SimpleViewBuilder AddGamePanel(string title)
+        {
+            var panelGo = new GameObject($"Panel_{title}");
+            panelGo.transform.SetParent(_contentParent, false);
+            var img = panelGo.AddComponent<Image>();
+            img.color = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+
+            var panelRect = panelGo.AddComponent<RectTransform>();
+            panelRect.anchorMin = new Vector2(0.05f, 1);
+            panelRect.anchorMax = new Vector2(0.95f, 1);
+            panelRect.pivot = new Vector2(0.5f, 1);
+            panelRect.anchoredPosition = new Vector2(0, _yOffset);
+            panelRect.sizeDelta = new Vector2(0, 80);
+
+            // 面板标题
+            if (!string.IsNullOrEmpty(title))
+            {
+                var labelGo = new GameObject("Label");
+                labelGo.transform.SetParent(panelGo.transform, false);
+                var label = labelGo.AddComponent<Text>();
+                label.text = title;
+                label.fontSize = 16;
+                label.fontStyle = FontStyle.Bold;
+                label.color = Color.white;
+                label.alignment = TextAnchor.MiddleLeft;
+                var labelRect = labelGo.AddComponent<RectTransform>();
+                labelRect.anchorMin = new Vector2(0, 0);
+                labelRect.anchorMax = new Vector2(1, 1);
+                labelRect.offsetMin = new Vector2(10, 0);
+                labelRect.offsetMax = new Vector2(-10, 0);
+            }
+
+            _yOffset -= 90;
+            return this;
+        }
+
         /// <summary>添加关闭按钮（调用 Destroy(root)）。</summary>
         public SimpleViewBuilder AddCloseButton(string text = "关闭")
         {
