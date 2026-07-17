@@ -749,4 +749,128 @@ modder 应使用 `TryGetCustomItem(Identifier id, out Item? item)`。
 
 ---
 
+## 14. v0.7 变更（2026-07-17）
+
+### 14.1 NpcRole 枚举升级为 [Flags]
+
+`NpcRole` 从普通枚举升级为 `[Flags]` 位掩码枚举，支持复合角色。
+
+**旧代码**：
+```csharp
+config.Role = NpcRole.Merchant;
+
+// 单值比较
+if (config.Role == NpcRole.Merchant) { /* ... */ }
+```
+
+**新代码**：
+```csharp
+config.Role = NpcRole.Merchant | NpcRole.QuestGiver; // 复合角色
+
+// 用 HasFlag 判断
+if (config.Role.HasFlag(NpcRole.Merchant)) { /* ... */ }
+```
+
+> **注意**：旧版中 `Role == NpcRole.Merchant` 形式的比较在 Flags 下**仍然有效**（因为单值枚举和位掩码值兼容），但建议改用 `HasFlag` 以支持复合角色场景。
+
+### 14.2 BuildingUtils 新增回收回调
+
+```csharp
+// 旧版：只有建成回调
+BuildingUtils.OnBuildingBuilt(buildingId, callback);
+
+// 新版：新增对称的回收/拆除回调
+BuildingUtils.OnBuildingDemolished(buildingId, callback);
+BuildingUtils.OffBuildingDemolished(buildingId, callback);
+```
+
+### 14.3 GameViews.Shop/Quest 自动注册
+
+| View | 旧行为 | 新行为 |
+|------|--------|--------|
+| `GameViews.Shop` | 需手动 `ViewDispatcher.Register` | 自动查找 NPC 的 `StockShop` 并调用 `ShowUI()` |
+| `GameViews.Quest` | 需手动 `ViewDispatcher.Register` | 自动调用 `QuestView.Show()` |
+
+**旧代码（可删除）**：
+```csharp
+ViewDispatcher.Register(GameViews.Shop, _ => { /* 手动实现 */ }, "mymod");
+ViewDispatcher.Register(GameViews.Quest, _ => { /* 手动实现 */ }, "mymod");
+```
+
+### 14.4 新增 AutoFacePlayer（NPC 自动面向玩家）
+
+```csharp
+config.AutoFacePlayer = true; // NPC 在运行时持续平滑旋转朝向玩家
+```
+
+内部挂载 `NpcFacePlayer` MonoBehaviour，通过游戏原生 `Movement.ForceTurnTo(Vector3 direction)` 驱动角色 `rotationRoot` 旋转——与游戏原生 AI 转向逻辑完全一致（`Quaternion.RotateTowards` + `turnSpeed` 平滑过渡）。仅在水平面旋转，每 0.3s 更新一次方向。默认 `false`，完全向后兼容。
+
+### 14.6 QuestGiver API 重构（QuestGiverConfig 简化 + 与 FriendlyNPC 解耦）
+
+`QuestGiverConfig` 不再包含显示层属性——模型、捏脸、ActorId、SpawnPosition 等已移除。
+QuestGiver 回归纯交互层职责。
+
+**旧代码（废弃）**：
+```csharp
+var config = new QuestGiverConfig
+{
+    DisplayNameKey = "npc_giver",
+    ActorId = "dialogue_giver",
+    Face = FaceRef.Preset("Default"),
+    SpawnPosition = new Vector3(10, 0, 5),
+    BoundQuests = new[] { new Identifier("mymod", "quest_01") }
+};
+QuestGiverUtils.RegisterQuestGiver(id, config);
+var npc = QuestGiverUtils.SpawnQuestGiver(id, position);
+
+// FriendlyNpcConfig 中直接设置 QuestGiverId 字符串
+config.QuestGiverId = "50";  // ← 违反 Identifier 原则
+```
+
+**新代码**：
+```csharp
+// 1. QuestGiver 只配核心属性
+var config = new QuestGiverConfig
+{
+    BoundQuests = new[] { new Identifier("mymod", "quest_01") },
+    SpawnPOI = true
+};
+QuestGiverUtils.RegisterQuestGiver(id, config);
+
+// 2. 创建独立交互点
+QuestGiverUtils.CreateQuestGiver(id, position);
+
+// 3. 或挂载到 FriendlyNPC（通过 Identifier 关联）
+FriendlyNpcUtils.BindQuestGiver(npcId, questGiverId);
+
+// 4. FriendlyNpcConfig 不再有 QuestGiverId 字段
+config.Role = NpcRole.QuestGiver; // 只设角色类型，ID 通过 BindQuestGiver 设置
+```
+
+| 旧 API | 新 API |
+|--------|--------|
+| `SpawnQuestGiver(id, pos, rot)` | `CreateQuestGiver(id, pos, spawnPOI)` |
+| `FriendlyNpcConfig.QuestGiverId` | 移除，改用 `FriendlyNpcUtils.BindQuestGiver(npcId, qgId)` |
+| `QuestGiverConfig.DisplayNameKey` | 移除（属于 FriendlyNpcConfig） |
+| `QuestGiverConfig.ActorId` | 移除（属于 FriendlyNpcConfig） |
+| `QuestGiverConfig.Face` | 移除（属于 FriendlyNpcConfig） |
+| `QuestGiverConfig.SpawnPosition` | 移除（作为 `CreateQuestGiver` 参数传入） |
+| `QuestGiverConfig.SpawnRotation` | 移除（不再需要） |
+
+```csharp
+// 接近触发（需 NPC 已生成）
+DialogueTrigger.OnProximity(npcId, 3f, lines, DialogueTriggerMode.Once);
+
+// 任务激活时触发
+DialogueTrigger.OnQuestAccepted(questId, npcId, lines);
+
+// 任务完成时触发
+DialogueTrigger.OnQuestCompleted(questId, npcId, lines);
+
+// 声明式配置（在 FriendlyNpcConfig 中）
+config.ProximityDialogue = new ProximityDialogueConfig { Distance = 3f, Lines = lines };
+```
+
+---
+
 *如有其他迁移问题，请在 GitHub Issues 中提出。*

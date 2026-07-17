@@ -1,4 +1,7 @@
 using Duckov.Utilities;
+
+using FeatherMod.Utils;
+
 using UnityEngine;
 
 namespace FeatherMod
@@ -49,11 +52,14 @@ namespace FeatherMod
         /// <summary>目标场景 ID（null = 当前活动场景）。</summary>
         public string? SceneId;
 
-        /// <summary>商店绑定 ID（Role=Merchant 时使用）。调用 ShopUtils 注册。</summary>
+        /// <summary>商店绑定 ID（Role=Merchant 时使用）。调用 ShopUtils.CreateMerchantProfile 注册。</summary>
         public string? ShopId;
 
-        /// <summary>任务发放者 ID（Role=QuestGiver 时使用）。</summary>
-        public string? QuestGiverId;
+        /// <summary>
+        /// 绑定的 QuestGiver Identifier。需先通过 QuestGiverUtils.RegisterQuestGiver() 注册。
+        /// 设置后 SpawnFriendlyNpcAsync 自动绑定 questGiverID。
+        /// </summary>
+        public Identifier? QuestGiverId;
 
         // ── 模型与外观（🆕 Phase 6 — 重构后新增） ──
 
@@ -82,5 +88,30 @@ namespace FeatherMod
         /// 生成时自动注入到 CharacterRandomPreset.itemsToGenerate。
         /// </summary>
         public ItemEntry? BodyEquipment;
+
+        /// <summary>
+        /// 接近触发对话配置。null 表示无接近触发。
+        /// 设置后，SpawnFriendlyNpcAsync 会自动在 NPC 上挂载 <see cref="NpcProximityTrigger"/> 组件。
+        /// </summary>
+        public DialogueSequence? ProximityDialogue;
+
+        /// <summary>
+        /// 是否自动面向玩家。默认 false（向后兼容）。
+        /// 设为 true 时，NPC 在运行时持续旋转朝向玩家位置（仅在水平面旋转，不影响俯仰）。
+        /// </summary>
+        public bool AutoFacePlayer;
+
+        /// <summary>
+        /// 是否无敌（不可被攻击）。默认 true。
+        /// 设为 true 时，NPC 无视所有伤害（通过 <c>Health.invincible</c> 实现）。
+        /// </summary>
+        public bool Invincible = true;
+
+        /// <summary>
+        /// AI 视野距离（米）。决定 NPC 能否"看到"玩家并自然面向。
+        /// 设为 0 会完全禁用 AI 朝向追踪（NPC 不会面向玩家）。
+        /// 友善 NPC（Teams.middle）默认建议 8f，不会攻击玩家。
+        /// </summary>
+        public float SightDistance = 8f;
     }
 }

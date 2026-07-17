@@ -734,113 +734,77 @@ QuestUtils.UnregisterQuestAll("mymod");
 
 ### 6.6 自定义 QuestGiver（QuestGiverUtils） 🆕
 
-游戏原生 `QuestGiverID` 是固定枚举，不可扩展。`QuestGiverUtils` 提供完整的自定义任务发放者 API，
-允许 modder 注册新 QuestGiver、生成 NPC、绑定任务。自定义 ID 从 **50** 起分配，与原生枚举值（0~11）无冲突。
+游戏原生 `QuestGiverID` 是固定枚举。`QuestGiverUtils` 提供自定义 QuestGiver ID 注册和交互点创建。
+自定义 ID 从 **50** 起分配，与原生枚举值（0~11）无冲突。
 
-#### 6.6.1 注册 QuestGiver
+> **设计原则**：QuestGiver 是纯交互层——仅管理 questGiverID 映射和交互点组件。
+> 模型、捏脸、对话角色等显示层属性由 `FriendlyNpcUtils` 管理，两者通过 `BindQuestGiver` 关联。
+
+#### 6.6.1 注册 QuestGiver ID
 
 ```csharp
-// 创建配置
-var giverConfig = new QuestGiverConfig
-{
-    DisplayNameKey = "npc_daily_giver",     // 本地化键
-    ActorId = "dialogue_peddler",           // DuckovDialogueActor.id（对话角色）
-    Face = FaceRef.Preset("Default"),       // 捏脸
-    SpawnPosition = new Vector3(15f, 0f, 5f),
-    BoundQuests = new[]                     // 可选：预先绑定的任务
-    {
-        new Identifier("mymod", "daily_01"),
-        new Identifier("mymod", "daily_02")
-    }
-};
-
-// 注册（返回自定义 ID）
+// 注册并分配自定义 questGiverID（int，从 50 起）
 int giverId = QuestGiverUtils.RegisterQuestGiver(
-    new Identifier("mymod", "daily_giver"), giverConfig);
+    new Identifier("mymod", "daily_giver"));
 ```
 
-#### 6.6.2 生成 NPC
+#### 6.6.2 创建独立交互点
 
 ```csharp
-// 在世界空间生成 QuestGiver NPC
-var npc = QuestGiverUtils.SpawnQuestGiver(
+// 在世界空间创建独立的 QuestGiver 交互点（参照原版 Interact_Quest 子对象）
+var qgGo = QuestGiverUtils.CreateQuestGiver(
     new Identifier("mymod", "daily_giver"),
-    new Vector3(20f, 0f, 10f));
+    position: new Vector3(20f, 0f, 10f),
+    spawnPOI: true);
 ```
 
-#### 6.6.3 绑定任务
+#### 6.6.3 挂载到 FriendlyNPC
 
 ```csharp
-// 方式 A：注册时通过 QuestData.QuestGiverIdentifier 自动绑定（推荐）
-var questData = new QuestData
-{
-    displayName = "每日任务",
-    QuestGiverIdentifier = new Identifier("mymod", "daily_giver"), // 🆕
-    // ...
-};
-QuestUtils.RegisterQuest(new Identifier("mymod", "daily_01"), questData);
+// 1. 注册 QuestGiver
+QuestGiverUtils.RegisterQuestGiver(new Identifier("mymod", "laozheng"));
 
-// 方式 B：注册后显式绑定
+// 2. Spawn NPC（QuestGiverId 自动绑定）
+var npc = await FriendlyNpcUtils.SpawnFriendlyNpcAsync(
+    new Identifier("mymod", "npc_laozheng"));
+// FriendlyNpcConfig 中设置:
+//   Role = NpcRole.QuestGiver,
+//   QuestGiverId = new Identifier("mymod", "laozheng")
+```
+
+#### 6.6.4 绑定任务到 QuestGiver
+
+```csharp
+// 任务可以随时添加到 QuestGiver，不限于注册时
 QuestGiverUtils.BindQuest(
-    new Identifier("mymod", "daily_giver"),   // QuestGiver
-    new Identifier("mymod", "daily_02"));     // Quest
+    new Identifier("mymod", "daily_giver"),
+    new Identifier("mymod", "daily_01"));
+
+QuestGiverUtils.BindQuest(
+    new Identifier("mymod", "daily_giver"),
+    new Identifier("mymod", "daily_02"));
 ```
 
-#### 6.6.4 查询
+#### 6.6.5 查询与卸载
 
 ```csharp
-// 查询 GameObject
-if (QuestGiverUtils.TryGetQuestGiver(new Identifier("mymod", "daily_giver"), out var go))
-    Debug.Log($"NPC position: {go.transform.position}");
-
-// 查询自定义 ID
 if (QuestGiverUtils.TryGetQuestGiverId(new Identifier("mymod", "daily_giver"), out int id))
     Debug.Log($"Custom ID: {id}");
 
-// 检查是否为自定义 ID
 bool isCustom = QuestGiverUtils.IsCustomQuestGiverId(150);
-```
 
-#### 6.6.5 卸载
-
-```csharp
-// 按 Identifier 卸载
 QuestGiverUtils.UnregisterQuestGiver(new Identifier("mymod", "daily_giver"));
-
-// 批量卸载
 QuestGiverUtils.UnregisterAllQuestGivers("mymod");
-```
-
-#### 6.6.6 通过 FriendlyNpcUtils 创建 QuestGiver NPC
-
-```csharp
-// 先注册 QuestGiver
-QuestGiverUtils.RegisterQuestGiver(
-    new Identifier("mymod", "quest_npc"), config);
-
-// 再用 FriendlyNpcUtils 创建 NPC 并绑定
-var npc = FriendlyNpcUtils.CreateFriendlyNpc(
-    new Identifier("mymod", "npc_01"),
-    new FriendlyNpcConfig
-    {
-        Role = NpcRole.QuestGiver,
-        QuestGiverId = "50"  // 自定义 ID（int 字符串，≥50）
-    });
-
-// 或用 Identifier 绑定
-FriendlyNpcUtils.BindQuestGiver(
-    new Identifier("mymod", "npc_01"),
-    new Identifier("mymod", "quest_npc"));
 ```
 
 > **QuestGiverUtils API 一览**：
 > 
 > | 方法 | 说明 |
 > |------|------|
-> | `RegisterQuestGiver(Identifier, QuestGiverConfig)` | 注册自定义 QuestGiver |
-> | `SpawnQuestGiver(Identifier, Vector3?, Quaternion?)` | 生成 NPC |
-> | `BindQuest(Identifier, Identifier)` | 绑定任务 |
-> | `TryGetQuestGiver(Identifier, out GameObject)` | 查询 NPC |
+> | `RegisterQuestGiver(Identifier)` | 注册自定义 QuestGiver，分配 int ID |
+> | `CreateQuestGiver(Identifier, Vector3, bool)` | 创建独立交互点 GO |
+> | `FriendlyNpcUtils.BindQuestGiver(npcId, qgId)` | 绑定到 FriendlyNPC |
+> | `BindQuest(Identifier, Identifier)` | 绑定任务到 QuestGiver |
 > | `TryGetQuestGiverId(Identifier, out int)` | 查询自定义 ID |
 > | `IsCustomQuestGiverId(int)` | 检查是否为自定义 ID |
 > | `UnregisterQuestGiver(Identifier)` | 卸载 |
@@ -1503,6 +1467,25 @@ void UnregisterCallbacks()
             new Identifier("mymod", "forge"),
             _onBuiltCallback);
 }
+
+// ── 建筑回收回调（v0.7+ 新增）──
+void SetupDemolishCleanup()
+{
+    BuildingUtils.OnBuildingDemolished(
+        new Identifier("mymod", "forge"),
+        building =>
+        {
+            // 清理建筑中生成的 NPC
+            FriendlyNpcUtils.RemoveNpc(new Identifier("mymod", "merchant_forge"));
+        });
+}
+
+void RemoveDemolishCleanup()
+{
+    BuildingUtils.OffBuildingDemolished(
+        new Identifier("mymod", "forge"),
+        _onDemolishCallback);
+}
 ```
 
 ---
@@ -1990,8 +1973,8 @@ GameViews.PerkTree   // Perk 技能树
 GameViews.Building   // 建造面板（BuilderView）
 GameViews.Endowment  // 天赋选择面板
 GameViews.Crafting   // 过滤式合成界面
-GameViews.Shop       // 商店（需自行注册打开方法）
-GameViews.Quest      // 任务（需自行注册打开方法）
+GameViews.Shop       // 商店（自动查找 NPC 的 StockShop 并调用 ShowUI()）
+GameViews.Quest      // 任务（打开 QuestView.Show()）
 
 // 自定义 View 注册打开方法：
 ViewDispatcher.Register(
@@ -2306,9 +2289,21 @@ var config = new FriendlyNpcConfig
     Team = Teams.middle,                // 友善阵营
     SpawnPosition = new Vector3(10f, 0f, 5f),
     ShopId = "merchant_shop",
-    QuestGiverId = "daily_01",
+    QuestGiverId = new Identifier("mymod", "quest_giver"), // 🆕 Identifier 引用已注册的 QuestGiver
     HeadEquipment = ItemEntry.Of("duckov:CowboyHat", 1),  // 头部装备
     BodyEquipment = ItemEntry.Of("duckov:Vest_A", 1),     // 身体装备
+
+    AutoFacePlayer = true,                                // 🆕 自动面向玩家（v0.7+，内部通过 Movement.ForceTurnTo 驱动）
+    ProximityDialogue = new ProximityDialogueConfig       // 玩家接近时自动播放对话
+    {
+        Distance = 3f,                                    // 触发距离（米）
+        Lines = new[]                                     // 对话内容
+        {
+            new SubtitleLine { Text = "你好！有什么可以帮你的？" },
+            new SubtitleLine { Text = "欢迎来到我的小店！" }
+        },
+        Mode = DialogueTriggerMode.Once,                  // Once（默认）/ Repeatable
+    },
 };
 var preset = FriendlyNpcUtils.RegisterFriendlyNpc(new Identifier("mymod", "merchant_01"), config);
 
@@ -2343,12 +2338,24 @@ var go = FriendlyNpcUtils.CreateFriendlyNpc(id, config);
 
 ### 26.3 角色类型（NpcRole）
 
-| 枚举值 | 行为 |
-|--------|------|
-| `Merchant` | 交互打开商店 UI（需 `ShopId`） |
-| `QuestGiver` | 交互打开任务 UI（需 `QuestGiverId`） |
-| `Companion` | NPC 跟随玩家 |
-| `DialogueOnly` | 仅对话，不绑定额外交互 |
+`NpcRole` 为 `[Flags]` 枚举，支持复合角色（如 `Merchant | QuestGiver`）。
+
+| 枚举值 | 位值 | 行为 |
+|--------|------|------|
+| `None` | `0` | 无角色 |
+| `Merchant` | `1 << 1` | 交互打开商店 UI（自动挂载 `StockShop` 组件，需 `ShopId`） |
+| `QuestGiver` | `1 << 2` | 交互打开任务 UI（需 `QuestGiverId`） |
+| `Companion` | `1 << 4` | NPC 跟随玩家 |
+| `DialogueOnly` | `1 << 5` | 仅对话，不绑定额外交互 |
+| `Neutral` | `1 << 3` | 中立 NPC（不攻击也不交互） |
+| `Enemy` | `1 << 0` | 敌对敌人 |
+
+```csharp
+// 复合角色：既是商人也是任务提供方
+config.Role = NpcRole.Merchant | NpcRole.QuestGiver;
+```
+
+> **注意**：从 v0.7 起 `NpcRole` 从普通枚举升级为 `[Flags]`。旧版代码中 `Role == NpcRole.Merchant` 形式的比较需改为 `Role.HasFlag(NpcRole.Merchant)`。
 
 ### 26.4 其他 API
 
@@ -2571,9 +2578,9 @@ EventBusManager.Instance.Sync.Register<SubSceneChangedEvent>(evt =>
 
 ## 30. 对话系统（DialogueUtils）
 
-提供世界空间气泡和全屏字幕对话两种模式。全屏字幕通过游戏原生 `DialogueUI`（订阅 `DialogueTree.OnDialogueStarted` / `OnSubtitlesRequest` / `OnDialogueFinished` 事件）显示。
+基于游戏原生 `DialogueTreeController` 驱动，自动处理 DialogueUI 面板、镜头和字幕全流程。
 
-> **前置条件**：`PlaySubtitle` / `PlaySubtitles` 依赖 `DuckovDialogueActor.Get(actorId)` 查找发言者——必须先在 NPC 的 `FriendlyNpcConfig.ActorId` 中注册匹配的 id。
+> **前置条件**：`PlayDialogue` 依赖 `DuckovDialogueActor.Get(actorId)` 查找发言者——必须先在 NPC 的 `FriendlyNpcConfig.ActorId` 中注册匹配的 id。
 
 ### 30.1 世界空间气泡
 
@@ -2588,11 +2595,8 @@ DialogueUtils.ShowBubbleAt(new Vector3(10f, 1.5f, 5f), "这里看起来很有趣
 ### 30.2 全屏字幕对话
 
 ```csharp
-// ── 单行字幕 ──
-DialogueUtils.PlaySubtitle("merchant_actor", "欢迎光临我的小店！");
-
-// ── 字幕序列（多行按顺序播放，空格/点击推进）──
-await DialogueUtils.PlaySubtitles("merchant_actor", new[]
+// 播放对话序列（面板 + 镜头 + 字幕全流程自动处理）
+await DialogueUtils.PlayDialogue("merchant_actor", new[]
 {
     new SubtitleLine { Text = "欢迎光临！你需要点什么？" },
     new SubtitleLine { ActorId = "player_actor", TextKey = "dialogue_player_reply_01" },
@@ -2603,22 +2607,51 @@ await DialogueUtils.PlaySubtitles("merchant_actor", new[]
 ### 30.3 对话流程说明
 
 ```
-DialogueUtils.PlaySubtitles()
-  → 触发 DialogueTree.OnDialogueStarted   → DialogueUI 显示主面板 + 禁用输入
-  → 循环每行：
-      → DialogueTree.RequestSubtitles()   → DialogueUI.DoSubtitle（打字机动画 + 音效）
-      → 等待用户点击确认
-  → 触发 DialogueTree.OnDialogueFinished  → DialogueUI 隐藏 + 恢复输入
+DialogueUtils.PlayDialogue(actorId, lines)
+  → 构建 minimal DialogueTree JSON
+  → 创建 DialogueTreeController（运行时 GO）
+  → 注入 JSON + SetActorReference
+  → StartDialogue()
+      ├── OnDialogueStarted  → DialogueUI 开面板 + 禁用输入 + 转镜头
+      ├── RequestSubtitles   → 打字机动画 + 音效（每行自动播放）
+      └── OnDialogueFinished → 面板关闭 + 恢复输入
+  → 销毁临时 GO
 ```
 
 | 参数 | 说明 |
 |------|------|
-| `ActorId` | `DuckovDialogueActor.id`。为空时使用 `defaultActorId` |
-| `Text` | 直接文本（优先级高于 TextKey）。作为 `LocalizedStatement` 的 key 传入，无翻译时原样返回 |
-| `TextKey` | 本地化键。通过 FeatherMod `I18n` 预注入 → `LocalizationManager` → `ToPlainText()` 解析 |
+| `actorId` | `DuckovDialogueActor.id` |
+| `Text` | 直接文本（优先于 TextKey） |
+| `TextKey` | 本地化键 |
+| `ActorId`（SubtitleLine）| 为空时使用默认 actorId |
 
-> `DuckovDialogueActor.OnEnable()` 自动调用 `Register(this)`，`OnDisable()` 自动调用 `Unregister(this)`——无需手动注册。
-> `DialogueUI` 是单例（`DialogueUI.instance`），由游戏场景自动管理。
+### 30.4 对话触发链条（DialogueTrigger）
+
+```csharp
+// ── 接近触发（需 NPC 已生成）──
+DialogueTrigger.OnProximity(npcId, distance: 3f, lines: new[]
+{
+    new SubtitleLine { Text = "嘿！你看起来需要帮助。" },
+});
+
+// ── 任务激活/完成时触发 ──
+DialogueTrigger.OnQuestAccepted(questId, npcId, lines);
+DialogueTrigger.OnQuestCompleted(questId, npcId, lines);
+
+// ── NPC 配置中声明式接近触发 ──
+config.ProximityDialogue = new ProximityDialogueConfig
+{
+    Distance = 3f,
+    Lines = new[] { new SubtitleLine { Text = "欢迎！" } },
+    Mode = DialogueTriggerMode.Once,
+};
+config.SightDistance = 8f;  // NPC 自然面向玩家（默认值）
+
+// ── 移除触发器 ──
+DialogueTrigger.RemoveAllTriggers(npcId);
+```
+
+> **技术说明**：`PlayDialogue` 内部运行时创建 `DialogueTreeController` + 注入 JSON graph，与原版 `CutScene` 机制完全一致。`DialogueTreeController.StartDialogue()` 触发 NodeCanvas 全流程，无需反射。
 
 ---
 

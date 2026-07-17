@@ -159,7 +159,7 @@ namespace FeatherMod
             // 防止游戏原生 InteractableBase.Awake() 因缺失 Collider 而 NRE
             var collider = go.AddComponent<BoxCollider>();
             collider.isTrigger = true;
-            int interactLayer = LayerMask.NameToLayer("Interact");
+            int interactLayer = LayerMask.NameToLayer("Interactable");
             if (interactLayer != -1) go.layer = interactLayer;
 
             var interact = go.AddComponent<NoteInteract>();

@@ -334,19 +334,58 @@ namespace FeatherMod
             list.RemoveAll(e => e.buildingId.Equals(buildingId) && e.callback == callback);
         }
 
+        // 建筑回收回调（与 _buildingCallbacks 共用同一字典）
+        private static readonly Dictionary<string, List<(Identifier buildingId, Action<Building> callback)>> _buildingDemolishCallbacks
+            = new Dictionary<string, List<(Identifier, Action<Building>)>>();
+
+        /// <summary>
+        /// 注册建筑回收/拆除回调。当指定 buildingId 的建筑被回收或拆除时触发。
+        /// FML 内部订阅 <c>BuildingManager.OnBuildingDestroyedComplex</c>，按 buildingInfo.id 匹配。
+        /// </summary>
+        public static void OnBuildingDemolished(Identifier buildingId, Action<Building> callback)
+        {
+            Init();
+            HookBuildingEvents();
+
+            var path = buildingId.Path;
+            if (!_buildingDemolishCallbacks.ContainsKey(path))
+                _buildingDemolishCallbacks[path] = new List<(Identifier, Action<Building>)>();
+
+            _buildingDemolishCallbacks[path].Add((buildingId, callback));
+        }
+
+        /// <summary>移除建筑回收回调。</summary>
+        public static void OffBuildingDemolished(Identifier buildingId, Action<Building> callback)
+        {
+            if (!_buildingDemolishCallbacks.TryGetValue(buildingId.Path, out var list)) return;
+            list.RemoveAll(e => e.buildingId.Equals(buildingId) && e.callback == callback);
+        }
+
         private static void HookBuildingEvents()
         {
             if (_buildingEventsHooked) return;
             _buildingEventsHooked = true;
 
-            var evt = typeof(BuildingManager).GetEvent("OnBuildingBuiltComplex",
+            // Hook OnBuildingBuiltComplex
+            var builtEvt = typeof(BuildingManager).GetEvent("OnBuildingBuiltComplex",
                 BindingFlags.Public | BindingFlags.Static);
-            var handlerMethod = typeof(BuildingUtils).GetMethod("OnBuildingBuiltHandler",
+            var builtHandler = typeof(BuildingUtils).GetMethod("OnBuildingBuiltHandler",
                 BindingFlags.NonPublic | BindingFlags.Static);
-            if (evt != null && handlerMethod != null)
+            if (builtEvt != null && builtHandler != null)
             {
-                var handler = Delegate.CreateDelegate(evt.EventHandlerType!, (object?)null, handlerMethod);
-                evt.AddEventHandler(null, handler);
+                var handler = Delegate.CreateDelegate(builtEvt.EventHandlerType!, (object?)null, builtHandler);
+                builtEvt.AddEventHandler(null, handler);
+            }
+
+            // Hook OnBuildingDestroyedComplex（对称的回收/拆除事件）
+            var demolishEvt = typeof(BuildingManager).GetEvent("OnBuildingDestroyedComplex",
+                BindingFlags.Public | BindingFlags.Static);
+            var demolishHandler = typeof(BuildingUtils).GetMethod("OnBuildingDemolishedHandler",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            if (demolishEvt != null && demolishHandler != null)
+            {
+                var handler = Delegate.CreateDelegate(demolishEvt.EventHandlerType!, (object?)null, demolishHandler);
+                demolishEvt.AddEventHandler(null, handler);
             }
         }
 
@@ -367,6 +406,26 @@ namespace FeatherMod
                 catch (Exception e)
                 {
                     Debug.LogError($"[BuildingUtils.OnBuildingBuilt] callback for '{buildingId}' threw: {e}");
+                }
+            }
+        }
+
+        private static void OnBuildingDemolishedHandler(int guid, BuildingInfo info)
+        {
+            if (!_buildingDemolishCallbacks.TryGetValue(info.id, out var list)) return;
+            // 回收时建筑实例可能仍存在（拆除前），尝试查找
+            var building = UnityEngine.Object.FindObjectsOfType<Building>()
+                .FirstOrDefault(b => b != null && b.GUID == guid);
+            var arg = building ?? info.Prefab;
+            foreach (var (buildingId, callback) in list)
+            {
+                try
+                {
+                    callback?.Invoke(arg);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[BuildingUtils.OnBuildingDemolished] callback for '{buildingId}' threw: {e}");
                 }
             }
         }
@@ -442,7 +501,7 @@ namespace FeatherMod
             // 创建 functionContainer（功能层——交互碰撞体）
             var func = new GameObject("Function");
             func.transform.SetParent(go.transform);
-            func.layer = LayerMask.NameToLayer("Interact") != -1 ? LayerMask.NameToLayer("Interact") : 8;
+            func.layer = LayerMask.NameToLayer("Interactable") != -1 ? LayerMask.NameToLayer("Interactable") : 8;
             var collider = func.AddComponent<BoxCollider>();
             collider.isTrigger = true;
             collider.size = new Vector3(dimensions.x, 2f, dimensions.y);

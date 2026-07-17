@@ -41,20 +41,24 @@ namespace FeatherMod
     //  NpcRole — NPC 角色类型
     // ═══════════════════════════════════════════════════════════════
 
-    /// <summary>NPC 角色类型。</summary>
+    /// <summary>NPC 角色类型（Flags 枚举，支持复合角色如 <c>Merchant | QuestGiver</c>）。</summary>
+    [System.Flags]
     public enum NpcRole
     {
+        /// <summary>无角色。</summary>
+        None = 0,
         /// <summary>敌对敌人。</summary>
-        Enemy,
-        /// <summary>友善商人。</summary>
-        Merchant,
+        Enemy = 1 << 0,
+        /// <summary>友善商人（交互打开商店）。</summary>
+        Merchant = 1 << 1,
         /// <summary>任务给予者。</summary>
-        QuestGiver,
+        QuestGiver = 1 << 2,
         /// <summary>中立 NPC（不攻击也不交互）。</summary>
-        Neutral,
-        None,
-        Companion,
-        DialogueOnly
+        Neutral = 1 << 3,
+        /// <summary>同伴（跟随玩家）。</summary>
+        Companion = 1 << 4,
+        /// <summary>仅对话（无可交互行为）。</summary>
+        DialogueOnly = 1 << 5,
     }
 
     // ═══════════════════════════════════════════════════════════════

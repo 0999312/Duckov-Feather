@@ -85,9 +85,32 @@ namespace FeatherMod.Interaction
                 GameUIUtils.OpenCraftingView(tags);
             }, FMLConstants.Domain);
 
-            // Shop / Quest：预留，由具体实现填充
-            ViewDispatcher.Register(GameViews.Shop, _ => { }, FMLConstants.Domain);
-            ViewDispatcher.Register(GameViews.Quest, _ => { }, FMLConstants.Domain);
+            // Shop：打开 StockShopView。ViewParam 为 shopId（MerchantProfile.merchantID）。
+            // 正常流程由 NpcShopInteract 处理；此 handler 供 ViewInteractHandler 等自定义交互点使用。
+            ViewDispatcher.Register(GameViews.Shop, param =>
+            {
+                if (string.IsNullOrEmpty(param)) return;
+                // 遍历 FriendlyNpcUtils.Registry 查找匹配的 NPC
+                foreach (var kvp in FriendlyNpcUtils.Registry)
+                {
+                    if (kvp.Value == null) continue;
+                    var shop = kvp.Value.GetComponent<global::Duckov.Economy.StockShop>();
+                    if (shop != null && shop.MerchantID == param)
+                    {
+                        shop.ShowUI();
+                        return;
+                    }
+                }
+                // 兜底：直接创建临时 StockShop 并打开（商品从 StockShopDatabase 按 merchantID 加载）
+                Debug.LogWarning($"[FML] GameViews.Shop: No NPC found with shopId '{param}', " +
+                    "Shop goods must be registered via ShopUtils.AddGoods().");
+            }, FMLConstants.Domain);
+
+            // Quest：打开 QuestView（任务面板）
+            ViewDispatcher.Register(GameViews.Quest, _ =>
+            {
+                global::Duckov.Quests.UI.QuestView.Show();
+            }, FMLConstants.Domain);
         }
 
         // ═══════════════════════════════════════════════════
@@ -277,7 +300,7 @@ namespace FeatherMod.Interaction
             collider.isTrigger = true;
             collider.size = colliderSize ?? Vector3.one;
 
-            int interactLayer = LayerMask.NameToLayer("Interact");
+            int interactLayer = LayerMask.NameToLayer("Interactable");
             if (interactLayer != -1)
                 go.layer = interactLayer;
 
@@ -293,7 +316,7 @@ namespace FeatherMod.Interaction
                 collider.isTrigger = true;
             }
 
-            int interactLayer = LayerMask.NameToLayer("Interact");
+            int interactLayer = LayerMask.NameToLayer("Interactable");
             if (interactLayer != -1 && target.layer != interactLayer)
                 target.layer = interactLayer;
         }

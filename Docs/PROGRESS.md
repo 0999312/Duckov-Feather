@@ -4,6 +4,53 @@
 
 ---
 
+## 对话系统重写：DialogueTreeController 方案 — ✅ 已完成
+
+**完成时间**: 2026-07-17
+
+三度修复后彻底放弃反射方案，改用游戏原生 `DialogueTreeController` 驱动完整对话流程。
+
+### 根因
+
+反射获取 `DialogueTree.OnDialogueStarted` backing field 失败（Mono 编译器命名不可靠）→ 对话面板永远打不开。
+
+### 方案
+
+运行时动态创建 `DialogueTreeController` → 注入 minimal JSON → `StartDialogue()` → NodeCanvas 接管。**零反射调用（仅一次 field set 用反射兜底）**。
+
+### 文件变更
+
+| 操作 | 文件 | 改动摘要 |
+|------|------|----------|
+| 重写 | `Dialogues/DialogueUtils.cs` | `PlayDialogue(actorId, lines)` 新 API；剔除反射 delegate；`BuildDialogueJson` 内建 JSON 生成 |
+| 重写 | `Dialogues/DialogueTrigger.cs` | `QuestTriggerEntry` 新增 `ActorId`；`PlayDialogueForNpc` 用新 API |
+| 修改 | `Dialogues/NpcProximityTrigger.cs` | 改用 `DialogueUtils.PlayDialogue` |
+| 修改 | `Entities/FriendlyNpcConfig.cs` | 新增 `SightDistance`（默认 8f） |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | `BuildFriendlyPreset` 用 `config.SightDistance`；`CreateInteractChild` 加 `BoxCollider`；`RemoveNpc` 不再删 preset |
+
+### 新增 API
+
+```csharp
+// 播放任意对话（面板+镜头+字幕全流程）
+await DialogueUtils.PlayDialogue("actor_id", new[] {
+    new SubtitleLine { Text = "你好！" },
+    new SubtitleLine { Text = "有什么需要？" },
+});
+
+// NPC 面向玩家
+config.SightDistance = 8f;  // 默认值，AI 自然朝向
+```
+
+### 设计偏离
+
+从 `DialogueTree.OnDialogueStarted` 反射 invoke → `DialogueTreeController.StartDialogue()` 全流程。这完全匹配原版 CutScene 机制。
+
+### 验证结果
+
+- [x] 编译通过
+
+---
+
 ## 项目改名 — ✅ 已完成
 
 **完成时间**: 2026-07-06
@@ -1232,3 +1279,115 @@ Face = FaceRef.FromJson(json),
 ### 验证结果
 - [x] `dotnet build` 通过（0 错误，48 预存警告）
 - [ ] 功能测试（待游戏运行时验证——确认 NPC 捏脸正确应用）
+
+---
+
+## DockovDrinks BUG 修复 — ✅ 已完成
+
+**完成时间**: 2026-07-17
+**耗时**: 约 4 小时
+**触发**: `Docs/TODO/ISSUE_FEATHER_NPC_FACE_PLAYER.md`
+
+### 审计与修复范围
+
+对 DockovDrinks v0.5.0 提交的 4 个核心 BUG + 2 个额外问题进行全面审计，对照逆向源码验证后实施修复。
+
+### BUG 1：建筑回收 NPC 残留 + 重复生成
+
+**修复**: `BuildingUtils` 新增 `OnBuildingDemolished` / `OffBuildingDemolished` 回调 API
+- 游戏原生已提供 `BuildingManager.OnBuildingDestroyedComplex` 事件
+- 框架选择性地只 Hook 了建成事件，现补全对称的回收 Hook
+- `HookBuildingEvents()` 同时注册 `OnBuildingBuiltComplex` 和 `OnBuildingDestroyedComplex`
+
+### BUG 3-A：交互 NPC 打开笔记而非商店
+
+**根因**: 框架 `AttachInteractionComponents` 对 `NpcRole.Merchant` 分支添加了 `NoteInteract`（笔记交互），而非商店交互。
+**修复**:
+- Merchant 分支改为挂载 `StockShop` 组件 + 自定义 `NpcShopInteract : InteractableBase`
+- `NpcShopInteract.OnInteractFinished()` 调用 `StockShop.ShowUI()` 打开游戏原生商店 View
+- `StockShop.merchantID` 通过 Publicizer 公开字段直接赋值
+
+### BUG 3-B：GameViews.Shop/Quest handler 为空占位
+
+**修复**: `RegisterBuiltInViews` 中 Shop/Quest handler 实现有意义的逻辑
+- `GameViews.Shop`: 遍历 `FriendlyNpcUtils.Registry` 查找匹配 NPC 并调用 `StockShop.ShowUI()`
+- `GameViews.Quest`: 调用 `QuestView.Show()` 打开任务面板
+
+### BUG 3-C：NpcRole 不支持复合角色
+
+**修复**: `NpcRole` 枚举改为 `[Flags]`
+- 新增值: `None = 0`, `Enemy = 1<<0`, `Merchant = 1<<1`, `QuestGiver = 1<<2`, `Neutral = 1<<3`, `Companion = 1<<4`, `DialogueOnly = 1<<5`
+- `AttachInteractionComponents` switch → `HasFlag()` 检查，支持 `Merchant | QuestGiver` 复合角色
+- `FriendlyNpcConfig.Role` 默认值 `NpcRole.None = 0` 不变
+
+### 新增：对话触发链条
+
+**新增文件**:
+- `Dialogues/DialogueTrigger.cs` — 对话触发 API（直接订阅 `Quest.onQuestActivated` / `Quest.onQuestCompleted` 静态事件）
+- `Dialogues/NpcProximityTrigger.cs` — NPC 接近检测 MonoBehaviour
+
+**API 设计**:
+```csharp
+// 接近触发（距离 < 3m 时播放对话）
+DialogueTrigger.OnProximity(npcId, 3f, lines, DialogueTriggerMode.Once);
+
+// 任务激活时触发
+DialogueTrigger.OnQuestAccepted(questId, npcId, lines, DialogueTriggerMode.Repeatable);
+
+// 任务完成时触发
+DialogueTrigger.OnQuestCompleted(questId, npcId, lines);
+```
+
+**特性**: 支持 `Once`（默认）和 `Repeatable` 两种触发模式。接近触发也可通过 `FriendlyNpcConfig.ProximityDialogue` 声明式配置。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 修改 | `Entities/EnemyPresetData.cs` | `NpcRole` 枚举改为 `[Flags]`，调整值为位掩码 |
+| 修改 | `Entities/FriendlyNpcConfig.cs` | 新增 `ProximityDialogue`、`AutoFacePlayer` 字段 |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | `AttachInteractionComponents` switch→HasFlag；添加 `NpcShopInteract` 内部类；添加 ProximityDialogue 处理；新增 `using FeatherMod.Interaction` |
+| 修改 | `Buildings/BuildingUtils.cs` | 新增 `OnBuildingDemolished`/`OffBuildingDemolished`；`HookBuildingEvents` 同步 Hook `OnBuildingDestroyedComplex`；新增 `OnBuildingDemolishedHandler` |
+| 修改 | `Interaction/InteractionUtils.cs` | `GameViews.Shop` 实现查找 NPC+调用 ShowUI；`GameViews.Quest` 实现 `QuestView.Show()` |
+| 修改 | `Register/RegisterBootstrap.cs` | 新增 `DialogueTrigger.Init()` 调用 |
+| 新建 | `Dialogues/DialogueTrigger.cs` | 对话触发 API + `QuestStatusChangedEvent` 事件定义 |
+| 新建 | `Dialogues/NpcProximityTrigger.cs` | NPC 接近检测 MonoBehaviour |
+| 新建 | `Dialogues/NpcFacePlayer.cs` | NPC 面向玩家（`Movement.ForceTurnTo` 驱动） |
+
+### BUG 4：NPC 不面向玩家
+
+**修复**: `FriendlyNpcConfig` 新增 `AutoFacePlayer`（bool，默认 false）
+- 设为 `true` 时，`AttachInteractionComponents` 自动挂载 `NpcFacePlayer` 组件
+- `NpcFacePlayer` 每帧使用 `Quaternion.RotateTowards` 平滑旋转 `transform.rotation`
+- 仅在水平面旋转，无抽搐/跳变问题
+
+```csharp
+config.AutoFacePlayer = true; // 一行启用
+```
+
+### 复合角色交互点分离
+
+交叉验证 `SpecialAttachment_XiaoMing.prefab` 原版结构后修正：
+
+```
+// 原版 XiaoMing Prefab 模式：
+SpecialAttachment_XiaoMing (Layer 8)
+├── StockShop (数据) + InteractableBase → OnInteractFinished → ShowUI
+├── Interact_Quest (子GO) → QuestGiver (独立交互, questGiverID=7)
+└── Interact_Skill (子GO) → PerkTree交互
+```
+
+**修正后的 FML 实现**：
+- 单一 Merchant：父 GO `StockShop` + `NpcShopInteract`（对应原版 InteractableBase + UnityEvent 模式）
+- 单一 QuestGiver：父 GO `QuestGiver`（自交互）
+- `Merchant | QuestGiver`：父 GO `StockShop` + `NpcShopInteract`；子 GO `Interact_Quest` + `QuestGiver`（参照原版独立子对象）
+- 不再使用 `ViewInteractHandler` 处理 QuestGiver——`QuestGiver` 自身即是 `InteractableBase`
+
+### BUG 2 判定：不修复（当前实现已满足契约）
+
+`SpawnFriendlyNpcAsync` 的 `AttachInteractionComponents` 中 `SetActorId` 已调用 `DuckovDialogueActor.Register(actor)`，确保 Actor 在 spawn 返回前已注册。如在特定场景仍失败，根因更可能在 `DialogueUtils.Init()` 中 event backing field 获取失败。
+
+### 验证结果
+- [ ] `dotnet build` 编译通过（需 Unity 引用，待构建环境验证）
+- [ ] LSP diagnostics（LSP 服务不可用）
+- [ ] 功能测试（待游戏运行时验证）

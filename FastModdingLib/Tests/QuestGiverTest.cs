@@ -14,35 +14,27 @@ namespace FeatherMod.Tests
         /// </summary>
         public static void Test()
         {
-            // 1. 注册自定义 QuestGiver
-            var config = new QuestGiverConfig
-            {
-                DisplayNameKey = "NPC_Giver_Test",
-                ActorId = "dialogue_test",
-                SpawnPosition = new Vector3(100, 0, 100),
-                BoundQuests = null // 注册后再绑定
-            };
-
             var giverId = new Identifier("testmod", "test_giver");
-            int customId = QuestGiverUtils.RegisterQuestGiver(giverId, config);
 
+            // 1. 注册自定义 QuestGiver（仅分配 ID，不创建 GO）
+            int customId = QuestGiverUtils.RegisterQuestGiver(giverId);
             Debug.Log($"[QuestGiverTest] Registered: {giverId} → custom ID {customId}");
 
-            // 2. 查询
-            bool found = QuestGiverUtils.TryGetQuestGiver(giverId, out var template);
-            Debug.Assert(found, "QuestGiver should be found after registration");
-            Debug.Assert(template != null, "GameObject template should not be null");
-
-            // 3. 验证 ID 映射
+            // 2. 查询 — 注意：TryGetQuestGiver 需先有 GO（通过 CreateQuestGiver 创建）
             bool hasId = QuestGiverUtils.TryGetQuestGiverId(giverId, out int queriedId);
             Debug.Assert(hasId, "Should have quest giver ID");
             Debug.Assert(queriedId == customId, "Queried ID should match registered ID");
             Debug.Assert(QuestGiverUtils.IsCustomQuestGiverId(customId), "Should be recognized as custom ID");
 
-            // 4. 生成 NPC（不实际生成，只验证模板有效）
-            Debug.Log("[QuestGiverTest] Spawning (template validation only)...");
-            Debug.Assert(template.GetComponent<Duckov.Quests.QuestGiver>() != null,
-                "Template should have QuestGiver component");
+            // 3. 创建交互点 GO（独立的 QuestGiver 组件 + Collider）
+            var go = QuestGiverUtils.CreateQuestGiver(giverId, new Vector3(100, 0, 100));
+            Debug.Assert(go != null, "Should create quest giver interact point");
+            Debug.Assert(go.GetComponent<Duckov.Quests.QuestGiver>() != null,
+                "Interact point should have QuestGiver component");
+
+            // 4. 验证创建后可查询到 GO
+            bool found = QuestGiverUtils.TryGetQuestGiver(giverId, out var template);
+            Debug.Assert(found, "QuestGiver should be found after creating interact point");
 
             // 5. 清理
             bool removed = QuestGiverUtils.UnregisterQuestGiver(giverId);
@@ -60,46 +52,29 @@ namespace FeatherMod.Tests
         /// </summary>
         public static void TestFriendlyNpcIntegration()
         {
-            // 1. 注册 QuestGiver
-            var config = new QuestGiverConfig
-            {
-                DisplayNameKey = "NPC_Giver_Friendly",
-                SpawnPosition = Vector3.zero
-            };
+            // 1. 注册 QuestGiver Identifier
             var giverId = new Identifier("testmod", "friendly_qg");
-            int customId = QuestGiverUtils.RegisterQuestGiver(giverId, config);
+            int customId = QuestGiverUtils.RegisterQuestGiver(giverId);
+            Debug.Assert(customId >= QuestGiverRegistry.MinCustomQuestGiverId,
+                $"Custom ID should be >= {QuestGiverRegistry.MinCustomQuestGiverId}");
 
             // 2. 通过 FriendlyNpcUtils 创建 NPC 并绑定 QuestGiver
             var npcConfig = new FriendlyNpcConfig
             {
                 Role = NpcRole.QuestGiver,
-                QuestGiverId = customId.ToString(), // 使用自定义 int ID
+                QuestGiverId = giverId,
                 SpawnPosition = new Vector3(10, 0, 10)
             };
             var npc = FriendlyNpcUtils.CreateFriendlyNpc(
                 new Identifier("testmod", "npc_with_giver"), npcConfig);
 
             Debug.Assert(npc != null, "Friendly NPC should be created");
-            Debug.Assert(npc.GetComponent<Duckov.Quests.QuestGiver>() != null,
-                "NPC should have QuestGiver component");
 
             // 3. 清理
             FriendlyNpcUtils.RemoveNpc(new Identifier("testmod", "npc_with_giver"));
             QuestGiverUtils.UnregisterQuestGiver(giverId);
 
             Debug.Log("[QuestGiverTest] FriendlyNpc integration test passed.");
-        }
-
-        /// <summary>
-        /// ShopUtils Identifier 修复验证。
-        /// </summary>
-        public static void TestShopIdentifierFix()
-        {
-            // 验证 CreateMerchantProfile(Identifier) 存在
-            var shopId = new Identifier("testmod", "Merchant_Test");
-            // 注：实际运行需要游戏环境，此处仅编译验证
-
-            Debug.Log("[QuestGiverTest] ShopUtils Identifier overload verified.");
         }
     }
 }
