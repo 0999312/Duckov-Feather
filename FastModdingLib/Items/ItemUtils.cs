@@ -457,12 +457,12 @@ namespace FeatherMod
         public static void SetItemProperties(Item item, ItemData config)
         {
             item.weight = config.weight;
-
             item.Order = config.order;
             item.Value = config.value;
             item.Quality = config.quality;
 
             item.DisplayNameRaw = config.localizationKey;
+            item.description = config.localizationDesc;
             item.MaxDurability = config.maxDurability;
             item.Durability = config.maxDurability;
             ItemUtils.createUsage(item, config);
