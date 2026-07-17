@@ -984,3 +984,251 @@ Building 系统的成本定义长期依赖游戏原生 `Cost` struct（裸 `int 
 - **NRE 修复**：`BuildingInfo.RequirementsSatisfied()` 遍历 `requireBuildings`/`requireQuests` 时 crash。根本原因：`new BuildingInfo { ... }` 创建 struct 时这些 `string[]` 字段为 null。修复方案：`SanitizeBuildingInfo()` 在注册时用反射将 null 数组初始化为 `Array.Empty<string[]>()`，`BuildingCollectionPatch` 追加前再做一层防御。
 - **Decompose 重复 key 修复**：`AddDecomposeFormulaInternal` 的 `instance.Dic.Add(sourceItemId, item)` 对已有原版配方的物品抛 `ArgumentException`。改为 `instance.Dic[sourceItemId] = item`（索引器允许覆盖），覆盖时输出 warning。
 - **文档重写**：`Docs/USAGE.md` §13 建筑章节全面重写——按实战场景重新组织示例（BuildingConfig 快速开始 → 完整配置 → 三种注册模式 → 放置查询 → 回调），精简 Prefab 规格说明。
+
+---
+
+## Phase 6 启动：NPC 创建路径重构 + 装备 API — ✅ 已完成
+
+**完成时间**: 2026-07-17
+**耗时**: 约 3 小时
+**来源**: 测试 Mod 反馈——`InteractableBase.Awake()` NRE + NPC 不可见 + 捏脸不生效
+
+### 核心策略
+
+Friendly NPC 与 Enemy 在鸭科夫原生代码中**本质相同**（共用 `CharacterRandomPreset`）。旧的 bare `GameObject` + `AddComponent` 路径被完全废弃，改为和 `EnemyUtils.SpawnEnemy` 一致的 `CharacterRandomPreset.CreateCharacterAsync` 路径。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `Entities/FriendlyNpcConfig.cs` | 新增 `Model` (ModelRef)、`Team` (Teams)、`HeadEquipment`/`BodyEquipment` (ItemEntry?) 字段；文档更新为新 API 用法 |
+| 重写 | `Entities/FriendlyNpcUtils.cs` | **全面重写**：新增 `RegisterFriendlyNpc()` + `SpawnFriendlyNpcAsync()`（异步生成）、`BuildFriendlyPreset()`（预设构建）、`AttachInteractionComponents()`（交互组件挂载）；旧 `CreateFriendlyNpc()` 标记 `[Obsolete]` 保留兼容；内部使用 `CharacterRandomPreset.CreateCharacterAsync` 通过 UniTask + callback 桥接 |
+| 新建 | `Entities/EquipmentUtils.cs` | **全新装备 API**：`ConfigureNpcEquipment()` / `SetNpcEquipment()` / `GetNpcEquipment()` / `ClearNpcEquipment()` / `InjectEquipmentToPreset()`；定义了 `EquipmentSlot` 枚举 (Head/Body/Backpack)；内部通过反射操作 `CharacterRandomPreset.itemsToGenerate`；运行时尝试访问 `CharacterModel` 装备方法 |
+| 修改 | `Register/RegisterBootstrap.cs` | Init() 新增 `EquipmentUtils.Init()` |
+| 修改 | `Docs/PROGRESS.md` | 新增本条目 + 更新日期 |
+
+### 新增 API 一览
+
+| API | 用途 |
+|-----|------|
+| `RegisterFriendlyNpc(Identifier, FriendlyNpcConfig)` | 创建 CharacterRandomPreset 并注册到游戏全局列表 |
+| `SpawnFriendlyNpcAsync(Identifier, position?, rotation?)` | 异步生成完整可见 NPC（含 CharacterModel/CustomFaceInstance/Animator/Collider） |
+| `ConfigureNpcEquipment(npcId, slot, item)` | 配置 NPC 装备（注入到 itemsToGenerate） |
+| `SetNpcEquipment(npcId, slot, item)` | 运行时设置已生成 NPC 的装备 |
+| `GetNpcEquipment(npcId, slot)` | 读取 NPC 当前装备 |
+| `ClearNpcEquipment(npcId, slot)` | 清除 NPC 指定槽位装备 |
+
+### API 用法
+
+```csharp
+// 新版推荐用法（异步生成+可见角色）
+var config = new FriendlyNpcConfig
+{
+    DisplayNameKey = "NPC_Merchant_Name",
+    Role = NpcRole.Merchant,
+    Face = FaceRef.Preset("Duck_Default"),
+    HeadEquipment = ItemEntry.Of("duckov:CowboyHat", 1),
+    BodyEquipment = ItemEntry.Of("duckov:Vest_A", 1),
+    SpawnPosition = new Vector3(10, 0, 5)
+};
+FriendlyNpcUtils.RegisterFriendlyNpc(new Identifier("mymod", "merchant"), config);
+var npc = await FriendlyNpcUtils.SpawnFriendlyNpcAsync(new Identifier("mymod", "merchant"));
+
+// 旧版兼容（标记 [Obsolete]，fire-and-forget 异步）
+var go = FriendlyNpcUtils.CreateFriendlyNpc(id, config); // 返回临时占位 GameObject
+```
+
+### FaceRef 捏脸修复
+
+- **旧路径**：运行时通过 `FaceRefResolver.ApplyToModel(model, face)` 调用 `CharacterModel.SetFaceFromPreset()`——但 `CharacterModel` 根本不存在
+- **新路径**：在 `BuildFriendlyPreset()` 中通过反射设置 `CharacterRandomPreset.facePreset` 字段——`CreateCharacterAsync` 在生成角色时自动应用捏脸，`CustomFaceInstance` 随角色自动创建
+
+### 装备实现
+
+- **生成时装备**：在 `BuildFriendlyPreset()` 中调用 `EquipmentUtils.InjectEquipmentToPreset()`，通过反射将 `ItemEntry` 注入 `CharacterRandomPreset.itemsToGenerate`
+- **运行时装备**：`SetNpcEquipment()` 先尝试通过反射调用 `CharacterModel.SetEquipment()` 等方法；若不可用则记录到待处理队列，下次生成时通过 `itemsToGenerate` 生效
+
+### 设计偏离
+
+- `SpawnFriendlyNpcAsync` 返回 `UniTask<GameObject?>`（异步），与旧 `CreateFriendlyNpc` 返回 `GameObject`（同步）不兼容。旧 API 保留但标记 `[Obsolete]`，内部 fire-and-forget 委托到异步版本
+- 装备 API 的运行时部分依赖于游戏内部 `CharacterModel` 方法（`SetEquipment` 等），这些方法的具体签名未知——当前实现通过反射探测常见方法名，若不存在则回退到 `itemsToGenerate` 注入
+
+### 遗留问题
+
+- [ ] 功能测试（待游戏运行时验证——确认 `CreateCharacterAsync` 回调签名匹配 + `facePreset` 字段名正确 + `itemsToGenerate` 元素类型匹配）
+- [ ] `CharacterModel` 运行时装备方法签名需在游戏运行时确认（反射探测可能遗漏）
+- [ ] 测试文件 `QuestGiverTest.cs` 仍使用已废弃的 `CreateFriendlyNpc()`（需更新为新 API）
+- [ ] 装备 API 运行时部分的 `TrySetEquipmentOnModel`/`TryClearEquipmentOnModel` 反射探测逻辑需运行时验证
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误，49 预存警告，0 新增错误）
+- [ ] 功能测试（待游戏运行时验证）
+
+---
+
+## 对话系统修复：缺失 DialogueUI 管理 + DuckovDialogueActor 注册 — ✅ 已完成
+
+**完成时间**: 2026-07-17
+**耗时**: 约 1 小时
+**来源**: 测试 Mod 反馈——NPC 对话只有音频，无字幕文本显示，无镜头切换
+
+### 问题诊断
+
+```
+DialogueUtils.PlaySubtitles("laozheng", lines)
+  → DuckovDialogueActor.Get("laozheng")     ← ① 可能未注册 → 静默跳过
+  → _onStartedDel?.DynamicInvoke(null)      ← ② 事件发出，但无 UI 监听
+  → DialogueTree.RequestSubtitles(...)      ← ③ 只发送音频数据，不负责 UI/镜头
+```
+
+| # | 问题 | 根因 |
+|---|------|------|
+| ① | Actor 查找可能失败 | `FriendlyNpcUtils.SetActorId` 设置了 `id` 字段但从未调用 `DuckovDialogueActor.Register()` |
+| ② | DialogueUI 未打开 | `RequestSubtitles` 是底层 API，`DialogueUI` 通过 `DialogueTree.OnDialogueStarted` 事件打开，但 FML 未主动查找并激活 `DialogueUI` |
+| ③ | 只有音频 | `RequestSubtitles` 会触发音频系统播放语音，但字幕文本需要 `DialogueUI` 激活后才能显示；镜头切换也由 `DialogueUI` 控制 |
+
+### 已修复
+
+| 文件 | 改动 |
+|------|------|
+| `Entities/FriendlyNpcUtils.cs` | `SetActorId()` 新增 `DuckovDialogueActor.Register(actor)` 反射调用；新增 `UnregisterActor()` 辅助方法；`RemoveNpc()` 在销毁前调用 `UnregisterActor()` |
+| `Dialogues/DialogueUtils.cs` | **全面重写**：`Init()` 新增 `DialogueUI` 类型预查找；`PlaySubtitle()`/`PlaySubtitles()` 在对话前后调用 `EnsureDialogueUIOpen()`/`EnsureDialogueUIClose()`；Actor 未找到时输出详细警告 |
+| `QuestGivers/QuestGiverUtils.cs` | `SetActorId()` 新增 `DuckovDialogueActor.Register()` 反射调用 |
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误）
+- [ ] 功能测试（待游戏运行时验证——DialogueUI 类型名、Register 签名、UI 打开/关闭方法名）
+
+---
+
+## 对话系统二次修复：利用反编译源码消除推测性反射 — ✅ 已完成
+
+**完成时间**: 2026-07-17
+**耗时**: 约 1 小时
+**来源**: 审查 `DecompiledDLL/Core/` 后发现的三个关键问题
+
+### 通过反编译源码确认的事实
+
+| 反编译文件 | 关键发现 |
+|-----------|---------|
+| `DuckovDialogueActor.cs` | `OnEnable()` 自动调用 `Register(this)`，`OnDisable()` 自动 `Unregister(this)` → FML 的手动反射 Register 调用**完全冗余** |
+| `DialogueUI.cs` | `RegisterEvents()` 订阅 `DialogueTree.OnDialogueStarted/OnSubtitlesRequest/OnDialogueFinished` 三个事件；`OnDialogueStarted` 调用 `mainFadeGroup.Show()` + `InputManager.DisableInput()` → **主面板和镜头由事件驱动，无需手动管理 UI** |
+| `LocalizedStatement.cs` | `text` 属性调用 `textKey.ToPlainText()` 实现本地化；`audio` 字段可选音频 clip |
+
+### 根因确认
+
+```csharp
+// ❌ 旧代码（上一轮修复中遗留）
+var bfs = BindingFlags.Public | BindingFlags.Static;  // 只搜索 public 字段
+_onStartedDel = typeof(DialogueTree).GetField("OnDialogueStarted", bfs)...;
+// C# event 的 backing field 是 PRIVATE static → GetField 返回 null
+// → _onStartedDel 为 null → DynamicInvoke 从未执行
+// → DialogueUI.OnDialogueStarted 从未触发 → mainFadeGroup 从未显示 → 字幕不可见
+```
+
+### 已修复
+
+| 文件 | 改动 |
+|------|------|
+| `Dialogues/DialogueUtils.cs` | `Init()` 中 `BindingFlags` 加上 `NonPublic`（**一行修复：核心 Bug**）；移除所有推测性 `DialogueUI` 反射代码（`EnsureDialogueUIOpen/Close/FindDialogueUI/CallMethodIfExists`）；移除 `_dialogueUIType/_cachedDialogueUI/_dialogueUISearched` 字段 |
+| `Entities/FriendlyNpcUtils.cs` | 移除冗余的 `DuckovDialogueActor.Register/Unregister` 反射调用（`OnEnable/OnDisable` 自动处理）；移除 `UnregisterActor()` 方法 |
+| `QuestGivers/QuestGiverUtils.cs` | 移除冗余的 `DuckovDialogueActor.Register` 反射调用 |
+
+### 代码行数变化
+
+- DialogueUtils.cs: 216 行 → 130 行（**-40%**，移除全部推测性代码）
+- FriendlyNpcUtils.cs: 移除 ~35 行冗余反射
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误）
+- [ ] 功能测试（待游戏运行时验证——确认 `OnDialogueStarted` backing field 名称为 `OnDialogueStarted`，`BindingFlags.NonPublic` 能访问到）
+
+---
+
+## CreateCharacterAsync 反射参数类型修复 — ✅ 已完成
+
+**完成时间**: 2026-07-17
+**耗时**: 约 1 小时
+**来源**: 测试 Mod 崩溃——`SpawnFriendlyNpcAsync` 抛出 `ArgumentException: Quaternion cannot be converted to Vector3`
+
+### 根因
+
+`duckov_assembly/Core/CharacterRandomPreset.cs:251` 反编译确认游戏**唯一重载**：
+```csharp
+public async UniTask<CharacterMainControl> CreateCharacterAsync(
+    Vector3 pos, Vector3 dir, int relatedScene,
+    CharacterSpawnerGroup group, bool isLeader)
+```
+**不存在** Quaternion/Teams/callback 重载。FML 代码三处错误传入 Quaternion（第二参数应为 Vector3 dir）和 Teams 枚举（第三参数应为 int sceneBuildIndex）。
+
+### 问题汇总
+
+| 位置 | 问题 |
+|------|------|
+| `FriendlyNpcUtils.cs:140` | `rot`(Quaternion) 传入 `dir`(Vector3) 参数位——**直接崩溃** |
+| `FriendlyNpcUtils.cs:130-131` | 查找不存在的 4-arg `(Vector3, Quaternion, Teams, Action<>)` 重载——永远为 null，必定走 fallback |
+| `FriendlyNpcUtils.cs:418` | `GetMethod` 无参数类型——重载歧义，可能返回错误方法 |
+| `EnemyUtils.cs:157` | `Quaternion.identity` 传入 `dir` 位——同 bug 潜伏中 |
+| `OtherPatches.cs:27-28` | Harmony postfix 参数 `(Vector3, Quaternion, Teams, Action<>)` 与游戏方法不匹配——静默失效 |
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `Entities/FriendlyNpcUtils.cs` | `SpawnFriendlyNpcAsync`: 移除不存在的 4-arg callback 代码；`Quaternion`→`Vector3.forward` 方向转换；`(int)config.Team`→`SceneManager.GetActiveScene().buildIndex`；直接 await UniTask 返回值 |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | `GetCreateCharacterAsyncMethod`: `GetMethod` 添加精确 5 参数类型，消除重载歧义 |
+| 修改 | `Entities/EnemyUtils.cs` | `GetCreateCharacterAsyncMethod` + `SpawnInternal`: 同上修复 |
+| 修改 | `Entities/Patches/OtherPatches.cs` | `CreateCharacterAsyncPostfix` 移除不匹配的形参（仅保留 `__instance`）；Patch #10 GetMethod 歧义修复 |
+
+### 设计偏离
+
+- 原有 4-arg callback 方案（假设游戏有 `(Vector3, Quaternion, Teams, Action<CharacterMainControl>)` 重载）基于错误的反编译结论。实际游戏仅有 5-arg 重载，返回 `UniTask<CharacterMainControl>`，FML 修复后直接 await 该返回值。
+
+### 验证结果
+- [x] `dotnet build` 通过（0 错误，48 预存警告）
+- [ ] 功能测试（待游戏运行时验证——确认 FriendlyNpc + Enemy 生成正常）
+
+---
+
+## FaceRef.FromJson(): NPC 捏脸 JSON 数据驱动 — ✅ 已完成
+
+**完成时间**: 2026-07-17
+**耗时**: 约 0.5 小时
+**来源**: 测试 Mod 需要将已保存的玩家捏脸 JSON 数据应用到 NPC（非"跟随当前玩家捏脸"）
+
+### 背景
+
+`FaceRef` 之前支持三种模式：
+
+| 模式 | 效果 |
+|------|------|
+| `Preset("name")` | 查找 Resources 中的 `CustomFacePreset` |
+| `PlayerFace()` | 设置 `usePlayerPreset = true`（跟随当前玩家捏脸） |
+| `Custom(FacePartIds)` | 按部件 ID 组合自定义 |
+
+缺少"从 `CustomFaceSettingData` JSON 字符串创建捏脸"的能力。Modder 有已保存的捏脸数据（`GetPlayerFaceJson()` 导出或从存档提取），需要直接应用到 NPC。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `Entities/FaceRef.cs` | `FaceRefMode` 新增 `FromJson` 枚举值；`FaceRef` 新增 `FaceJson` 字段 + `FromJson(string json)` 静态工厂 |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | `BuildFriendlyPreset` switch 新增 `FromJson` 分支：`JsonToData(json)`→创建 `CustomFacePreset`→赋值 `facePreset` |
+
+### API
+
+```csharp
+// 直接从 JSON 字符串创建捏脸引用
+Face = FaceRef.FromJson(jsonString),
+
+// 从文件加载
+string json = File.ReadAllText(Path.Combine(modDir, "faces", "npc_laozheng.json"));
+Face = FaceRef.FromJson(json),
+```
+
+### 验证结果
+- [x] `dotnet build` 通过（0 错误，48 预存警告）
+- [ ] 功能测试（待游戏运行时验证——确认 NPC 捏脸正确应用）

@@ -28,6 +28,10 @@ namespace FeatherMod
         public static ModelRef GamePrefab(string name)
             => new ModelRef { GamePrefabName = name };
 
+        /// <summary>使用游戏默认 CharacterModel（GameplayDataSettings.Prefabs.DefaultCharacterModel）。
+        /// 即玩家捏脸系统的基础模型，适用于 FaceRef.FromJson 等自定义捏脸场景。</summary>
+        public static ModelRef Default => new ModelRef { GamePrefabName = null };
+
         /// <summary>从 AssetBundle 加载自定义模型。</summary>
         public static ModelRef FromBundle(string bundle, string path)
             => new ModelRef { BundleName = bundle, AssetPath = path };

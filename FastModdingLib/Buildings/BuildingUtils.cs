@@ -5,6 +5,7 @@ using FeatherMod.Register;
 using FeatherMod.Utils;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -352,12 +353,16 @@ namespace FeatherMod
         private static void OnBuildingBuiltHandler(int guid, BuildingInfo info)
         {
             if (!_buildingCallbacks.TryGetValue(info.id, out var list)) return;
-            var prefab = info.Prefab;
+            // 查找场景中实际放置的 Building 实例（非 prefab 资源）
+            // OnBuildingBuiltComplex 事件同步触发时实例已存在（BuildingArea.Display 已 Instantiate + Setup）
+            var building = UnityEngine.Object.FindObjectsOfType<Building>()
+                .FirstOrDefault(b => b != null && b.GUID == guid);
+            var arg = building ?? info.Prefab;  // 找到实例 → 传实例；未找到 → fallback prefab
             foreach (var (buildingId, callback) in list)
             {
                 try
                 {
-                    callback?.Invoke(prefab);
+                    callback?.Invoke(arg);
                 }
                 catch (Exception e)
                 {

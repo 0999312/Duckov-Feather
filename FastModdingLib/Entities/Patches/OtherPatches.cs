@@ -24,8 +24,7 @@ namespace FeatherMod.Entities.Patches
         // ======================================================================
         [HarmonyPatch(typeof(CharacterRandomPreset), "CreateCharacterAsync")]
         [HarmonyPostfix]
-        public static void CreateCharacterAsyncPostfix(CharacterRandomPreset __instance,
-            Vector3 position, Quaternion rotation, Teams team, Action<CharacterMainControl> callback)
+        public static void CreateCharacterAsyncPostfix(CharacterRandomPreset __instance)
         {
             try
             {
@@ -282,7 +281,7 @@ namespace FeatherMod.Entities.Patches
                     {
                         // 使用反射调用 CreateCharacterAsync（fire-and-forget）
                         var method = typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync",
-                            BindingFlags.Public | BindingFlags.Instance);
+                            new Type[] { typeof(Vector3), typeof(Vector3), typeof(int), typeof(CharacterSpawnerGroup), typeof(bool) });
                         if (method != null)
                         {
                             Vector3 spawnPos = basePos + new Vector3(

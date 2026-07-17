@@ -105,7 +105,7 @@ namespace FeatherMod
             {
                 if (_cachedCreateAsync != null) return _cachedCreateAsync;
                 _cachedCreateAsync = typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    new Type[] { typeof(Vector3), typeof(Vector3), typeof(int), typeof(CharacterSpawnerGroup), typeof(bool) });
                 if (_cachedCreateAsync == null)
                 {
                     Debug.LogError("[FML EnemyUtils] CreateCharacterAsync method not found. Game API may have changed.");
@@ -150,29 +150,17 @@ namespace FeatherMod
                 var method = GetCreateCharacterAsyncMethod();
                 if (method == null) return null;
 
-                // 包装回调：如果 modder 传了 onSpawned, 包装原生 callback
-                // 注意: 游戏原生 CreateCharacterAsync 的 callback 参数索引为 3 (第 5 个参数)
-                // 签名: CreateCharacterAsync(Vector3 position, Quaternion rotation, int team, ...)
-                object[] args;
-                var quat = Quaternion.identity;
+                // 游戏实际重载：CreateCharacterAsync(Vector3 pos, Vector3 dir, int relatedScene, CharacterSpawnerGroup group, bool isLeader)
+                Vector3 dir = Vector3.forward;
+                int sceneBuildIndex = 0; // Enemy spawn in current scene context
+
                 if (onSpawned != null)
                 {
-                    // 需要劫持原生 callback
-                    // 由于反射调用无法直接获取 UniTask 返回值，此处通过反射包装
-                    args = group != null
-                        ? new object[] { position, quat, 0, group, false }
-                        : new object[] { position, quat, 0, null, false };
-
                     Debug.LogWarning("[FML EnemyUtils] onSpawned callback is not supported via reflection; " +
                                      "subscribe to EventBus HurtEvent/LevelInitializedEvent instead.");
                 }
-                else
-                {
-                    args = group != null
-                        ? new object[] { position, quat, 0, group, false }
-                        : new object[] { position, quat, 0, null, false };
-                }
 
+                var args = new object[] { position, dir, sceneBuildIndex, group, false };
                 method.Invoke(preset, args);
             }
             catch (Exception e)

@@ -38,7 +38,8 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 30. [对话系统（DialogueUtils）](#30-对话系统dialogueutils)
 31. [注册表系统（Registry）](#31-注册表系统registry)
 32. [模组卸载生命周期](#32-模组卸载生命周期)
-33. [附录：项目结构参考](#33-附录项目结构参考)
+33. [NPC 装备系统（EquipmentUtils）](#33-npc-装备系统equipmentutils)
+34. [附录：项目结构参考](#34-附录项目结构参考)
 
 ---
 
@@ -2287,44 +2288,86 @@ FishingUtils.UnregisterAll("MyMod");
 
 ## 26. 友善 NPC（FriendlyNpcUtils）
 
-提供友善 NPC 的创建、对话气泡、商店绑定和任务发放绑定。
+基于 `CharacterRandomPreset.CreateCharacterAsync` 创建完整的可见 NPC（自动附带 `CharacterModel`、`CustomFaceInstance`、`Animator` 等组件）。
+
+> **重要**：必须在 NPC 创建前通过 `FriendlyNpcConfig.ActorId` 指定 `DuckovDialogueActor.id`，否则对话系统无法找到发言者。该 id 需与 DialogueUtils 的 `actorId` 参数一致。
+
+### 26.1 新版 API（推荐）
 
 ```csharp
-// 创建友善 NPC
-var npc = FriendlyNpcUtils.CreateFriendlyNpc(
-    new Identifier("mymod", "merchant_01"),
-    new FriendlyNpcConfig
-    {
-        DisplayNameKey = "npc_merchant_name",
-        ActorId = "merchant_actor",        // DuckovDialogueActor.id（对话角色）
-        Role = NpcRole.Merchant,           // Merchant / QuestGiver / Companion / DialogueOnly
-        Face = FaceRef.Preset("Default"),   // 捏脸（或 FaceRef.None）
-        SpawnPosition = new Vector3(10f, 0f, 5f),
-        ShopId = "mymod:shop_welcome",     // 绑定商店（Role=Merchant）
-        QuestGiverId = "daily_01"          // 绑定任务发放（Role=QuestGiver，原生枚举名或自定义 int 值）
-    });
+// ── 第 1 步：注册预设 ──
+var config = new FriendlyNpcConfig
+{
+    DisplayNameKey = "npc_merchant_name",
+    ActorId = "merchant_actor",         // DuckovDialogueActor.id（对话系统查找用）
+    Role = NpcRole.Merchant,            // Merchant / QuestGiver / Companion / DialogueOnly
+    Face = FaceRef.Preset("Duck_Default"), // 捏脸（见下方 FaceRef 模式表）
+    Model = ModelRef.GamePrefab("CharacterModel_Duck_Jeff"), // 模型
+    Team = Teams.middle,                // 友善阵营
+    SpawnPosition = new Vector3(10f, 0f, 5f),
+    ShopId = "merchant_shop",
+    QuestGiverId = "daily_01",
+    HeadEquipment = ItemEntry.Of("duckov:CowboyHat", 1),  // 头部装备
+    BodyEquipment = ItemEntry.Of("duckov:Vest_A", 1),     // 身体装备
+};
+var preset = FriendlyNpcUtils.RegisterFriendlyNpc(new Identifier("mymod", "merchant_01"), config);
 
-// 🆕 BindQuestGiver 的 Identifier 重载（配合 QuestGiverUtils）
-FriendlyNpcUtils.BindQuestGiver(
-    new Identifier("mymod", "npc_01"),
-    new Identifier("mymod", "quest_giver_custom"));
+// ── 第 2 步：异步生成 ──
+var npc = await FriendlyNpcUtils.SpawnFriendlyNpcAsync(new Identifier("mymod", "merchant_01"));
+// npc 现在是一个完整的可见角色，带 CharacterModel + CustomFaceInstance + Collider
+```
 
+#### FaceRef 捏脸模式
+
+| 模式 | 用法 | 效果 |
+|------|------|------|
+| `Preset` | `FaceRef.Preset("Duck_Default")` | 引用 Resources 中已有 `CustomFacePreset` |
+| `PlayerFace` | `FaceRef.PlayerFace()` | 使用玩家当前捏脸数据 |
+| `Custom` | `FaceRef.Custom(parts)` | 按 8 个部件 ID 自定义组合 |
+| `FromJson` | `FaceRef.FromJson(json)` | 从游戏原生 `CustomFaceSettingData` JSON 字符串创建 |
+
+```csharp
+// ── FromJson 示例：从文件加载已保存的捏脸数据 ──
+string json = File.ReadAllText(Path.Combine(modDir, "faces", "npc_laozheng.json"));
+Face = FaceRef.FromJson(json),
+```
+> JSON 格式与 `CustomFaceUtils.GetPlayerFaceJson()` 输出一致，也可从游戏存档导出。
+
+### 26.2 旧版 API（已废弃）
+
+```csharp
+// ⚠️ 已标记 [Obsolete]，返回的是临时占位 GameObject，NPC 不可见
+// 请改用 RegisterFriendlyNpc + SpawnFriendlyNpcAsync
+var go = FriendlyNpcUtils.CreateFriendlyNpc(id, config);
+```
+
+### 26.3 角色类型（NpcRole）
+
+| 枚举值 | 行为 |
+|--------|------|
+| `Merchant` | 交互打开商店 UI（需 `ShopId`） |
+| `QuestGiver` | 交互打开任务 UI（需 `QuestGiverId`） |
+| `Companion` | NPC 跟随玩家 |
+| `DialogueOnly` | 仅对话，不绑定额外交互 |
+
+### 26.4 其他 API
+
+```csharp
 // 世界空间对话气泡
-FriendlyNpcUtils.ShowBubble(new Identifier("mymod", "merchant_01"), "欢迎光临！", 3f);
+FriendlyNpcUtils.ShowBubble(new Identifier("mymod", "merchant_01"), "欢迎！", 3f);
+FriendlyNpcUtils.ShowBubbleLocalized(id, "dialogue_welcome", 3f);
 
-// 本地化气泡
-FriendlyNpcUtils.ShowBubbleLocalized(new Identifier("mymod", "merchant_01"), "dialogue_welcome", 3f);
+// 绑定商店 / 任务
+FriendlyNpcUtils.BindShop(id, new Identifier("mymod", "shop"));
+FriendlyNpcUtils.BindQuestGiver(id, "daily_01");
+FriendlyNpcUtils.BindQuestGiver(id, new Identifier("mymod", "quest_giver_custom"));
 
-// 销毁 NPC
-FriendlyNpcUtils.RemoveNpc(new Identifier("mymod", "merchant_01"));
-
-// 批量卸载
+// 销毁 / 批量卸载
+FriendlyNpcUtils.RemoveNpc(id);
 FriendlyNpcUtils.RemoveAllNpcs("MyMod");
 ```
 
-> `FaceRefResolver` 在运行时按名称查找 `CustomFacePreset`（Resources.Load → Presets 列表）。
-> `NpcRole` 枚举已扩展：`Enemy`, `Merchant`, `QuestGiver`, `Neutral`, `None`, `Companion`, `DialogueOnly`。
-> 如需从官方捏脸数据串（JSON）导入/导出，使用 [§27 CustomFaceUtils](#27-捏脸系统customfaceutils)。
+> **技术说明**：NPC 创建基于游戏原生的 `CharacterRandomPreset` + `CreateCharacterAsync`（与 `EnemyUtils.SpawnEnemy` 同路径）。所有 `[SerializeField] private` 字段经 Krafs.Publicizer 编译期公开，直接赋值无需反射。Preset 字段参考游戏原生友善 NPC（Ming/Fo）的配置值。
 
 ---
 
@@ -2416,6 +2459,22 @@ if (playerFace != null)
 
 > `CustomFaceUtils.GetPlayerFaceInstance()` 通过 `FindObjectOfType<MainCharacterFace>()` 查找玩家主角的面部实例。
 > 如果主角不在场景中（如主菜单），返回 `null`。
+
+### 27.5 将捏脸应用到 NPC
+
+`CustomFaceUtils` 用于**运行时**修改已存在角色的捏脸。如果要在 NPC **创建时**指定捏脸，使用 `FaceRef.FromJson()`（详见 §26.1）：
+
+```csharp
+// NPC 创建时指定捏脸（推荐——避免运行时查找 CustomFaceInstance）
+var config = new FriendlyNpcConfig
+{
+    Face = FaceRef.FromJson(faceJson),  // 从 JSON 直接创建捏脸
+    // ...其他配置
+};
+FriendlyNpcUtils.RegisterFriendlyNpc(id, config);
+```
+
+> **区别**：`CustomFaceUtils.SetFaceFromJson(instance, json)` 修改**已生成**角色的捏脸（需要先获取 `CustomFaceInstance` 组件）；`FaceRef.FromJson(json)` 在 NPC **创建时**通过 `CharacterRandomPreset.facePreset` 设置捏脸（更早、更可靠）。
 
 ---
 
@@ -2512,23 +2571,27 @@ EventBusManager.Instance.Sync.Register<SubSceneChangedEvent>(evt =>
 
 ## 30. 对话系统（DialogueUtils）
 
-提供世界空间气泡和全屏字幕对话两种模式。全屏字幕通过 NodeCanvas `DialogueTree.RequestSubtitles` 驱动游戏原生 `DialogueUI`。
+提供世界空间气泡和全屏字幕对话两种模式。全屏字幕通过游戏原生 `DialogueUI`（订阅 `DialogueTree.OnDialogueStarted` / `OnSubtitlesRequest` / `OnDialogueFinished` 事件）显示。
+
+> **前置条件**：`PlaySubtitle` / `PlaySubtitles` 依赖 `DuckovDialogueActor.Get(actorId)` 查找发言者——必须先在 NPC 的 `FriendlyNpcConfig.ActorId` 中注册匹配的 id。
+
+### 30.1 世界空间气泡
 
 ```csharp
-// ── 世界空间气泡 ──
-
 // 在 NPC 头顶显示
 DialogueUtils.ShowBubble(new Identifier("mymod", "merchant"), "欢迎！有什么可以帮你的？", 3f);
 
 // 在任意坐标显示
 DialogueUtils.ShowBubbleAt(new Vector3(10f, 1.5f, 5f), "这里看起来很有趣…");
+```
 
-// ── 全屏字幕对话 ──
+### 30.2 全屏字幕对话
 
-// 单行字幕
+```csharp
+// ── 单行字幕 ──
 DialogueUtils.PlaySubtitle("merchant_actor", "欢迎光临我的小店！");
 
-// 字幕序列（多行按顺序播放，带行间隔）
+// ── 字幕序列（多行按顺序播放，空格/点击推进）──
 await DialogueUtils.PlaySubtitles("merchant_actor", new[]
 {
     new SubtitleLine { Text = "欢迎光临！你需要点什么？" },
@@ -2537,14 +2600,25 @@ await DialogueUtils.PlaySubtitles("merchant_actor", new[]
 });
 ```
 
+### 30.3 对话流程说明
+
+```
+DialogueUtils.PlaySubtitles()
+  → 触发 DialogueTree.OnDialogueStarted   → DialogueUI 显示主面板 + 禁用输入
+  → 循环每行：
+      → DialogueTree.RequestSubtitles()   → DialogueUI.DoSubtitle（打字机动画 + 音效）
+      → 等待用户点击确认
+  → 触发 DialogueTree.OnDialogueFinished  → DialogueUI 隐藏 + 恢复输入
+```
+
 | 参数 | 说明 |
 |------|------|
 | `ActorId` | `DuckovDialogueActor.id`。为空时使用 `defaultActorId` |
 | `Text` | 直接文本（优先级高于 TextKey）。作为 `LocalizedStatement` 的 key 传入，无翻译时原样返回 |
 | `TextKey` | 本地化键。通过 FeatherMod `I18n` 预注入 → `LocalizationManager` → `ToPlainText()` 解析 |
 
-> `PlaySubtitle` / `PlaySubtitles` 自动管理 `DialogueUI` 的打开和关闭。
-> 字幕通过 `click to continue` 交互确认后推进到下一行。
+> `DuckovDialogueActor.OnEnable()` 自动调用 `Register(this)`，`OnDisable()` 自动调用 `Unregister(this)`——无需手动注册。
+> `DialogueUI` 是单例（`DialogueUI.instance`），由游戏场景自动管理。
 
 ---
 
@@ -2626,7 +2700,69 @@ FML 自动处理模组卸载时的清理工作，**无需手动编写卸载逻�
 
 ---
 
-## 33. 附录：项目结构参考
+## 33. NPC 装备系统（EquipmentUtils）
+
+管理 NPC 身体/头部/背包装备。生成前通过 `FriendlyNpcConfig` 配置，或通过 `EquipmentUtils` API 动态管理。
+
+> **技术说明**：装备通过 `CharacterRandomPreset.itemsToGenerate` 注入，由 `CreateCharacterAsync` 在生成时自动装备到对应槽位（`ArmorSlot` / `HelmatSlot` / `BackpackSlot`）。运行时装备修改待后续基于 `CharacterItemControl` 实现。
+
+### 33.1 生成时配置（推荐）
+
+```csharp
+// 方式 1：直接在 FriendlyNpcConfig 中配置
+var config = new FriendlyNpcConfig
+{
+    HeadEquipment = ItemEntry.Of("duckov:CowboyHat", 1),
+    BodyEquipment = ItemEntry.Of("duckov:Vest_A", 1),
+};
+FriendlyNpcUtils.RegisterFriendlyNpc(id, config);
+
+// 方式 2：通过 EquipmentUtils API 配置
+EquipmentUtils.ConfigureNpcEquipment(id, EquipmentSlot.Head, ItemEntry.Of("duckov:Fedora", 1));
+```
+
+### 33.2 装备槽位
+
+```csharp
+public enum EquipmentSlot
+{
+    Head,      // 头部（头盔/帽子）
+    Body,      // 身体（护甲/衣服）
+    Backpack   // 背包
+}
+```
+
+### 33.3 API 参考
+
+```csharp
+// 配置装备（在 RegisterFriendlyNpc 之前或之后调用均可）
+EquipmentUtils.ConfigureNpcEquipment(id, EquipmentSlot.Head, item);
+
+// 查询已配置的装备
+if (EquipmentUtils.TryGetConfiguredEquipment(id, EquipmentSlot.Body, out var item))
+    Debug.Log($"Body: {item}");
+
+// 清除指定槽位
+EquipmentUtils.ClearConfiguredEquipment(id, EquipmentSlot.Head);
+
+// 清除全部
+EquipmentUtils.ClearAllEquipment(id);
+
+// 运行时设置（已生成的 NPC）
+bool applied = EquipmentUtils.SetNpcEquipment(id, EquipmentSlot.Head, item);
+
+// 运行时查询
+var equip = EquipmentUtils.GetNpcEquipment(id, EquipmentSlot.Body);
+
+// 运行时清除
+EquipmentUtils.ClearNpcEquipment(id, EquipmentSlot.Backpack);
+```
+
+> `SetNpcEquipment` / `ClearNpcEquipment` 运行时版本待基于 `CharacterItemControl` 的物品槽位系统实现（`ArmorSlot` / `HelmatSlot` / `BackpackSlot`）。
+
+---
+
+## 34. 附录：项目结构参考
 
 ### 推荐目录结构
 

@@ -32,8 +32,9 @@ namespace FeatherMod.Register
             EndowmentUtils.Init();
             NoteUtils.Init();
             FishingUtils.Init();
-            FriendlyNpcUtils.Init();
-            QuestGiverUtils.Init();
+FriendlyNpcUtils.Init();
+EquipmentUtils.Init();
+QuestGiverUtils.Init();
             WeatherUtils.Init();
             MultiSceneUtils.Init();
             DialogueUtils.Init();

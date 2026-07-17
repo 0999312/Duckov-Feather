@@ -46,6 +46,40 @@ public static void SelectEndowment(Identifier id);
 
 此约束适用于所有新增模块和已有模块的 API 修改。Phase 4 各子模块（Building/PerkTree/Endowment/UI）的实施计划必须遵守此原则。
 
+### 反射最小化原则
+
+| 规则 | 说明 |
+|------|------|
+| **Publicizer 优先** | 游戏 DLL 中 `[SerializeField] private` 字段经 Krafs.Publicizer 编译期公开，可直接访问，**禁止**对这些字段使用 `GetField` + `SetValue` 反射 |
+| **Harmony 优先** | 需要 Hook 游戏方法时优先用 `[HarmonyPatch]` / `[HarmonyPrefix]` / `[HarmonyPostfix]`，**禁止**用反射手动调用游戏私有方法 |
+| **反射仅用于回调/事件** | 仅编译器生成的 event backing field（`BindingFlags.NonPublic` 必需）和 `CreateCharacterAsync` 等无法直接引用的泛型方法允许反射 |
+| **禁止推测性反射** | 禁止用反射探测"可能存在"的方法名——必须基于反编译源码（`DecompiledDLL/` 或 `duckov_assembly/`）确认后再使用 |
+
+**反例（禁止）**：
+```csharp
+// ❌ Publicizer 已公开——禁止反射
+var field = typeof(CharacterRandomPreset).GetField("nameKey", ...);
+field.SetValue(preset, value);
+
+// ❌ 推测性反射——方法不存在
+model.GetType().GetMethod("SetEquipment")?.Invoke(...);
+
+// ❌ 手动 Hook——应用 Harmony
+method.Invoke(preset, args);
+```
+
+**正例（必须）**：
+```csharp
+// ✅ Publicizer 已公开——直接赋值
+preset.nameKey = value;
+
+// ✅ Harmony Patch
+[HarmonyPatch(typeof(Target), "Method")]
+
+// ✅ DecompiledDLL 中已确认的方法签名，反射仅用于调用
+typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync", new[] { typeof(Vector3), ... })
+```
+
 ### 进度文档规则
 
 每个 Phase 完成后**必须立即**编写或更新进度文档 `docs/PROGRESS.md`，包含以下内容：

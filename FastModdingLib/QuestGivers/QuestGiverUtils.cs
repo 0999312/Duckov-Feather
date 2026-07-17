@@ -4,7 +4,6 @@ using FeatherMod.Register;
 using FeatherMod.Utils;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod
@@ -244,28 +243,22 @@ namespace FeatherMod
         //  反射辅助
         // ═══════════════════════════════════════════════════
 
+        /// <summary>DuckovDialogueActor.id 经 Publicizer 已公开，直接赋值。</summary>
         private static void SetActorId(global::DuckovDialogueActor actor, string actorId)
         {
-            var field = typeof(global::DuckovDialogueActor).GetField("id",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            field?.SetValue(actor, actorId);
+            actor.id = actorId;
         }
 
+        /// <summary>QuestGiver.spawnPOI 已是 public 字段，直接赋值。</summary>
         private static void SetSpawnPOI(QuestGiver qg, bool value)
         {
-            var field = typeof(QuestGiver).GetField("spawnPOI",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            field?.SetValue(qg, value);
+            qg.spawnPOI = value;
         }
 
+        /// <summary>Quest.questGiverID 经 Publicizer 已公开，直接赋值。</summary>
         private static void SetQuestQuestGiverId(Quest quest, int questGiverId)
         {
-            var field = typeof(Quest).GetField("questGiverID",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            if (field != null)
-            {
-                field.SetValue(quest, Enum.ToObject(field.FieldType, questGiverId));
-            }
+            quest.questGiverID = (QuestGiverID)questGiverId;
         }
     }
 }
