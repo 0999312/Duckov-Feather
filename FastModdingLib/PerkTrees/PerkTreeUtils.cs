@@ -231,6 +231,9 @@ namespace FeatherMod
             var go = new GameObject($"{FML_TREE_PREFIX}{treeId}");
             var tree = go.AddComponent<PerkTree>();
 
+            // PerkTree 模板需跨场景存活，防止场景切换后 PerkTreeManager 持有僵尸引用
+            UnityEngine.Object.DontDestroyOnLoad(go);
+
             // 反射设置 tree ID 字段
             var idField = typeof(PerkTree).GetField("perkTreeID", BindingFlags.Instance | BindingFlags.NonPublic);
             idField?.SetValue(tree, treeId);

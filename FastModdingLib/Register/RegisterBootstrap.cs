@@ -30,6 +30,13 @@ namespace FeatherMod.Register
             PerkTreeUtils.Init();
             EnemyUtils.Init();
             EndowmentUtils.Init();
+            NoteUtils.Init();
+            FishingUtils.Init();
+            FriendlyNpcUtils.Init();
+            QuestGiverUtils.Init();
+            WeatherUtils.Init();
+            MultiSceneUtils.Init();
+            DialogueUtils.Init();
             WeaponInjectionUtils.Init();
             LotteryBoxUtils.Init();
             InteractionUtils.Init();

@@ -146,6 +146,32 @@ namespace FeatherMod
         // —— Merchant profile 创建 ——
 
         /// <summary>
+        /// 创建新商人 profile（Identifier 版本）。从 Identifier 推导 merchantID 和 owner modid。
+        /// 创建的 profile 会被 Registry 追踪，mod 卸载时通过
+        /// <see cref="ShopRegistry.RemoveProfilesByOwner"/> 自动移除。
+        /// </summary>
+        /// <param name="id">商人 Identifier（domain = modid, path = merchantID）。</param>
+        /// <returns>创建的 merchantID 字符串。</returns>
+        /// <exception cref="ArgumentException"><paramref name="id"/> 对应的 merchantID 已存在。</exception>
+        public static string CreateMerchantProfile(Identifier id)
+        {
+            string name = id.Path;
+            string modid = id.Domain;
+
+            if (GameplayDataSettings.StockshopDatabase.GetMerchantProfile(name) != null)
+            {
+                throw new ArgumentException($"MerchantProfile '{name}' already exists.", nameof(id));
+            }
+            var profile = new StockShopDatabase.MerchantProfile
+            {
+                merchantID = name
+            };
+            GameplayDataSettings.StockshopDatabase.merchantProfiles.Add(profile);
+            _shopRegistry.RegisterCreatedProfile(modid, name);
+            return name;
+        }
+
+        /// <summary>
         /// 创建新商人 profile 并追加到 <see cref="StockShopDatabase.merchantProfiles"/> 列表。
         /// 返回传入的 <paramref name="name"/>（即新 profile 的 merchantID）。
         /// 创建的 profile 会被 Registry 追踪，mod 卸载时通过
@@ -248,6 +274,26 @@ namespace FeatherMod
                 result.Add(ToShopGoodsData(entry, merchantProfileID));
             }
             return result;
+        }
+
+        /// <summary>
+        /// 按 Identifier 获取商人 profile 下的全部商品。Identifier.Path 作为 merchantProfileID。
+        /// profile 不存在时返回空列表。
+        /// </summary>
+        /// <param name="id">商人 Identifier（path = merchantProfileID）。</param>
+        public static IReadOnlyList<ShopGoodsData> GetAllGoods(Identifier id)
+        {
+            return GetAllGoods(id.Path);
+        }
+
+        /// <summary>
+        /// 按 Identifier 查询商人 profile 是否存在。
+        /// </summary>
+        /// <param name="id">商人 Identifier（path = merchantProfileID）。</param>
+        public static bool TryGetMerchantProfile(Identifier id, out StockShopDatabase.MerchantProfile profile)
+        {
+            profile = GameplayDataSettings.StockshopDatabase.GetMerchantProfile(id.Path);
+            return profile != null;
         }
     }
 }

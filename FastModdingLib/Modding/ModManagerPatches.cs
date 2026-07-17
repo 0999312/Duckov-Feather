@@ -25,6 +25,7 @@ namespace FeatherMod.Modding
             _sortPatchApplied = true;
 
             var harmony = new Harmony("Feather.ModOrdering");
+            FeatherMod.ModBehaviour.ExtraHarmonies.Add(harmony);
             harmony.Patch(
                 original: typeof(ModManager).GetMethod("SortModInfosByPriority",
                     BindingFlags.NonPublic | BindingFlags.Static),
@@ -44,12 +45,14 @@ namespace FeatherMod.Modding
         /// 原生排序已按 ES3 保存的 priority 恢复玩家手动顺序，
         /// 此 Postfix 在此基础上叠加依赖拓扑排序，确保 fml.json 依赖关系成立。
         /// 未声明依赖关系的 mod 保持原生排序结果（即玩家上次保存的顺序）。
+        /// 排序完成后将修正后的顺序回写 ES3，确保下次 Rescan 时顺序不再丢失。
         /// </summary>
         public static void SortModInfosByPriority_Postfix()
         {
             ModMetaCache.Clear();
             ModMetaCache.LoadAll(ModManager.modInfos);
             ModDependencyResolver.SortByDependencyOnly(ModManager.modInfos);
+            PersistPriorities();
         }
 
         /// <summary>
@@ -93,16 +96,50 @@ namespace FeatherMod.Modding
         /// Reorder 内部不调用 SortModInfosByPriority，故在此独立做依赖拓扑排序。
         /// 仅保证 fml.json 声明的依赖关系（dependencies / loadAfter / loadBefore），
         /// 不强制按 priority 重排。未声明依赖关系的 mod 顺序完全不受影响。
+        /// 排序完成后将修正后的顺序回写 ES3，确保优先级与内存顺序一致。
         /// </summary>
         public static void Reorder_Postfix()
         {
             ModMetaCache.Clear();
             ModMetaCache.LoadAll(ModManager.modInfos);
             ModDependencyResolver.SortByDependencyOnly(ModManager.modInfos);
+            PersistPriorities();
             var onReorder = typeof(ModManager)
                 .GetField("OnReorder", BindingFlags.Public | BindingFlags.Static)
                 ?.GetValue(null) as System.Action;
             onReorder?.Invoke();
+        }
+
+        /// <summary>
+        /// 将当前 <c>ModManager.modInfos</c> 的顺序持久化到 ES3（Mods.ES3）。
+        /// 调用原生 <c>ModManager.RegeneratePriorities()</c> 私有方法，
+        /// 将每个 mod 的索引作为 priority_XXX 键写入。
+        /// 若反射调用失败，回退到逐个调用 <c>SetModPriority</c>。
+        /// </summary>
+        private static void PersistPriorities()
+        {
+            var modInfos = ModManager.modInfos;
+            if (modInfos == null || modInfos.Count == 0) return;
+
+            // 优先通过反射调用原生 RegeneratePriorities（一次处理所有 mod）
+            var regenerateMethod = typeof(ModManager).GetMethod("RegeneratePriorities",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            if (regenerateMethod != null)
+            {
+                regenerateMethod.Invoke(null, null);
+                return;
+            }
+
+            // 回退：逐个调用 SetModPriority（public static）
+            var setPriorityMethod = typeof(ModManager).GetMethod("SetModPriority",
+                BindingFlags.Public | BindingFlags.Static);
+            if (setPriorityMethod != null)
+            {
+                for (int i = 0; i < modInfos.Count; i++)
+                {
+                    setPriorityMethod.Invoke(null, new object[] { modInfos[i].name, i });
+                }
+            }
         }
     }
 }

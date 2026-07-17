@@ -1,4 +1,5 @@
 ﻿using Duckov.Buildings;
+using Duckov.Economy;
 using Duckov.Utilities;
 using FeatherMod.Register;
 using FeatherMod.Utils;
@@ -45,20 +46,75 @@ namespace FeatherMod
         public static void RegisterBuilding(Identifier id, BuildingInfo info, Building prefab)
         {
             Init();
+
+            // 修复 BuildingInfo 中可能为 null 的引用类型字段，
+            // 防止游戏原生 RequirementsSatisfied() 遍历时 NRE
+            SanitizeBuildingInfo(ref info);
+
+            // Prefab 需跨场景存活（纯代码创建的 GameObject 在场景切换时会被销毁）
+            UnityEngine.Object.DontDestroyOnLoad(prefab.gameObject);
+
+            // 仅将 prefab 写入原生 collection.prefabs（游戏 BeginPlacing 直接遍历此列表取 prefab），
+            // BuildingInfo 不写 infos（由 Harmony GetBuildingsToDisplay_Postfix 追加，避免双注册）
             var collection = GameplayDataSettings.BuildingDataCollection;
-            if (collection == null)
-                throw new InvalidOperationException("BuildingDataCollection not available.");
+            if (collection != null)
+            {
+                collection.prefabs ??= new System.Collections.Generic.List<Building>();
+                if (!collection.prefabs.Contains(prefab))
+                    collection.prefabs.Add(prefab);
+            }
 
-            // 写入 native 侧（使游戏内 UI / 查询即时可见）
-            collection.infos ??= new List<BuildingInfo>();
-            if (!collection.infos.Contains(info))
-                collection.infos.Add(info);
-            collection.prefabs ??= new List<Building>();
-            if (!collection.prefabs.Contains(prefab))
-                collection.prefabs.Add(prefab);
-
-            // Registry 侧登记（OnRemoved 自动做 native 善后）
+            // FML Registry 侧登记
             _buildingRegistry.Register(id, info, prefab, id.Domain);
+        }
+
+        /// <summary>
+        /// 注册自定义建筑（BuildingConfig 重载）。自动将 <see cref="BuildingConfig"/>
+        /// 转换为游戏原生 <see cref="BuildingInfo"/>，包括 Identifier→TypeID 成本解析。
+        /// 若未提供 prefab，自动调用 <see cref="CreateSimpleBuilding"/> 创建。
+        /// </summary>
+        /// <param name="config">建筑配置 DTO（含 Id、尺寸、成本、解锁条件）。</param>
+        /// <param name="prefab">可选：自定义 Building prefab。为 null 时从 config 自动创建。</param>
+        public static void RegisterBuilding(BuildingConfig config, Building? prefab = null)
+        {
+            if (config == null) throw new ArgumentNullException(nameof(config));
+
+            // 确定 prefabName：modder 可显式指定 PrefabName，
+            // 否则自动加 "Building_" 前缀与游戏原生命名一致。
+            // 注意 info.id 不带前缀，因为 BuildingInfo.DisplayNameKey 会追加 "Building_"。
+            var prefabName = config.PrefabName.Length > 0
+                ? config.PrefabName
+                : $"Building_{config.Id.Path}";
+
+            // 解析或创建 prefab
+            if (prefab == null)
+            {
+                prefab = CreateSimpleBuilding(config.Id, config.Dimensions, config.ExistingPrefabName);
+            }
+
+            // Prefab 需跨场景存活，防止场景切换后注册表持有僵尸引用
+            // （鸭科夫场景切换频繁，纯代码创建的 GameObject 不会自动保留）
+            if (prefab != null)
+                UnityEngine.Object.DontDestroyOnLoad(prefab.gameObject);
+
+            // 确保 prefab GameObject.name 与 prefabName 一致，
+            // 游戏 GetPrefab() 按 e.name == prefabName 精确匹配。
+            if (prefab != null && prefab.name != prefabName)
+                prefab.name = prefabName;
+
+            // 构建原生 BuildingInfo
+            var info = new BuildingInfo
+            {
+                id = config.Id.Path,
+                prefabName = prefabName,
+                maxAmount = config.MaxAmount,
+                cost = config.BuildCost()
+            };
+
+            // 修复 null 数组字段，防止 RequirementsSatisfied() NRE
+            SanitizeBuildingInfo(ref info);
+
+            RegisterBuilding(config.Id, info, prefab);
         }
 
         /// <summary>按 Identifier 移除已注册的建筑。</summary>
@@ -120,6 +176,23 @@ namespace FeatherMod
             return result;
         }
 
+        /// <summary>
+        /// 按 Identifier 获取建筑 prefab（GameObject with <see cref="Building"/> component）。
+        /// 优先查 FML Registry，再回退到原生 <c>BuildingDataCollection</c>。
+        /// </summary>
+        /// <param name="buildingId">建筑 Identifier。</param>
+        /// <returns>建筑 prefab；未注册时返回 null。</returns>
+        public static Building? GetBuildingPrefab(Identifier buildingId)
+        {
+            // 优先查 FML Registry
+            var info = GetBuildingInfo(buildingId);
+            if (info != null && _buildingRegistry.TryGetPrefab(info.Value.prefabName, out var prefab))
+                return prefab;
+
+            // 回退到原生 collection
+            return BuildingDataCollection.GetPrefab(buildingId.Path);
+        }
+
         // ===== 放置建筑 =====
 
         /// <summary>
@@ -149,6 +222,85 @@ namespace FeatherMod
                 new Identifier(RegistryManager.CurrentModid, areaID),
                 new Identifier(RegistryManager.CurrentModid, buildingID),
                 coord, rotation);
+        }
+
+        // ===== 成本构建 =====
+
+        /// <summary>
+        /// 从 FML <see cref="ItemEntry"/> 数组构建游戏原生 <see cref="Cost"/> struct。
+        /// 自动调用 <see cref="ItemEntry.ResolveTypeId"/> 将每个 Identifier 解析为游戏原生 TypeID。
+        /// </summary>
+        /// <param name="money">所需金钱。</param>
+        /// <param name="items">消耗物品列表（FML ItemEntry，支持 Identifier、标签、耐久度折算）。</param>
+        /// <returns>可直接赋值给 <c>BuildingInfo.cost</c> 的原生 <see cref="Cost"/>。</returns>
+        /// <example>
+        /// <code>
+        /// var info = new BuildingInfo { id = "forge" };
+        /// info.cost = BuildingUtils.CreateCost(5000,
+        ///     ItemEntry.Of("duckov:Iron", 20),
+        ///     ItemEntry.Of("duckov:Stone", 10));
+        /// </code>
+        /// </example>
+        public static Cost CreateCost(long money, params ItemEntry[] items)
+        {
+            if (items == null || items.Length == 0)
+                return new Cost(money);
+
+            var nativeItems = new Cost.ItemEntry[items.Length];
+            for (int i = 0; i < items.Length; i++)
+            {
+                nativeItems[i] = new Cost.ItemEntry
+                {
+                    id = items[i].ResolveTypeId(),
+                    amount = items[i].Amount
+                };
+            }
+            return new Cost
+            {
+                money = money,
+                items = nativeItems
+            };
+        }
+
+        // ===== 成本查询 =====
+
+        /// <summary>
+        /// 查询建筑的建造成本（金钱 + 物品）。
+        /// 返回游戏原生 <see cref="Cost"/> struct，可直接调用其 <c>.Enough</c> / <c>.Pay()</c> 方法。
+        /// </summary>
+        /// <param name="buildingId">建筑 Identifier。</param>
+        /// <returns>建筑成本；建筑未注册时返回 null。</returns>
+        public static Cost? GetBuildingCost(Identifier buildingId)
+        {
+            var info = GetBuildingInfo(buildingId);
+            return info?.cost;
+        }
+
+        /// <summary>
+        /// 检查玩家是否能负担建筑的建造成本（金钱 + 背包物品充足）。
+        /// 直接委托给游戏原生 <c>Cost.Enough</c> → <c>EconomyManager.IsEnough()</c>。
+        /// </summary>
+        /// <param name="buildingId">建筑 Identifier。</param>
+        /// <returns>可负担返回 true；建筑未注册或资源不足返回 false。</returns>
+        public static bool CanAffordBuilding(Identifier buildingId)
+        {
+            var info = GetBuildingInfo(buildingId);
+            if (info == null) return false;
+            return info.Value.cost.Enough;
+        }
+
+        /// <summary>
+        /// 手动扣除建筑建造成本（从玩家账户扣钱、从背包移除物品）。
+        /// 注意：<see cref="PlaceBuilding"/> 内部已通过游戏 <c>BuyAndPlace</c> 自动处理成本扣除，
+        /// 一般无需手动调用。此 API 用于需要在建造前预先扣费的场景。
+        /// </summary>
+        /// <param name="buildingId">建筑 Identifier。</param>
+        /// <returns>扣除成功返回 true；建筑未注册或资源不足返回 false。</returns>
+        public static bool SpendBuildingCost(Identifier buildingId)
+        {
+            var info = GetBuildingInfo(buildingId);
+            if (info == null) return false;
+            return info.Value.cost.Pay();
         }
 
         // ===== 便捷回调 =====
@@ -242,6 +394,8 @@ namespace FeatherMod
                     clone.name = $"Building_{id.Path}";
                     SetBuildingField(clone, "id", id.Path);
                     SetBuildingField(clone, "dimensions", dimensions);
+                    // Prefab 需跨场景存活，防止场景切换导致注册表持有僵尸引用
+                    UnityEngine.Object.DontDestroyOnLoad(clone.gameObject);
                     return clone;
                 }
             }
@@ -253,13 +407,15 @@ namespace FeatherMod
         private static Building CreateBuildingFromScratch(Identifier id, Vector2Int dimensions)
         {
             var go = new GameObject($"Building_{id.Path}");
+            go.SetActive(false);  // 阻止 Awake 在字段就绪前触发
+
             var building = go.AddComponent<Building>();
 
             // 设置 Building 组件字段
             SetBuildingField(building, "id", id.Path);
             SetBuildingField(building, "dimensions", dimensions);
 
-            // 创建 graphicsContainer（美术层）
+            // 创建 graphicsContainer（美术层 + 物理碰撞）
             var graphics = new GameObject("Graphics");
             graphics.transform.SetParent(go.transform);
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -267,6 +423,15 @@ namespace FeatherMod
             cube.transform.localPosition = Vector3.zero;
             cube.transform.localScale = new Vector3(dimensions.x, 2f, dimensions.y);
             cube.name = "Model_Cube";
+
+            // 物理碰撞箱（非 trigger），阻止玩家穿过建筑
+            // 游戏原生 Building prefab 的 graphicsContainer 中有 Collider，
+            // Building.SetupPreview() 会遍历 graphicsContainer.GetComponentsInChildren<Collider>()
+            var physicsCollider = graphics.AddComponent<BoxCollider>();
+            physicsCollider.isTrigger = false;
+            physicsCollider.size = new Vector3(dimensions.x, 2f, dimensions.y);
+            physicsCollider.center = Vector3.zero;
+
             SetBuildingField(building, "graphicsContainer", graphics);
 
             // 创建 functionContainer（功能层——交互碰撞体）
@@ -278,6 +443,10 @@ namespace FeatherMod
             collider.size = new Vector3(dimensions.x, 2f, dimensions.y);
             SetBuildingField(building, "functionContainer", func);
 
+            go.SetActive(true);  // 字段就绪，允许 Awake
+
+            // Prefab 需跨场景存活，防止场景切换导致注册表持有僵尸引用
+            UnityEngine.Object.DontDestroyOnLoad(go);
             return building;
         }
 
@@ -325,6 +494,45 @@ namespace FeatherMod
         {
             var field = typeof(Building).GetField(fieldName, _buildingFlags);
             return field?.GetValue(building) as T;
+        }
+
+        /// <summary>
+        /// 修复 BuildingInfo 中可能为 null 的数组字段，初始化为空数组。
+        /// 游戏原生 <c>RequirementsSatisfied()</c> / <c>BuildingAreaData.Any()</c>
+        /// 遍历这些字段时不检查 null，必须提前补齐。
+        /// </summary>
+        private static void SanitizeBuildingInfo(ref BuildingInfo info)
+        {
+            // requireBuildings: string[] — RequirementsSatisfied() 会 foreach 遍历
+            try
+            {
+                var field = typeof(BuildingInfo).GetField("requireBuildings",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null && field.GetValue(info) == null)
+                    field.SetValueDirect(__makeref(info), Array.Empty<string>());
+            }
+            catch { /* 字段不存在或类型不匹配时静默跳过 */ }
+
+            // requireQuests: int[] — 同上
+            try
+            {
+                var field = typeof(BuildingInfo).GetField("requireQuests",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null && field.GetValue(info) == null)
+                    field.SetValueDirect(__makeref(info), Array.Empty<int>());
+            }
+            catch { /* 字段不存在或类型不匹配时静默跳过 */ }
+
+            // alternativeFor: string[] — BuildingAreaData.Any() 遍历时不检查 null，
+            // 建造 FML 建筑后触发 Contains(null) → ArgumentNullException 扩散全局
+            try
+            {
+                var field = typeof(BuildingInfo).GetField("alternativeFor",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null && field.GetValue(info) == null)
+                    field.SetValueDirect(__makeref(info), Array.Empty<string>());
+            }
+            catch { /* 字段不存在或类型不匹配时静默跳过 */ }
         }
     }
 }

@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/status-活跃开发中-brightgreen?style=flat-square" alt="Status">
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/Patch-22%20个-blueviolet?style=flat-square" alt="Patches">
-  <img src="https://img.shields.io/badge/module-17%20个-orange?style=flat-square" alt="Modules">
+  <img src="https://img.shields.io/badge/module-28%20个-orange?style=flat-square" alt="Modules">
 </p>
 
 ---
@@ -106,7 +106,7 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
 
 ## 模块速览
 
-FML 提供 **22 个功能模块**，覆盖 Mod 开发的大部分场景：
+FML 提供 **28 个功能模块**，覆盖 Mod 开发的大部分场景：
 
 | 模块 | 入口类 | 示例 API |
 |------|--------|---------|
@@ -131,6 +131,12 @@ FML 提供 **22 个功能模块**，覆盖 Mod 开发的大部分场景：
 | **UI 构建器** | `SimpleViewBuilder` | `Create(name).AddGameButton().Build()` |
 | **物品容器** | `ContainerUtils` | `CreateContainer(id, slots, modid)` |
 | **设置面板** | `ModOptionsRegistry` | `RegisterPanel(modId, name, builder)` |
+| **笔记** | `NoteUtils` | `RegisterNote(id, config)` |
+| **钓鱼** | `FishingUtils` | `RegisterFishingPool(id, config)` |
+| **友善 NPC** | `FriendlyNpcUtils` | `CreateFriendlyNpc(id, config)` |
+| **天气** | `WeatherUtils` | `GetCurrentWeather()` |
+| **多场景** | `MultiSceneUtils` | `TeleportTo(sceneId, location)` |
+| **对话** | `DialogueUtils` | `PlaySubtitles(actorId, lines)` |
 | **AssetBundle** | `AssetUtil` | `LoadBundle("weapons")` |
 
 **原版内容反查**：
@@ -224,7 +230,7 @@ FML 提供 **22 个功能模块**，覆盖 Mod 开发的大部分场景：
 
 | 文档 | 说明 |
 |------|------|
-| [Docs/USAGE.md](Docs/USAGE.md) | 完整使用指南 — 快速开始、全模块 API（23 章） |
+| [Docs/USAGE.md](Docs/USAGE.md) | 完整使用指南 — 快速开始、全模块 API（32 章） |
 | [Docs/MIGRATION.md](Docs/MIGRATION.md) | 迁移指南 — 从旧版 FML 升级 |
 | [Docs/PROGRESS.md](Docs/PROGRESS.md) | 项目进度 — Phase 完成状态与变更记录 |
 
@@ -343,8 +349,8 @@ FML 的开发离不开以下开源项目和社区的支持：
 | Phase 1 | 框架内核加固（EventBus + Registry） | ✅ 已完成 |
 | Phase 2 | 头部消费系统（Economy / Buff / Options） | ✅ 已完成 |
 | Phase 3 | 内容创作系统（Shop / Audio / Perk / Building / Enemy） | ✅ 已完成 |
-| Phase 4 | Building / Perk / Endowment / UI 深化 | ⏳ 部分完成 |
-| Phase 5 | 长尾幂等系统 | ⏳ 待启动 |
+| Phase 4 | Building / Perk / Endowment / UI 深化 | ✅ 已完成 |
+| Phase 5 | 长尾幂等系统（Note / Fishing / NPC / Weather / Multi-Scene） | ✅ 已完成 |
 | Phase 6 | 质量（测试 / 示例 / CI/CD） | ⏳ 待启动 |
 
 ---

@@ -41,6 +41,8 @@ namespace FeatherMod.Utils
 
         public Identifier(string domain, string path)
         {
+            if (domain == null) throw new ArgumentNullException(nameof(domain));
+            if (path == null) throw new ArgumentNullException(nameof(path));
             if (domain.Contains("/"))
             {
                 throw new ArgumentException("/(Forward slash) is not accepted in domain");

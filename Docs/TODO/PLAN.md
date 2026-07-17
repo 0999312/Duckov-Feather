@@ -343,8 +343,10 @@ Phase 3 已完成这四个系统的基础注册 API，Phase 4 针对性地补齐
   - **E1**：Endowment 从零实现（`EndowmentUtils` + `EndowmentRegistry` + `EndowmentManager` Patch + `EndowmentConfig` DTO）
   - **U1**：UI 交互入口模板（3 个 InteractableBase 子类）
 
+### 已完成
+- **Phase 5** — ✅ 已完成（Note / Fishing / Friendly NPC / Weather / Multi-Scene，详见 `Docs/PLAN-Phase5-Goals.md`）
+
 ### 待启动
-- **Phase 5** — Achievements / Weather / Fishing / Multi-Scene（视社区需求）
 - **Phase 6** — NUnit 全量测试 + 示例 mod 子项目 + 中英双语 API 文档
 
 ---

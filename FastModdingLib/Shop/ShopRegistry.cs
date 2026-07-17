@@ -21,7 +21,7 @@ namespace FeatherMod
     {
         private readonly Dictionary<int, Identifier> _byTypeId;
         private readonly Dictionary<Identifier, string> _merchantProfileIds;
-        private readonly Dictionary<string, List<string>> _createdProfiles = new Dictionary<string, List<string>>(); // modid → merchantProfileID[]
+        private readonly Dictionary<string, HashSet<string>> _createdProfiles = new Dictionary<string, HashSet<string>>();
 
         public ShopRegistry()
         {
@@ -81,24 +81,23 @@ namespace FeatherMod
         /// <summary>追踪通过 CreateMerchantProfile 创建的商人 profile，供卸载时清理。</summary>
         public void RegisterCreatedProfile(string modid, string merchantProfileID)
         {
-            if (!_createdProfiles.TryGetValue(modid, out var list))
+            if (!_createdProfiles.TryGetValue(modid, out var set))
             {
-                list = new List<string>();
-                _createdProfiles[modid] = list;
+                set = new HashSet<string>();
+                _createdProfiles[modid] = set;
             }
-            list.Add(merchantProfileID);
+            set.Add(merchantProfileID);
         }
 
         /// <summary>按 mod 批量移除通过 CreateMerchantProfile 创建的商人 profile。</summary>
         public int RemoveProfilesByOwner(string modid)
         {
-            if (!_createdProfiles.TryGetValue(modid, out var list)) return 0;
+            if (!_createdProfiles.TryGetValue(modid, out var set)) return 0;
             var profiles = GameplayDataSettings.StockshopDatabase.merchantProfiles;
             int count = 0;
-            // 逆序移除以避免索引偏移
             for (int i = profiles.Count - 1; i >= 0; i--)
             {
-                if (list.Contains(profiles[i].merchantID))
+                if (set.Contains(profiles[i].merchantID))
                 {
                     profiles.RemoveAt(i);
                     count++;

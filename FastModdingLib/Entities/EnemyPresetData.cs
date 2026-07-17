@@ -47,7 +47,10 @@ namespace FeatherMod
         /// <summary>任务给予者。</summary>
         QuestGiver,
         /// <summary>中立 NPC（不攻击也不交互）。</summary>
-        Neutral
+        Neutral,
+        None,
+        Companion,
+        DialogueOnly
     }
 
     // ═══════════════════════════════════════════════════════════════

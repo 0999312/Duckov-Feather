@@ -29,9 +29,16 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 21. [物品容器（ContainerUtils）](#21-物品容器containerutils)
 22. [自定义设置面板（ModOptionsRegistry）](#22-自定义设置面板modoptionsregistry)
 23. [AssetBundle 加载（AssetUtil）](#23-assetbundle-加载assetutil)
-24. [注册表系统（Registry）](#24-注册表系统registry)
-25. [模组卸载生命周期](#25-模组卸载生命周期)
-26. [附录：项目结构参考](#26-附录项目结构参考)
+24. [笔记系统（NoteUtils）](#24-笔记系统noteutils)
+25. [钓鱼系统（FishingUtils）](#25-钓鱼系统fishingutils)
+26. [友善 NPC（FriendlyNpcUtils）](#26-友善-npcfriendlynpcutils)
+27. [捏脸系统（CustomFaceUtils）](#27-捏脸系统customfaceutils)
+28. [天气系统（WeatherUtils）](#28-天气系统weatherutils)
+29. [多场景（MultiSceneUtils）](#29-多场景multisceneutils)
+30. [对话系统（DialogueUtils）](#30-对话系统dialogueutils)
+31. [注册表系统（Registry）](#31-注册表系统registry)
+32. [模组卸载生命周期](#32-模组卸载生命周期)
+33. [附录：项目结构参考](#33-附录项目结构参考)
 
 ---
 
@@ -621,6 +628,8 @@ var questData = new QuestData
     displayName = "quest_coffee_run",
     description = "quest_coffee_run_desc",
     questGiver = QuestGiverID.Fence,
+    // 🆕 或使用 QuestGiverIdentifier 绑定自定义 QuestGiver（推荐）
+    QuestGiverIdentifier = new Identifier("mymod", "daily_giver"),
     requireLevel = 5,
     tasks = new List<TaskData>
     {
@@ -667,6 +676,10 @@ QuestUtils.RegisterQuest(new Identifier("mymod", "coffee_run"), questData);
 > 均由 FML 在注册时自动分配，带 **冲突检测** — 若候选 ID 已被原生游戏任务或已注册 FML 任务占用，自动递增至空闲位置。
 > modder 无需手动设置（已 internal）。
 > `RewardUnlockEndowmentData` 在任务完成时自动解锁指定天赋（AutoClaim），无需 modder 手动处理解锁逻辑。
+>
+> **QuestGiverIdentifier 自动绑定**：设置 `QuestData.QuestGiverIdentifier` 后，`RegisterQuest` 时自动将任务绑定到
+> 指定的自定义 QuestGiver（通过 `QuestGiverUtils.RegisterQuestGiver` 注册），无需额外调用 `BindQuest`。
+> `questGiver`（原生枚举）仍可用于引用游戏原生任务发放者，两者兼容。
 
 ### 6.3 任务关系图
 
@@ -715,6 +728,122 @@ QuestUtils.UnregisterQuest(new Identifier("mymod", "coffee_run"));
 // 批量卸载
 QuestUtils.UnregisterQuestAll("mymod");
 ```
+
+---
+
+### 6.6 自定义 QuestGiver（QuestGiverUtils） 🆕
+
+游戏原生 `QuestGiverID` 是固定枚举，不可扩展。`QuestGiverUtils` 提供完整的自定义任务发放者 API，
+允许 modder 注册新 QuestGiver、生成 NPC、绑定任务。自定义 ID 从 **50** 起分配，与原生枚举值（0~11）无冲突。
+
+#### 6.6.1 注册 QuestGiver
+
+```csharp
+// 创建配置
+var giverConfig = new QuestGiverConfig
+{
+    DisplayNameKey = "npc_daily_giver",     // 本地化键
+    ActorId = "dialogue_peddler",           // DuckovDialogueActor.id（对话角色）
+    Face = FaceRef.Preset("Default"),       // 捏脸
+    SpawnPosition = new Vector3(15f, 0f, 5f),
+    BoundQuests = new[]                     // 可选：预先绑定的任务
+    {
+        new Identifier("mymod", "daily_01"),
+        new Identifier("mymod", "daily_02")
+    }
+};
+
+// 注册（返回自定义 ID）
+int giverId = QuestGiverUtils.RegisterQuestGiver(
+    new Identifier("mymod", "daily_giver"), giverConfig);
+```
+
+#### 6.6.2 生成 NPC
+
+```csharp
+// 在世界空间生成 QuestGiver NPC
+var npc = QuestGiverUtils.SpawnQuestGiver(
+    new Identifier("mymod", "daily_giver"),
+    new Vector3(20f, 0f, 10f));
+```
+
+#### 6.6.3 绑定任务
+
+```csharp
+// 方式 A：注册时通过 QuestData.QuestGiverIdentifier 自动绑定（推荐）
+var questData = new QuestData
+{
+    displayName = "每日任务",
+    QuestGiverIdentifier = new Identifier("mymod", "daily_giver"), // 🆕
+    // ...
+};
+QuestUtils.RegisterQuest(new Identifier("mymod", "daily_01"), questData);
+
+// 方式 B：注册后显式绑定
+QuestGiverUtils.BindQuest(
+    new Identifier("mymod", "daily_giver"),   // QuestGiver
+    new Identifier("mymod", "daily_02"));     // Quest
+```
+
+#### 6.6.4 查询
+
+```csharp
+// 查询 GameObject
+if (QuestGiverUtils.TryGetQuestGiver(new Identifier("mymod", "daily_giver"), out var go))
+    Debug.Log($"NPC position: {go.transform.position}");
+
+// 查询自定义 ID
+if (QuestGiverUtils.TryGetQuestGiverId(new Identifier("mymod", "daily_giver"), out int id))
+    Debug.Log($"Custom ID: {id}");
+
+// 检查是否为自定义 ID
+bool isCustom = QuestGiverUtils.IsCustomQuestGiverId(150);
+```
+
+#### 6.6.5 卸载
+
+```csharp
+// 按 Identifier 卸载
+QuestGiverUtils.UnregisterQuestGiver(new Identifier("mymod", "daily_giver"));
+
+// 批量卸载
+QuestGiverUtils.UnregisterAllQuestGivers("mymod");
+```
+
+#### 6.6.6 通过 FriendlyNpcUtils 创建 QuestGiver NPC
+
+```csharp
+// 先注册 QuestGiver
+QuestGiverUtils.RegisterQuestGiver(
+    new Identifier("mymod", "quest_npc"), config);
+
+// 再用 FriendlyNpcUtils 创建 NPC 并绑定
+var npc = FriendlyNpcUtils.CreateFriendlyNpc(
+    new Identifier("mymod", "npc_01"),
+    new FriendlyNpcConfig
+    {
+        Role = NpcRole.QuestGiver,
+        QuestGiverId = "50"  // 自定义 ID（int 字符串，≥50）
+    });
+
+// 或用 Identifier 绑定
+FriendlyNpcUtils.BindQuestGiver(
+    new Identifier("mymod", "npc_01"),
+    new Identifier("mymod", "quest_npc"));
+```
+
+> **QuestGiverUtils API 一览**：
+> 
+> | 方法 | 说明 |
+> |------|------|
+> | `RegisterQuestGiver(Identifier, QuestGiverConfig)` | 注册自定义 QuestGiver |
+> | `SpawnQuestGiver(Identifier, Vector3?, Quaternion?)` | 生成 NPC |
+> | `BindQuest(Identifier, Identifier)` | 绑定任务 |
+> | `TryGetQuestGiver(Identifier, out GameObject)` | 查询 NPC |
+> | `TryGetQuestGiverId(Identifier, out int)` | 查询自定义 ID |
+> | `IsCustomQuestGiverId(int)` | 检查是否为自定义 ID |
+> | `UnregisterQuestGiver(Identifier)` | 卸载 |
+> | `UnregisterAllQuestGivers(string)` | 批量卸载 |
 
 ---
 
@@ -810,7 +939,22 @@ ShopUtils.RemoveAllProfiles("mymod");
 ### 7.5 创建新商人
 
 ```csharp
+// Identifier 方式（推荐）—— Path 作为 merchantID，Domain 作为 modid
+ShopUtils.CreateMerchantProfile(new Identifier("mymod", "Merchant_Drink"));
+
+// 字符串方式（兼容旧 API）
 ShopUtils.CreateMerchantProfile("MyTrader");
+```
+
+#### 7.5.1 按 Identifier 查询商品
+
+```csharp
+// 按 Identifier 查询商人全部商品（Path = merchantProfileID）
+var goods = ShopUtils.GetAllGoods(new Identifier("mymod", "Merchant_Drink"));
+
+// 查询商人 profile 是否存在
+if (ShopUtils.TryGetMerchantProfile(new Identifier("mymod", "Merchant_Drink"), out var profile))
+    Debug.Log($"Merchant found: {profile.merchantID}");
 ```
 
 ---
@@ -1123,67 +1267,277 @@ BuffUtils.UnregisterAllBuffs("mymod");
 
 ## 13. 建筑系统（BuildingUtils）
 
+### 13.1 快速开始
+
 ```csharp
-// ===== 注册与放置 =====
+// 一行注册：纯代码创建 2×2 工作台，花费 5000 金币 + 20 根原木
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    Id = new Identifier("mymod", "workshop"),
+    Money = 5000,
+    CostItems = new[] { ItemEntry.Of("duckov:Wood", 20) }
+});
+```
 
-// 注册自定义建筑（modid 从 id.Domain 自动推导）
+> `RegisterBuilding(BuildingConfig)` 自动完成四件事：创建 Building Prefab（Cube 模型 + 碰撞体）→ 构建 `BuildingInfo` → 解析 Identifier 为 TypeID → 写入游戏和 FML 双注册表。
+
+---
+
+### 13.2 BuildingConfig 完整配置
+
+```csharp
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    // ── 必填 ──
+    Id = new Identifier("mymod", "forge"),          // Identifier（domain=modid, path=建筑名）
+
+    // ── 尺寸与外观 ──
+    Dimensions = new Vector2Int(3, 3),               // 占地 3×3 网格（默认 2×2）
+    PrefabName = "Building_Forge",                   // prefab 名称（用于注册标识）
+    ExistingPrefabName = "Building_Workbench",        // 可选：克隆游戏已有建筑结构
+
+    // ── 成本（走 FML ItemEntry） ──
+    Money = 5000,                                    // 金币
+    CostItems = new[]
+    {
+        ItemEntry.Of("duckov:Iron", 20),             // 精确物品
+        ItemEntry.Of("duckov:Stone", 10),
+        ItemEntry.ByTag("Wood", 30),                 // 标签匹配：任意木制品
+        ItemEntry.ByTag("Food", 5, minQuality: 3)    // 标签 + 最低品质
+    },
+
+    // ── 数量与解锁 ──
+    MaxAmount = 2,                                   // 最多同时建造 2 个（默认 1）
+    UnlockedByDefault = false,                       // 需任务解锁？
+    RequireBuildings = new[] { "workshop" },          // 前置建筑
+    RequireQuests = new[] { "quest_intro" }           // 前置任务
+});
+```
+
+#### 成本构建的三种方式
+
+```csharp
+// 方式 1：BuildingConfig（推荐）—— 自动 Identifier→TypeID 解析
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    Id = new Identifier("mymod", "forge"),
+    Money = 5000,
+    CostItems = new[] { ItemEntry.Of("duckov:Iron", 20) }
+});
+
+// 方式 2：CreateCost 辅助 —— 给已有 BuildingInfo 补成本
+var info = new BuildingInfo { id = "forge" };
+info.cost = BuildingUtils.CreateCost(5000,
+    ItemEntry.Of("duckov:Iron", 20),
+    ItemEntry.Of("duckov:Stone", 10));
+BuildingUtils.RegisterBuilding(new Identifier("mymod", "forge"), info, prefab);
+
+// 方式 3：CostItems 为空 —— 纯金币成本
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    Id = new Identifier("mymod", "free_shelter"),
+    Money = 0,    // 免费
+    // CostItems 省略 = 无物品消耗
+});
+```
+
+---
+
+### 13.3 三种注册模式
+
+#### 模式 A：全自动（零 Unity 依赖）
+
+```csharp
+// 自动生成 Cube 模型 + 碰撞体，适合快速原型
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    Id = new Identifier("mymod", "storage"),
+    Dimensions = new Vector2Int(2, 2),
+    Money = 1000,
+    CostItems = new[] { ItemEntry.Of("duckov:Wood", 10) }
+});
+```
+
+#### 模式 B：克隆游戏原生建筑结构
+
+```csharp
+// 保留原建筑的 graphics/function 容器布局，替换模型
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    Id = new Identifier("mymod", "advanced_bench"),
+    Dimensions = new Vector2Int(3, 2),
+    ExistingPrefabName = "Building_Workbench",  // ← 克隆原生工作台的容器结构
+    Money = 3000,
+    CostItems = new[] { ItemEntry.Of("duckov:Iron", 15) }
+});
+```
+
+#### 模式 C：AssetBundle 自定义模型
+
+```csharp
+// 1. 加载 AssetBundle
+var bundle = AssetUtil.LoadBundle("my_buildings");
+var modelPrefab = bundle.LoadAsset<GameObject>("Building_Forge_Model");
+
+// 2. 注册建筑（自动创建外壳 + 注册 + 注入模型）
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    Id = new Identifier("mymod", "forge"),
+    Dimensions = new Vector2Int(3, 3),
+    Money = 5000,
+    CostItems = new[]
+    {
+        ItemEntry.Of("duckov:Iron", 20),
+        ItemEntry.Of("duckov:Stone", 10)
+    },
+    PrefabName = "Building_Forge"
+});
+
+// 3. 注入自定义模型（替换 graphicsContainer 下的默认 Cube）
+BuildingUtils.SetBuildingModel(
+    new Identifier("mymod", "forge"),
+    modelPrefab);
+```
+
+> **顺序要求**：`RegisterBuilding` → `SetBuildingModel`。后者依赖 Registry 中已存在的条目。
+
+#### 模式 D：手动创建 Prefab + 原始 API
+
+```csharp
+// 用 CreateSimpleBuilding 手动创建 prefab
+var prefab = BuildingUtils.CreateSimpleBuilding(
+    new Identifier("mymod", "lab"),
+    new Vector2Int(4, 3),
+    existingPrefabName: "Building_Workbench");
+
+// 用原始 API 注册（传入自定义 BuildingInfo）
+var info = new BuildingInfo
+{
+    id = "lab",
+    prefabName = prefab.name,
+    maxAmount = 1,
+    cost = BuildingUtils.CreateCost(8000,
+        ItemEntry.Of("duckov:Electronics", 5))
+};
 BuildingUtils.RegisterBuilding(
-    new Identifier("mymod", "workbench"),
-    buildingInfo,   // BuildingInfo 数据
-    prefab          // Building 预制体
-);
+    new Identifier("mymod", "lab"), info, prefab);
+```
 
-// 放置建筑（通过反射调用 BuildingManager.BuyAndPlace）
-// areaId 和 buildingId 均为 Identifier，FML 内部映射为原生 string ID
+---
+
+### 13.4 放置、查询与卸载
+
+```csharp
+// ===== 放置建筑 =====
 BuildingUtils.PlaceBuilding(
-    new Identifier("base", "area1"),        // 区域 Identifier
-    new Identifier("mymod", "workbench"),   // 建筑 Identifier
-    new Vector2Int(2, 2),                    // 坐标
-    BuildingRotation.Rot0                    // 旋转
+    new Identifier("base", "area1"),         // 区域
+    new Identifier("mymod", "forge"),        // 建筑
+    new Vector2Int(5, 3),                     // 坐标
+    BuildingRotation.Rot90                    // 旋转（Rot0 / Rot90 / Rot180 / Rot270）
 );
 
-// ===== 查询（Identifier 优先） =====
-
-// 按 Identifier 查询 BuildingInfo（优先查 Registry，再回退到 native collection）
+// ===== 查询 =====
 BuildingInfo? info = BuildingUtils.GetBuildingInfo(
-    new Identifier("mymod", "workbench"));
-
-// 获取所有已注册的建筑 Identifier 列表
+    new Identifier("mymod", "forge"));
 IReadOnlyList<Identifier> allIds = BuildingUtils.GetAllBuildingIds();
+Building? prefab = BuildingUtils.GetBuildingPrefab(
+    new Identifier("mymod", "forge"));
 
 // ===== 卸载 =====
-
-// 移除单个建筑
-BuildingUtils.UnregisterBuilding(new Identifier("mymod", "workbench"));
-
-// 批量卸载指定 mod 注册的全部建筑
+BuildingUtils.UnregisterBuilding(new Identifier("mymod", "forge"));
 BuildingUtils.UnregisterAllBuildings("mymod");
-
-// ===== 建筑建成回调 =====
-
-// 注册建筑建成回调（modid 自动从 id.Domain 推导）
-BuildingUtils.OnBuildingBuilt(
-    new Identifier("mymod", "workbench"),
-    onBuilt);  // Action<Building>
-
-// 取消建筑建成回调
-BuildingUtils.OffBuildingBuilt(
-    new Identifier("mymod", "workbench"),
-    onBuilt);  // 需传入与 OnBuildingBuilt 相同的 Action 引用
-
-// ===== 代码端创建建筑 =====
-
-// 纯代码创建简易 Building（无需 Unity 编辑器预制体）
-Building building = BuildingUtils.CreateSimpleBuilding(
-    new Identifier("mymod", "workbench"),
-    new Vector2Int(2, 2),                     // 占地尺寸
-    existingPrefabName: "Building_Workbench"); // 可选：克隆已有建筑结构
-
-// 设置建筑模型
-BuildingUtils.SetBuildingModel(
-    new Identifier("mymod", "workbench"),
-    myModelPrefab);
 ```
+
+#### 成本查询与校验
+
+```csharp
+// 查看成本明细
+Cost? cost = BuildingUtils.GetBuildingCost(
+    new Identifier("mymod", "forge"));
+if (cost != null)
+    Debug.Log($"需要 {cost.Value.money} 金币 + {cost.Value.items.Length} 种物品");
+
+// 检查是否负担得起（委托游戏原生 EconomyManager.IsEnough）
+if (BuildingUtils.CanAffordBuilding(new Identifier("mymod", "forge")))
+    Debug.Log("资源充足！");
+
+// 手动扣费（通常不需要 —— PlaceBuilding 内部已自动处理）
+BuildingUtils.SpendBuildingCost(new Identifier("mymod", "forge"));
+```
+
+---
+
+### 13.5 建造完成回调
+
+```csharp
+// 建筑建成后自动生成 NPC 商人
+private Action<Building>? _onBuiltCallback;  // 保存引用以便取消
+
+void RegisterCallbacks()
+{
+    _onBuiltCallback = building =>
+    {
+        FriendlyNpcUtils.CreateFriendlyNpc(
+            new Identifier("mymod", "merchant_forge"),
+            new FriendlyNpcConfig
+            {
+                Role = NpcRole.Merchant,
+                ActorId = "merchant_alex",
+                SpawnPosition = building.transform.position + new Vector3(2f, 0f, 0f),
+                Face = FaceRef.Preset("Default"),
+                ShopId = "mymod:forge_shop"
+            });
+    };
+
+    BuildingUtils.OnBuildingBuilt(
+        new Identifier("mymod", "forge"),
+        _onBuiltCallback);
+}
+
+// 取消回调
+void UnregisterCallbacks()
+{
+    if (_onBuiltCallback != null)
+        BuildingUtils.OffBuildingBuilt(
+            new Identifier("mymod", "forge"),
+            _onBuiltCallback);
+}
+```
+
+---
+
+### 13.6 Building Prefab 结构标准
+
+游戏原生的 `Building` 组件要求 Prefab 包含以下层级：
+
+```
+Building_XXX (GameObject)
+├── Building (MonoBehaviour)         ← id, dimensions, graphicsContainer, functionContainer
+├── Graphics (GameObject)            ← graphicsContainer：纯视觉层（3D 模型、材质、渲染）
+│   ├── Model_XXX (MeshFilter + MeshRenderer)
+│   └── (可选) Collider（放置预览时自动禁用）
+└── Function (GameObject)            ← functionContainer：交互层
+    ├── BoxCollider (isTrigger=true) ← 交互点击检测 + 占地碰撞
+    └── areaMesh                     ← 运行时自动生成
+```
+
+| 容器 | 用途 | 碰撞体规范 |
+|------|------|-----------|
+| `graphicsContainer` | 展示用 3D 模型，纯视觉 | Collider 可选；放置时自动禁用 |
+| `functionContainer` | 交互检测 + 格子占位 | **必须**有 BoxCollider(isTrigger=true) |
+
+### 13.7 模型 Prefab 规格
+
+`SetBuildingModel` 注入的是**纯视觉 Prefab**——实例化到 `graphicsContainer` 下，**不需要** `Building` 组件。
+
+| 要求 | 说明 |
+|------|------|
+| **根节点** | 单个 `GameObject`，**无** `Building` 组件 |
+| **Transform** | 注入时强制设为 (0,0,0)/(0,0,0)/(1,1,1) |
+| **材质** | 游戏原生 Shader；注入后 `ShaderReplacer.ApplyTo()` 自动修复 |
+| **碰撞体** | **严禁**放 Collider（由 functionContainer 管理） |
+| **尺寸** | 视觉尺寸匹配 `dimensions`。1 单位 ≈ 1 米 |
+| **导出** | AssetBundle，放 `assets/bundle/` |
 
 ---
 
@@ -1837,7 +2191,364 @@ AssetUtil.UnloadAllBundles();
 
 ---
 
-## 24. 注册表系统（Registry）
+## 24. 笔记系统（NoteUtils）
+
+提供游戏内可收集笔记的注册、解锁和世界空间拾取物生成。笔记有"已解锁"和"已阅读"两个状态，支持条件门控（`RequireNoteIndexUnlocked`）。
+
+```csharp
+// 注册笔记（运行时注入到 NoteIndex）
+NoteUtils.RegisterNote(
+    new Identifier("mymod", "lore_01"),
+    new NoteConfig
+    {
+        TitleKey = "Note_lore_01_Title",
+        ContentKey = "Note_lore_01_Content",
+        Image = myImage,
+        Hidden = false        // true 则不计入总数
+    });
+
+// 解锁笔记
+NoteUtils.Unlock(new Identifier("mymod", "lore_01"));
+
+// 解锁并打开笔记 UI
+NoteUtils.UnlockAndShow(new Identifier("mymod", "lore_01"));
+
+// 状态查询
+bool unlocked = NoteUtils.IsUnlocked(new Identifier("mymod", "lore_01"));
+bool read = NoteUtils.IsRead(new Identifier("mymod", "lore_01"));
+
+// 统计
+int total = NoteUtils.GetTotalCount();
+int unlockedCount = NoteUtils.GetUnlockedCount();
+
+// 在世界空间生成可拾取笔记（支持拾取交互）
+NoteUtils.SpawnPickup(new Identifier("mymod", "lore_01"), new Vector3(10f, 0f, 5f));
+
+// 按 modid 批量卸载
+NoteUtils.UnregisterAllNotes("MyMod");
+```
+
+> 笔记的本地化键遵循 `Note_{key}_Title` / `Note_{key}_Content` 规则，与游戏原生一致。
+> FML 通过 `SetNoteDynamic()` 运行时注入，无需修改 Excel 资产。
+
+### 事件
+
+通过 EventBus 订阅笔记状态变更：
+
+```csharp
+EventBusManager.Instance.Sync.Register<NoteUnlockedEvent>(evt =>
+    Debug.Log($"笔记解锁: {evt.NoteId}"));
+
+EventBusManager.Instance.Sync.Register<NoteReadEvent>(evt =>
+    Debug.Log($"笔记已读: {evt.NoteId}"));
+```
+
+---
+
+## 25. 钓鱼系统（FishingUtils）
+
+提供钓鱼池注册、特殊配对外加钓鱼统计属性查询。
+
+```csharp
+// 注册钓鱼池（水域 → 鱼种 + 权重）
+FishingUtils.RegisterFishingPool(
+    new Identifier("mymod", "mountain_lake"),
+    new FishingPoolConfig
+    {
+        WaterId = new Identifier("mymod", "mountain_lake"),
+        Entries = new[]
+        {
+            new FishingPoolEntry { FishId = new Identifier("mymod", "salmon"), Weight = 0.5f, MinQuality = 2 },
+            new FishingPoolEntry { FishId = new Identifier("mymod", "trout"), Weight = 0.3f }
+        },
+        MinLuck = 0.1f,
+        MaxLuck = 1.0f
+    });
+
+// 注册特殊配对（精确 baitID → fishID 映射，含概率）
+FishingUtils.RegisterSpecialCatch(
+    new Identifier("mymod", "worm_bait"),
+    new Identifier("mymod", "golden_fish"),
+    0.1f);  // 10% 概率
+
+// 钓鱼统计属性查询
+float fishingTime = FishingUtils.GetFishingTime(mainCharacter);
+float difficulty  = FishingUtils.GetFishingDifficulty(fishItem);
+float quality     = FishingUtils.GetFishingQualityFactor(mainCharacter);
+
+// 按 modid 批量卸载
+FishingUtils.UnregisterAll("MyMod");
+```
+
+> 鱼物品仍需通过 `ItemUtils.CreateCustomItem` 创建——`FishingUtils` 只管理"什么鱼可以从哪钓到"。
+> 特殊配对在 `FishSpawner.Awake` 时通过 Harmony Postfix 自动注入，对 modder 透明。
+
+---
+
+## 26. 友善 NPC（FriendlyNpcUtils）
+
+提供友善 NPC 的创建、对话气泡、商店绑定和任务发放绑定。
+
+```csharp
+// 创建友善 NPC
+var npc = FriendlyNpcUtils.CreateFriendlyNpc(
+    new Identifier("mymod", "merchant_01"),
+    new FriendlyNpcConfig
+    {
+        DisplayNameKey = "npc_merchant_name",
+        ActorId = "merchant_actor",        // DuckovDialogueActor.id（对话角色）
+        Role = NpcRole.Merchant,           // Merchant / QuestGiver / Companion / DialogueOnly
+        Face = FaceRef.Preset("Default"),   // 捏脸（或 FaceRef.None）
+        SpawnPosition = new Vector3(10f, 0f, 5f),
+        ShopId = "mymod:shop_welcome",     // 绑定商店（Role=Merchant）
+        QuestGiverId = "daily_01"          // 绑定任务发放（Role=QuestGiver，原生枚举名或自定义 int 值）
+    });
+
+// 🆕 BindQuestGiver 的 Identifier 重载（配合 QuestGiverUtils）
+FriendlyNpcUtils.BindQuestGiver(
+    new Identifier("mymod", "npc_01"),
+    new Identifier("mymod", "quest_giver_custom"));
+
+// 世界空间对话气泡
+FriendlyNpcUtils.ShowBubble(new Identifier("mymod", "merchant_01"), "欢迎光临！", 3f);
+
+// 本地化气泡
+FriendlyNpcUtils.ShowBubbleLocalized(new Identifier("mymod", "merchant_01"), "dialogue_welcome", 3f);
+
+// 销毁 NPC
+FriendlyNpcUtils.RemoveNpc(new Identifier("mymod", "merchant_01"));
+
+// 批量卸载
+FriendlyNpcUtils.RemoveAllNpcs("MyMod");
+```
+
+> `FaceRefResolver` 在运行时按名称查找 `CustomFacePreset`（Resources.Load → Presets 列表）。
+> `NpcRole` 枚举已扩展：`Enemy`, `Merchant`, `QuestGiver`, `Neutral`, `None`, `Companion`, `DialogueOnly`。
+> 如需从官方捏脸数据串（JSON）导入/导出，使用 [§27 CustomFaceUtils](#27-捏脸系统customfaceutils)。
+
+---
+
+## 27. 捏脸系统（CustomFaceUtils）
+
+提供从官方捏脸数据串（JSON）导入/导出捏脸数据的能力，让 Mod 可以动态修改玩家或任意角色的外观。
+
+游戏原生的捏脸数据格式是 `CustomFaceSettingData` 结构体（Duckov 内置），通过 `DataToJson()` / `JsonToData()` 进行 JSON 序列化。`CustomFaceUtils` 在此之上封装了 FML 风格的便捷 API。
+
+### 27.1 JSON 格式说明
+
+官方捏脸数据串是游戏 `CustomFaceSettingData.DataToJson()` 输出的标准 JSON，结构如下：
+
+```json
+{
+  "savedSetting": false,
+  "headSetting": {
+    "mainColor": { "r": 0.129, "g": 0.129, "b": 0.129, "a": 1 },
+    "headScaleOffset": 0,
+    "foreheadHeight": 0.07,
+    "foreheadRound": 0.782
+  },
+  "hairID": 1,
+  "hairInfo": { "radius": 0, "color": {...}, "height": 0, "scale": 1, "twist": 0, ... },
+  "eyeID": 3,
+  "eyeInfo": { "radius": 0.23, "color": {...}, "height": 0.089, "scale": 1.179, ... },
+  "eyebrowID": 0,
+  "eyebrowInfo": { ... },
+  "mouthID": 20,
+  "mouthInfo": { ... },
+  "tailID": 1,
+  "tailInfo": { ... },
+  "footID": 1,
+  "footInfo": { ... },
+  "wingID": 0,
+  "wingInfo": { ... }
+}
+```
+
+每个 `*Info` 对象包含：`radius`（半径）、`color`（Color RGBA）、`height`（高度）、`heightOffset`（偏移）、`scale`（缩放）、`twist`（扭曲）、`distanceAngle`（距离角度，0-90）、`leftRightAngle`（左右角度，-90~90）。
+
+### 27.2 玩家主角捏脸
+
+```csharp
+// 从官方捏脸 JSON 字符串设置玩家外观
+string faceJson = "{\"savedSetting\":false,\"headSetting\":{...}}";
+bool ok = CustomFaceUtils.SetPlayerFaceFromJson(faceJson);
+
+// 导出玩家当前捏脸为 JSON 字符串
+string current = CustomFaceUtils.GetPlayerFaceJson();
+
+// 使用原生 CustomFaceSettingData 结构体
+CustomFaceUtils.SetPlayerFaceFromData(nativeFaceData);
+CustomFaceSettingData data = CustomFaceUtils.GetPlayerFaceAsData();
+
+// 验证 JSON 串是否合法
+bool valid = CustomFaceUtils.ValidateJson(faceJson);
+```
+
+### 27.3 任意角色捏脸
+
+通过 `CustomFaceInstance` 组件对任意角色（包括 NPC）进行捏脸操作：
+
+```csharp
+// 获取任意角色上的 CustomFaceInstance 组件
+var faceInstance = someCharacter.GetComponent<CustomFaceInstance>();
+
+// 从 JSON 设置
+CustomFaceUtils.SetFaceFromJson(faceInstance, faceJson);
+
+// 导出为 JSON
+string json = CustomFaceUtils.GetFaceJson(faceInstance);
+
+// 使用原生结构体
+CustomFaceUtils.LoadFaceFromData(faceInstance, nativeData);
+CustomFaceSettingData data = CustomFaceUtils.GetFaceAsData(faceInstance);
+```
+
+### 27.4 获取玩家主角的 CustomFaceInstance
+
+```csharp
+// 在场景中查找玩家主角的 CustomFaceInstance
+var playerFace = CustomFaceUtils.GetPlayerFaceInstance();
+if (playerFace != null)
+{
+    CustomFaceUtils.SetFaceFromJson(playerFace, myJson);
+}
+```
+
+> `CustomFaceUtils.GetPlayerFaceInstance()` 通过 `FindObjectOfType<MainCharacterFace>()` 查找玩家主角的面部实例。
+> 如果主角不在场景中（如主菜单），返回 `null`。
+
+---
+
+## 28. 天气系统（WeatherUtils）
+
+提供天气/季节查询、强制覆盖、风暴信息和温度防护属性查询。
+
+```csharp
+// 天气查询（FML WeatherType 枚举，隐藏 Snow=22 细节）
+WeatherType weather = WeatherUtils.GetCurrentWeather();
+// → Sunny / Cloudy / Rainy / Snow / Stormy / SevereStormy
+
+// 季节查询
+SeasonType season = WeatherUtils.GetCurrentSeason();
+// → Spring / Summer / Autumn / Winter
+
+// 强制覆盖天气（调试/剧情用）
+WeatherUtils.ForceWeather(WeatherType.Stormy);
+
+// 取消强制覆盖
+WeatherUtils.ResetWeather();
+
+// 便捷判断
+bool isRaining = WeatherUtils.IsRaining();
+bool isSnowing = WeatherUtils.IsSnowing();
+
+// 风暴等级（0=无风暴，1=Stormy_I，2=Stormy_II）
+int level = WeatherUtils.GetStormLevel();
+bool inStorm = WeatherUtils.IsStormActive();
+
+// 温度查询
+float cold = WeatherUtils.GetColdLevel();  // -10 ~ +10
+float heat = WeatherUtils.GetHeatLevel();
+
+// 防护属性（基于 ItemStatsSystem 的 StormProtection / ColdProtection / HeatProtection）
+float stormProt = WeatherUtils.GetStormProtection(playerCharacter);
+float coldProt  = WeatherUtils.GetColdProtection(playerCharacter);
+float heatProt  = WeatherUtils.GetHeatProtection(playerCharacter);
+```
+
+### 事件
+
+```csharp
+EventBusManager.Instance.Sync.Register<StormStartedEvent>(_ =>
+    Debug.Log("风暴开始！"));
+
+EventBusManager.Instance.Sync.Register<StormEndedEvent>(_ =>
+    Debug.Log("风暴结束。"));
+```
+
+---
+
+## 29. 多场景（MultiSceneUtils）
+
+提供关卡内子场景加载、传送和跨场景持久数据存储。
+
+```csharp
+// 注册自定义场景（Identifier → 游戏原生 sceneID 映射）
+MultiSceneUtils.RegisterScene(
+    new Identifier("mymod", "custom_boss_room"),
+    "Level_Desert_Boss");
+
+// 加载子场景
+MultiSceneUtils.LoadSubScene(new Identifier("mymod", "custom_boss_room"));
+
+// 传送（加载 + 传送到指定位置/坐标）
+MultiSceneUtils.TeleportTo(new Identifier("mymod", "custom_boss_room"), "boss_spawn");
+MultiSceneUtils.TeleportTo(new Identifier("mymod", "custom_boss_room"), new Vector3(100f, 0f, 200f));
+
+// 查询当前场景
+Identifier? current = MultiSceneUtils.GetCurrentSubScene();
+string displayName = MultiSceneUtils.GetSceneDisplayName(new Identifier("duckov", "Base"));
+
+// 关卡内跨场景持久数据（基于 MultiSceneCore.inLevelData）
+MultiSceneUtils.SetLevelData("boss_defeated", true);
+bool defeated = MultiSceneUtils.GetLevelData<bool>("boss_defeated") ?? false;
+
+// 物体场景归属迁移
+MultiSceneUtils.MoveToScene(myNpc, new Identifier("mymod", "custom_boss_room"));
+MultiSceneUtils.MoveToMainScene(myNpc);
+```
+
+### 事件
+
+```csharp
+EventBusManager.Instance.Sync.Register<SceneLoadFinishedEvent>(evt =>
+    Debug.Log($"场景加载完成: {evt.SceneId}"));
+
+EventBusManager.Instance.Sync.Register<SubSceneChangedEvent>(evt =>
+    Debug.Log($"子场景切换: {evt.FromScene} → {evt.ToScene}"));
+```
+
+---
+
+## 30. 对话系统（DialogueUtils）
+
+提供世界空间气泡和全屏字幕对话两种模式。全屏字幕通过 NodeCanvas `DialogueTree.RequestSubtitles` 驱动游戏原生 `DialogueUI`。
+
+```csharp
+// ── 世界空间气泡 ──
+
+// 在 NPC 头顶显示
+DialogueUtils.ShowBubble(new Identifier("mymod", "merchant"), "欢迎！有什么可以帮你的？", 3f);
+
+// 在任意坐标显示
+DialogueUtils.ShowBubbleAt(new Vector3(10f, 1.5f, 5f), "这里看起来很有趣…");
+
+// ── 全屏字幕对话 ──
+
+// 单行字幕
+DialogueUtils.PlaySubtitle("merchant_actor", "欢迎光临我的小店！");
+
+// 字幕序列（多行按顺序播放，带行间隔）
+await DialogueUtils.PlaySubtitles("merchant_actor", new[]
+{
+    new SubtitleLine { Text = "欢迎光临！你需要点什么？" },
+    new SubtitleLine { ActorId = "player_actor", TextKey = "dialogue_player_reply_01" },
+    new SubtitleLine { Text = "好的，这是你的物品。" }
+});
+```
+
+| 参数 | 说明 |
+|------|------|
+| `ActorId` | `DuckovDialogueActor.id`。为空时使用 `defaultActorId` |
+| `Text` | 直接文本（优先级高于 TextKey）。作为 `LocalizedStatement` 的 key 传入，无翻译时原样返回 |
+| `TextKey` | 本地化键。通过 FeatherMod `I18n` 预注入 → `LocalizationManager` → `ToPlainText()` 解析 |
+
+> `PlaySubtitle` / `PlaySubtitles` 自动管理 `DialogueUI` 的打开和关闭。
+> 字幕通过 `click to continue` 交互确认后推进到下一行。
+
+---
+
+## 31. 注册表系统（Registry）
 
 ### 24.1 基本操作
 
@@ -1887,7 +2598,7 @@ meta.Set(new Identifier("mymod", "myregistry"), myRegistry, "mymod");
 
 ---
 
-## 25. 模组卸载生命周期
+## 32. 模组卸载生命周期
 
 FML 自动处理模组卸载时的清理工作，**无需手动编写卸载逻辑**。
 
@@ -1915,7 +2626,7 @@ FML 自动处理模组卸载时的清理工作，**无需手动编写卸载逻�
 
 ---
 
-## 26. 附录：项目结构参考
+## 33. 附录：项目结构参考
 
 ### 推荐目录结构
 
@@ -1939,7 +2650,7 @@ MyMod/
 
 | 命名空间 | 包含 |
 |----------|------|
-| `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ModBehaviour`, `ContainerUtils` |
+| `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ModBehaviour`, `ContainerUtils`, `NoteUtils`, `FishingUtils`, `FriendlyNpcUtils`, `CustomFaceUtils`, `WeatherUtils`, `MultiSceneUtils`, `DialogueUtils` |
 | `FeatherMod.Utils` | `Identifier`, `Singleton<T>`, `ModPathResolver` |
 | `FeatherMod.Interaction` | `InteractionUtils`, `ViewDispatcher`, `GameViews`, `InteractionRegistry`, `InteractionEntry` |
 | `FeatherMod.Interaction.Components` | `ViewInteractHandler`, `DelegateInteractHandler` |

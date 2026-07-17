@@ -1,7 +1,7 @@
 # 捏脸系统 FML 集成设计
 
 > 基于 `DecompiledDLL/Core/CustomFacePreset.cs` 等源码分析
-> 最后更新：2026-07-01
+> 最后更新：2026-07-16
 
 ---
 
@@ -240,11 +240,11 @@ var custom = new EnemyPresetData
 
 | 项目 | 说明 | 优先级 | 状态 |
 |------|------|--------|------|
-| `CustomFaceSettingData` 内部结构 | 需要完整了解该结构体的字段以支持自定义捏脸 | P0 | ⏳ Phase 5 |
-| 面部部件 ID 命名规则 | 需要从 `CustomFacePartCollection` 了解各部件的 ID 格式 | P1 | ⏳ Phase 5 |
-| 运行时预设创建 | `ScriptableObject.CreateInstance<CustomFacePreset>()` 后如何正确填充数据 | P0 | ⚠️ `FaceRef`/`FacePartIds` 类型已实现，运行时查找待 Phase 5 |
-| 脸部材质/纹理 | 自定义脸部可能需要额外的纹理资源 | P2 | ⏳ Phase 5 |
+| `CustomFaceSettingData` 内部结构 | 需要完整了解该结构体的字段以支持自定义捏脸 | P0 | ✅ 已完成（2026-07-16）— 通过反编译完整分析了 `CustomFaceSettingData` / `CustomFacePartInfo` / `CustomFaceHeadSetting` |
+| 面部部件 ID 命名规则 | 需要从 `CustomFacePartCollection` 了解各部件的 ID 格式 | P1 | ✅ 已完成（2026-07-16）— 确认使用 int 型 ID，通过 `CustomFacePartCollection.GetPartPrefab(int)` 查找 |
+| 运行时 JSON 捏脸导入/导出 | 支持从官方捏脸数据串（JSON）设置玩家/角色外观 | P0 | ✅ 已完成（2026-07-16）— `CustomFaceUtils` 提供完整 JSON 导入/导出 API |
+| 脸部材质/纹理 | 自定义脸部可能需要额外的纹理资源 | P2 | ⏳ 待 Phase 6 |
 
 ---
 
-*本设计的核心类型（`FaceRef`、`FacePartIds`、`FaceRefMode` 枚举、`NpcRole` 枚举）已在 `FeatherMod/Entities/` 中实现，并已集成到 `EnemyPresetData` DTO。完整的捏脸预设创建和运行时面部定制留待 Phase 5。*
+*本设计的核心类型（`FaceRef`、`FacePartIds`、`FaceRefMode` 枚举、`NpcRole` 枚举）已在 `FeatherMod/Entities/` 中实现，并已集成到 `EnemyPresetData` DTO。2026-07-16 新增 `CustomFaceUtils` 提供完整的 JSON 捏脸导入/导出 API 和运行时捏脸数据操作。*

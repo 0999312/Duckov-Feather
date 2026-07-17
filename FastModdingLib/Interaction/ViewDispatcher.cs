@@ -13,10 +13,23 @@ namespace FeatherMod.Interaction
         private static readonly Dictionary<Identifier, Action<string?>> _handlers =
             new Dictionary<Identifier, Action<string?>>();
 
+        /// <summary>modid → 已注册 View 类型列表（用于按 mod 卸载）。</summary>
+        private static readonly Dictionary<string, List<Identifier>> _ownerIndex =
+            new Dictionary<string, List<Identifier>>();
+
         /// <summary>注册 View 打开方法。同一 viewType 重复注册会覆盖。</summary>
         public static void Register(Identifier viewType, Action<string?> openAction, string modid)
         {
             _handlers[viewType] = openAction;
+
+            // 追踪 owner 以便按 mod 卸载
+            if (!_ownerIndex.TryGetValue(modid, out var list))
+            {
+                list = new List<Identifier>();
+                _ownerIndex[modid] = list;
+            }
+            if (!list.Contains(viewType))
+                list.Add(viewType);
         }
 
         /// <summary>打开指定 View，传递可选参数。</summary>
@@ -47,13 +60,19 @@ namespace FeatherMod.Interaction
         public static bool Unregister(Identifier viewType)
             => _handlers.Remove(viewType, out _);
 
-        /// <summary>批量注销指定 mod 注册的全部 View handler。</summary>
+        /// <summary>按 modid 批量注销该 mod 注册的全部 View handler。</summary>
         public static int UnregisterAll(string modid)
         {
-            // ViewDispatcher 不维护 modid 映射，此处提供完整清理入口
-            // modid 参数预留，供将来按 modid 索引注册
-            int count = _handlers.Count;
-            _handlers.Clear();
+            if (!_ownerIndex.TryGetValue(modid, out var types))
+                return 0;
+
+            int count = 0;
+            foreach (var viewType in types)
+            {
+                if (_handlers.Remove(viewType))
+                    count++;
+            }
+            _ownerIndex.Remove(modid);
             return count;
         }
     }

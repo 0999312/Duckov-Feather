@@ -89,6 +89,14 @@ namespace FeatherMod
             quest.DescriptionRaw = data.description;
             quest.ID = data.ID;
             quest.QuestGiverID = data.questGiver;
+
+            // 🆕 优先使用 QuestGiverIdentifier：自动绑定到自定义 QuestGiver
+            if (data.QuestGiverIdentifier != null
+                && QuestGiverUtils.TryGetQuestGiverId(data.QuestGiverIdentifier, out int giverIntId))
+            {
+                quest.QuestGiverID = (QuestGiverID)giverIntId;
+            }
+
             quest.requireLevel = data.requireLevel;
 
             if (data.requireScene != null && data.requireScene != "")

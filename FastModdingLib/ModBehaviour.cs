@@ -1,7 +1,10 @@
 using FeatherMod.Modding;
 using FeatherMod.Options;
 using HarmonyLib;
+using System;
+using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
 
 namespace FeatherMod
 {
@@ -21,6 +24,9 @@ namespace FeatherMod
     public class ModBehaviour : Duckov.Modding.ModBehaviour, IHasModid
     {
         private Harmony? _harmony;
+
+        /// <summary>额外 Harmony 实例列表（由各模块 EnsurePatched 注册），卸载时统一 Unpatch。</summary>
+        internal static readonly List<Harmony> ExtraHarmonies = new List<Harmony>();
 
         public const string FrameworkName = "FeatherMod";
 
@@ -57,6 +63,14 @@ namespace FeatherMod
         {
             _harmony?.UnpatchAll();
             _harmony = null;
+
+            // 卸载各模块独立创建的 Harmony 实例
+            foreach (var h in ExtraHarmonies)
+            {
+                try { h.UnpatchAll(); }
+                catch (Exception e) { Debug.LogWarning($"[FML] Failed to unpatch {h.Id}: {e.Message}"); }
+            }
+            ExtraHarmonies.Clear();
 
             FMLBootstrap.TearDownMod(GetModid());
             FMLBootstrap.TearDown();

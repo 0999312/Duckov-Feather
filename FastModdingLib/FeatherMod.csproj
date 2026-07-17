@@ -58,6 +58,9 @@
     <Reference Include="$(DuckovPath)$(SubPath)EasySave3.dll">
       <Private>False</Private>
     </Reference>
+    <Reference Include="$(DuckovPath)$(SubPath)NodeCanvas.dll">
+      <Private>False</Private>
+    </Reference>
       
 		<Reference Include="0Harmony">
 			<HintPath>0Harmony.dll</HintPath>
@@ -68,6 +71,7 @@
 		<!-- All members in an assembly -->
 		<Publicize Include="TeamSoda.Duckov.Core" IncludeVirtualMembers="false" />
 		<Publicize Include="TeamSoda.Duckov.Utilities" IncludeVirtualMembers="false" />
+    <Publicize Include="NodeCanvas.DialogueTrees" IncludeVirtualMembers="false" />
 		<Publicize Include="ItemStatsSystem" IncludeVirtualMembers="false" />
 	</ItemGroup>
 	<ItemGroup>

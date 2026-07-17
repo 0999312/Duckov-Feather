@@ -194,9 +194,18 @@ namespace FeatherMod
             item.result = result;
 
             decomposeRegistry.Register(sourceItemId, id, item, owner);
-            Debug.Log($"Added decompose: {sourceItemId} (identifier: {id})");
 
-            instance.Dic.Add(sourceItemId, item);
+            // 写入游戏原生 DecomposeDatabase.Dic（索引器允许覆盖已有条目）
+            if (instance.Dic.ContainsKey(sourceItemId))
+            {
+                Debug.LogWarning($"[CraftingUtils] Overwriting existing decompose formula for item {sourceItemId} (identifier: {id}). " +
+                                "This may be a vanilla game formula or another mod's registration.");
+            }
+            else
+            {
+                Debug.Log($"Added decompose: {sourceItemId} (identifier: {id})");
+            }
+            instance.Dic[sourceItemId] = item;
             instance.entries = instance.Dic.Values.ToArray();
         }
 

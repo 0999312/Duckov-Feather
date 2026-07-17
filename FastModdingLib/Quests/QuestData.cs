@@ -24,6 +24,14 @@ namespace FeatherMod
         public Identifier? Id;
 
         public QuestGiverID questGiver;
+
+        /// <summary>
+        /// 🆕 可选：QuestGiver 的 Identifier（通过 QuestGiverUtils.RegisterQuestGiver 注册）。
+        /// 设置后，RegisterQuest 时自动将任务绑定到此发放者，无需额外调用 BindQuest。
+        /// 优先级高于 <see cref="questGiver"/>（如果两者都设置）。
+        /// </summary>
+        public Identifier? QuestGiverIdentifier;
+
         public int requireLevel;
         internal int requireItemID = -1;
         public string requireScene = string.Empty;

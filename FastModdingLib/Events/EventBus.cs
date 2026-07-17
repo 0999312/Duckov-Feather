@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace FeatherMod.Events
 {
@@ -133,8 +134,15 @@ namespace FeatherMod.Events
             }
             foreach (var task in snapshot)
             {
-                task.Delegate(evt);
-                if (evt.Cancelled) break;
+                try
+                {
+                    task.Delegate(evt);
+                    if (evt.Cancelled) break;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[EventBus] Handler for {evt.GetType().Name} threw: {e}");
+                }
             }
             return evt.Cancelled;
         }

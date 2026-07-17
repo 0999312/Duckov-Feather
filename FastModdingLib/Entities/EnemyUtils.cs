@@ -152,14 +152,16 @@ namespace FeatherMod
 
                 // 包装回调：如果 modder 传了 onSpawned, 包装原生 callback
                 // 注意: 游戏原生 CreateCharacterAsync 的 callback 参数索引为 3 (第 5 个参数)
+                // 签名: CreateCharacterAsync(Vector3 position, Quaternion rotation, int team, ...)
                 object[] args;
+                var quat = Quaternion.identity;
                 if (onSpawned != null)
                 {
                     // 需要劫持原生 callback
                     // 由于反射调用无法直接获取 UniTask 返回值，此处通过反射包装
                     args = group != null
-                        ? new object[] { position, Vector3.zero, 0, group, false }
-                        : new object[] { position, Vector3.zero, 0, null, false };
+                        ? new object[] { position, quat, 0, group, false }
+                        : new object[] { position, quat, 0, null, false };
 
                     Debug.LogWarning("[FML EnemyUtils] onSpawned callback is not supported via reflection; " +
                                      "subscribe to EventBus HurtEvent/LevelInitializedEvent instead.");
@@ -167,8 +169,8 @@ namespace FeatherMod
                 else
                 {
                     args = group != null
-                        ? new object[] { position, Vector3.zero, 0, group, false }
-                        : new object[] { position, Vector3.zero, 0, null, false };
+                        ? new object[] { position, quat, 0, group, false }
+                        : new object[] { position, quat, 0, null, false };
                 }
 
                 method.Invoke(preset, args);

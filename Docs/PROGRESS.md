@@ -1,6 +1,6 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-11
+> 最后更新：2026-07-17
 
 ---
 
@@ -409,24 +409,215 @@ public static int UnregisterAllLotteryInjections(string modid);
 
 ---
 
-## Phase 5 — 长尾幂等系统 ⏳ 待启动
+## Phase 5 — 长尾幂等系统 ✅ 已完成
 
-**计划内容**（详见 PLAN.md §7）：
-- Achievements（成就系统）
-- Weather / Seasons（天气/季节）
-- Fishing（钓鱼）
-- Multi-Scene（多场景支持）
-- 友善 NPC 交互（详见附录）
-- UI 注入辅助（详见附录）
-- 标签驱动的物品需求（详见附录）
+**Wave 1 完成**: 2026-07-14（Note + Fishing）  
+**Wave 2/3 完成**: 2026-07-14（Friendly NPC + Weather + Multi-Scene）  
+**设计文档**: `Docs/PLAN-Phase5-Goals.md`  
+**逆向基础**: `duckov_assembly/assembly_0625` 反编译审计
 
-**已完成的前置工作**（可在 Phase 5 启用）：
+### 子系统清单
+
+| 优先级 | 子系统 | 预估 LOC | 状态 |
+|--------|--------|---------|------|
+| **P0** | Note（笔记/收集品） | ~180 LOC / 5 文件 | ✅ Wave 1 已完成 |
+| **P0** | Fishing（钓鱼） | ~250 LOC / 4 文件 | ✅ Wave 1 已完成 |
+| **P1** | Friendly NPC（友善 NPC） | ~200 LOC / 3 文件 | ✅ Wave 2 已完成 |
+| **P1** | Weather & Seasons（天气/季节） | ~180 LOC / 3 文件 | ✅ Wave 2 已完成 |
+| **P2** | Multi-Scene（多场景） | ~200 LOC / 3 文件 | ✅ Wave 3 已完成 |
+
+> **已移除**: Achievements — 与 Steam 成就绑定，不应让 modder 更改。  
+> **替代**: Note（笔记/收集品） — 纯游戏内，支持 UI 展示 + 条件门控 + 运行时注册
+
+### 实施顺序
+1. **Wave 1**（并行 P0）：Note + Fishing
+2. **Wave 2**（并行）：Friendly NPC + Weather & Seasons
+3. **Wave 3**（顺序）：Multi-Scene
+
+### 已完成的前置工作（可在 Phase 5 启用）
 - `FaceRef` / `FacePartIds` / `NpcRole` 类型已就绪
 - `FMLTask_KillCountByTag` / `FMLTask_SubmitItemByTag` 类型已就绪
 - `TagCostRegistry` / `TagCostValidator` / `CraftingManagerPatch` 已就绪
 
 ### 遗留问题
-- 待 Phase 5 正式启动时补充详细计划文档（PLAN-Phase5-*.md）
+- FaceRef 运行时查找/创建（`FaceRefResolver`）待 Phase 5 实现
+- TagCost / QuestTask 运行时验收待实际游戏环境测试
+
+### Wave 1 文件变更清单（Note + Fishing — 2026-07-14）
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `FeatherMod/Notes/NoteConfig.cs` | NoteConfig DTO（TitleKey/ContentKey/Image/Hidden） |
+| 新建 | `FeatherMod/Notes/NoteRegistry.cs` | NoteRegistry : SimpleRegistry\<Note\> + key 索引 |
+| 新建 | `FeatherMod/Notes/NoteUtils.cs` | RegisterNote/Unlock/IsUnlocked/SpawnPickup/Init |
+| 新建 | `FeatherMod/Notes/NoteEvents.cs` | NoteRegisteredEvent/NoteUnlockedEvent/NoteReadEvent |
+| 新建 | `FeatherMod/Notes/Patches/NoteEventPatch.cs` | Harmony Postfix 桥接 SetNoteUnlocked/SetNoteRead → EventBus |
+| 新建 | `FeatherMod/Fishing/FishingPoolConfig.cs` | FishingPoolConfig + FishingPoolEntry DTO |
+| 新建 | `FeatherMod/Fishing/FishingRegistry.cs` | FishingRegistry : SimpleRegistry\<FishingPoolConfig\> + special catches |
+| 新建 | `FeatherMod/Fishing/FishingUtils.cs` | RegisterFishingPool/RegisterSpecialCatch/Stats/Init + FishCaughtEvent |
+| 新建 | `FeatherMod/Fishing/Patches/FishSpawnerPatch.cs` | Harmony Postfix 注入 specialPairs 到 FishSpawner.Awake |
+| 修改 | `FeatherMod/Register/RegisterBootstrap.cs` | Init() 新增 NoteUtils.Init() + FishingUtils.Init() |
+
+### 验证结果
+- [x] `dotnet build` 通过（0 错误，43 预存警告）
+- [ ] 功能测试（待游戏运行时验证）
+
+### 遗留问题
+- FaceRef 运行时查找/创建（`FaceRefResolver`）✅ 已完成（Wave 2）
+- TagCost / QuestTask 运行时验收待实际游戏环境测试
+
+### Wave 2 文件变更清单（Friendly NPC + Weather — 2026-07-14）
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `FeatherMod/Entities/FriendlyNpcConfig.cs` | FriendlyNpcConfig DTO |
+| 新建 | `FeatherMod/Entities/FriendlyNpcUtils.cs` | CreateFriendlyNpc/ShowBubble/BindShop/BindQuestGiver |
+| 新建 | `FeatherMod/Entities/Resolvers/FaceRefResolver.cs` | FaceRef → CharacterModel 运行时应用 |
+| 新建 | `FeatherMod/Weather/WeatherType.cs` | FML WeatherType 枚举（隐藏 Snow=22） |
+| 新建 | `FeatherMod/Weather/WeatherUtils.cs` | GetCurrent/Force/Storm/Precip/Temp + 事件 |
+| 新建 | `FeatherMod/Weather/Patches/WeatherEventPatch.cs` | OnStormStarted/Ended → EventBus |
+| 修改 | `FeatherMod/Entities/EnemyPresetData.cs` | NpcRole 枚举新增 None/Companion/DialogueOnly |
+
+### Wave 3 文件变更清单（Multi-Scene — 2026-07-14）
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `FeatherMod/Scenes/MultiSceneUtils.cs` | LoadSubScene/TeleportTo/LevelData/MoveToScene |
+| 新建 | `FeatherMod/Scenes/SceneRegistry.cs` | Identifier→sceneID 双向映射 |
+| 新建 | `FeatherMod/Scenes/Patches/SceneLoadEventPatch.cs` | OnSubSceneLoaded/Unloaded → EventBus |
+| 新建 | `FeatherMod/Dialogues/DialogueUtils.cs` | PlaySubtitle/PlaySubtitles/ShowBubble（NodeCanvas DialogueTree 直接调用） |
+| 修改 | `FeatherMod/Register/RegisterBootstrap.cs` | Init() 新增 FriendlyNpc/Weather/MultiScene/Dialogue
+
+### 验证结果
+- [x] `dotnet build` 通过（0 错误，44 预存警告）
+- [ ] 功能测试（待游戏运行时验证）
+
+### 遗留问题
+- TagCost / QuestTask 运行时验收待实际游戏环境测试
+- 所有 Phase 5 模块待游戏内集成测试
+- DialogueUtils.PlaySubtitle 待运行时验证 NodeCanvas DialogueUI 兼容性
+
+### Publicizer 扩展（2026-07-14）
+
+`FeatherMod.csproj` 新增 `NodeCanvas.DialogueTrees` 程序集 Publicizer 覆盖，
+使 `DialogueTree` / `SubtitlesRequestInfo` / `IDialogueActor` / `IStatement` 等
+NodeCanvas 对话系统类型可直接在 FML 内部访问，无需反射。
+
+---
+
+## 捏脸系统（CustomFaceUtils） — ✅ 已完成
+
+**完成时间**: 2026-07-16
+**耗时**: 约 1 小时
+
+### 背景
+
+游戏原生捏脸系统（`CustomFaceSettingData` / `CustomFaceInstance` / `MainCharacterFace`）已有完整的 `DataToJson()` / `JsonToData()` 序列化机制。FML 之前仅有 `FaceRef` / `FacePartIds`（NPC 捏脸引用），缺少对官方捏脸数据串（JSON）的导入/导出 API。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FeatherMod/Entities/CustomFaceUtils.cs` | 静态工具类：`SetPlayerFaceFromJson` / `GetPlayerFaceJson` / `SetFaceFromJson(instance)` / `GetFaceJson(instance)` / `LoadFaceFromData` / `GetFaceAsData` / `ValidateJson` / `GetPlayerFaceInstance` |
+
+### API 设计
+
+| 方法 | 用途 |
+|------|------|
+| `SetPlayerFaceFromJson(string)` | 将官方 JSON 捏脸串应用到玩家主角 |
+| `GetPlayerFaceJson()` | 导出玩家当前捏脸为 JSON 字符串 |
+| `SetPlayerFaceFromData(CustomFaceSettingData)` | 用原生 struct 设置玩家捏脸 |
+| `GetPlayerFaceAsData()` | 获取玩家捏脸的原生 struct |
+| `SetFaceFromJson(instance, string)` | 将 JSON 应用到任意 CustomFaceInstance |
+| `GetFaceJson(instance)` | 从任意实例导出 JSON |
+| `LoadFaceFromData(instance, data)` | 用原生 struct 设置任意实例 |
+| `GetFaceAsData(instance)` | 获取任意实例的原生 struct |
+| `ValidateJson(string)` | 检查 JSON 串是否合法 |
+| `GetPlayerFaceInstance()` | 在场景中查找玩家主角的 CustomFaceInstance |
+
+### 设计决策
+- 直接封装游戏原生 `CustomFaceSettingData.JsonToData()` / `DataToJson()`，不做二次封装
+- 与 `FaceRef` / `FacePartIds`（NPC 捏脸引用）互补——`FaceRef` 用于 NPC 创建时指定外观，`CustomFaceUtils` 用于运行时导入/导出现有捏脸数据
+- `GetPlayerFaceInstance()` 通过 `FindObjectOfType<MainCharacterFace>()` 查找
+
+### 验证结果
+- [x] `dotnet build` 通过（0 错误）
+- [ ] 功能测试（待游戏运行时验证）
+
+---
+
+## Building 模型 Prefab 规范文档 — ✅ 已完成
+
+**完成时间**: 2026-07-16
+**耗时**: 约 1 小时
+
+### 背景
+
+Building 系统的模型注入（`CreateSimpleBuilding` → `SetBuildingModel` → AssetBundle）缺少完整的 Prefab 规格标准说明，modder 不清楚模型 Prefab 在 Unity 中应如何构造。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `Docs/USAGE.md` §13 | 大幅扩展 Building 章节：新增 §13.1 Building Prefab 结构标准、§13.2 模型 Prefab 完整规格（根节点/Transform/材质/碰撞体/尺寸/导出格式）、§13.3 AssetBundle 完整工作流示例、§13.5 建造→NPC 生成完整示例、§13.6 碰撞体标准表 |
+| 修改 | `Docs/USAGE.md` 目录 | 新增 §27 捏脸系统 + 后续章节重新编号 |
+| 修改 | `Docs/PROGRESS.md` | 更新日期，新增 CustomFaceUtils 和 Building 规范条目 |
+
+### Building 模型 Prefab 规格标准
+
+| 要求 | 说明 |
+|------|------|
+| 根节点 | 纯 GameObject，无 Building 组件，无 functionContainer |
+| 子物体 | 可嵌套多层 MeshRenderer |
+| Transform | 注入时强制 (0,0,0)/(0,0,0)/(1,1,1) |
+| 材质/Shader | 游戏原生 Shader，注入后自动修复 |
+| 碰撞体 | **严禁** Collider |
+| 导出 | AssetBundle → `assets/bundle/` |
+
+---
+
+## 测试反馈修复：InteractableBase NRE + NPC 不可见 — ✅ 已完成
+
+**完成时间**: 2026-07-17
+**耗时**: 约 1 小时
+**来源**: 测试 Mod 拉回的崩溃报告（FeatherMod 框架 — FriendlyNpcUtils.CreateFriendlyNpc）
+
+### 问题诊断
+
+| 层级 | 问题 | 根因 | 影响 |
+|------|------|------|------|
+| **主因** | `InteractableBase.Awake()` 在裸 `GameObject` 上 NRE | `FriendlyNpcUtils.CreateFriendlyNpc`（line 64）和 `NoteUtils.SpawnPickup`（line 155）在 `new GameObject()` 上直接 `AddComponent<NoteInteract>()`，缺少 `BoxCollider` + `Interact` layer | **崩溃** — 但被 `BuildingUtils.OnBuildingBuiltHandler` 的 `try-catch` 捕获，NPC 创建静默失败 |
+| **次因** | NPC 缺少 `CharacterModel` 组件 | `new GameObject()` 不会自动带 `CharacterModel`，`GetComponent<CharacterModel>()` 永远 null | NPC **不可见**（无 3D 模型） |
+| **次因** | `FaceRef` 捏脸不生效 | `CharacterModel` 不存在 → `FaceRefResolver.ApplyToModel` 被跳过 | 无法为 NPC 设置外观 |
+
+### 关键发现
+
+- **FriendlyNPC 和 Enemy 在鸭科夫原生代码中是本质相同的**：两者都基于 `CharacterModel` + `CharacterRandomPreset.CreateCharacterAsync`。当前 FML 的 bare `GameObject` 路径是错误的简化。
+- 正确的 NPC 创建应走 `CharacterRandomPreset.CreateCharacterAsync` 路径（与 `EnemyUtils.SpawnEnemy` 一致），届时 `CharacterModel`、`CustomFaceInstance`、Animator 等组件会自动就绪。
+
+### 已修复
+
+| 文件 | 改动 | 效果 |
+|------|------|------|
+| `Notes/NoteUtils.cs` | `SpawnPickup` 在添加 `NoteInteract` 前添加 `BoxCollider(isTrigger=true)` + `Interact` layer | 防止 `InteractableBase.Awake` NRE |
+| `Entities/FriendlyNpcUtils.cs` | `CreateFriendlyNpc` 在 GameObject 创建后立即添加 `BoxCollider(isTrigger=true)` + `Interact` layer；所有 `AddComponent` 调用包裹 `try-catch` | 防止 `InteractableBase.Awake` NRE，失败时记录日志而非崩溃 |
+| `Buildings/BuildingConfig.cs` | `BuildCost()` 添加防御注释，说明 `ResolveTypeId` fallback 行为 | 文档化已知行为，非功能性变更 |
+
+### 设计偏离
+
+- `FriendlyNpcUtils.CreateFriendlyNpc` 的 bare `GameObject` 路径未改为 `CharacterRandomPreset` 路径——此项改动范围大，涉及异步生命周期（`CreateCharacterAsync` 是 UniTask），需单独作为 Phase 6 子任务处理。当前仅修复了崩溃（NRE），**NPC 仍然不可见**（无 `CharacterModel`）。
+
+### 遗留问题
+
+- [ ] **NPC 不可见**：`CharacterModel` 需通过 `CharacterRandomPreset.CreateCharacterAsync` 或 Prefab 实例化方式添加。计划在装备 API 实现时一并解决。
+- [ ] **FaceRef 捏脸不生效**：依赖 `CharacterModel` + `CustomFaceInstance`，两者在当前 bare `GameObject` 路径下不存在。
+- [ ] **NPC 身体/头部装备 API**：用户已提出需求，待 Phase 6 实现。
+- [ ] 功能测试（待游戏运行时验证——确认 `BoxCollider` + `Interact` layer 是否完全满足 `InteractableBase.Awake` 的要求）
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误，47 预存警告，0 新增）
+- [ ] 功能测试（待游戏运行时——验证 NPC 交互不崩溃 + Note 拾取不崩溃）
 
 ---
 
@@ -600,3 +791,196 @@ Quest 模块 Identifier 化后，数字 ID 自增分配（从 1000 起）缺少�
 - [x] `dotnet build` 通过（0 错误，0 警告）
 - [ ] 功能测试（待游戏运行时验证）
 - [ ] `GamePlayDataSettings.UIPrefabs` 克隆测试（待实际游戏环境）
+
+---
+
+## Phase 7: QuestGiver API + 商人 API 修复 — ✅ 已完成
+
+**完成时间**: 2026-07-16
+**耗时**: 约 2 小时
+
+### 背景
+
+项目没有为 QuestGiver 添加自定义接口。当 Modder 需要添加新的任务发放者时没有对应 API。
+同时商人的 `CreateMerchantProfile` 不接受 `Identifier`，违反 Identifier 优先原则。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FastModdingLib/QuestGivers/QuestGiverConfig.cs` | QuestGiver 配置 DTO（DisplayName/ActorId/Face/位置/BoundQuests/POI） |
+| 新建 | `FastModdingLib/QuestGivers/QuestGiverRegistry.cs` | 继承 SimpleRegistry\<GameObject\>，维护 Identifier↔questGiverID (int) 双向映射 + OnRemoved 清理 |
+| 新建 | `FastModdingLib/QuestGivers/QuestGiverUtils.cs` | 公共 API：RegisterQuestGiver/SpawnQuestGiver/BindQuest/TryGetQuestGiver/Unregister（全部用 Identifier） |
+| 新建 | `FastModdingLib/QuestGivers/Patches/QuestGiverIDPatch.cs` | Harmony 补丁拦截 GetAllQuestsByQuestGiverID/GetActiveQuestsFromGiver/GetHistoryQuestsFromGiver/AnyActiveQuestNeedsInspection，支持自定义 QuestGiverID（≥50） |
+| 新建 | `FastModdingLib/Tests/QuestGiverTest.cs` | QuestGiver 功能测试 + FriendlyNpc 集成测试 + ShopUtils 修复验证 |
+| 修改 | `FastModdingLib/Entities/FriendlyNpcUtils.cs` | ~5 处改动：SetQuestGiverId 支持 int 自定义值 + BindQuestGiver(Identifier) 重载 |
+| 修改 | `FastModdingLib/Register/RegisterBootstrap.cs` | Init() 新增 `QuestGiverUtils.Init()` |
+| 修改 | `FastModdingLib/Shop/ShopUtils.cs` | 新增 `CreateMerchantProfile(Identifier)` + `GetAllGoods(Identifier)` + `TryGetMerchantProfile(Identifier)` |
+| 修改 | `FastModdingLib/Quests/QuestData.cs` | 新增 `QuestGiverIdentifier` 字段（Identifier?）— RegisterQuest 时自动绑定自定义 QuestGiver |
+| 修改 | `FastModdingLib/Quests/QuestUtils.cs` | RegisterQuestInternal 优先使用 QuestGiverIdentifier → 自动映射到自定义 questGiverID |
+
+### 关键技术决策
+
+#### QuestGiverID 枚举限制绕过（方案 A）
+
+游戏原生 `QuestGiverID` 是固定 enum（0~11），不可扩展。采用 Harmony 补丁方案：
+- 自定义 QuestGiverID 从 **50** 起分配，与原生枚举值无冲突
+- 通过反射将 int 值直接赋给 `QuestGiver.questGiverID` 字段（QuestGiverID 底层是 int）
+- 补丁拦截 `QuestManager.GetAllQuestsByQuestGiverID` 等 4 个方法，检测自定义 ID 范围（≥50），返回 FML 内部维护的任务列表
+
+#### FriendlyNpcUtils 集成
+
+- `SetQuestGiverId` 升级：先尝试 `int.TryParse` → 自定义 ID（≥50）直接赋 int；否则尝试 `Enum.Parse` 匹配原生值
+- 新增 `BindQuestGiver(Identifier npcId, Identifier questGiverId)` 重载，与 QuestGiverUtils 联动
+
+#### 商人 API Identifier 修复
+
+- `CreateMerchantProfile(Identifier id)` — 从 Identifier.Domain 推导 modid，Identifier.Path 作为 merchantID
+- `GetAllGoods(Identifier id)` — Identifier.Path 作为 merchantProfileID
+- `TryGetMerchantProfile(Identifier id, out profile)` — 按 Identifier 查询
+
+### 设计偏离
+
+- 无重大偏离。QuestGiver 模块完全遵循 EndowmentUtils 的 6 步模式（Config → Registry → Utils → Init → Bootstrap → Patch）
+- `FriendlyNpcUtils.SetQuestGiverId` 保持了对旧 API（string 参数）的向后兼容
+
+### 遗留问题
+
+- [ ] 功能测试待游戏运行时验证（QuestGiverView 是否正确打开自定义 QuestGiver 的任务列表）
+- [ ] `QuestData.questGiver` 字段仍使用原生 `QuestGiverID` 枚举 — 后续可考虑添加 `Identifier? QuestGiverIdentifier` 字段以完全遵循 Identifier 优先原则
+
+### 验证结果
+- [x] `dotnet build` 通过
+- [ ] 功能测试（待游戏运行时验证）
+
+---
+
+## Phase 7.1: 全面代码审查修复 — ✅ 已完成
+
+**完成时间**: 2026-07-16
+**耗时**: 约 3 小时
+
+### 背景
+
+Phase 7（QuestGiver API）完成后，对全项目进行了 7 维度全面代码审查（健壮性/性能/API一致性/集成/Harmony/安全/设计），
+发现 39 个问题。本轮修复了其中 17 个高风险问题，其余低优先级问题留待后续。
+
+### 修复清单
+
+#### 🔴 阻断性修复
+
+| # | 文件 | 修复内容 |
+|---|------|---------|
+| C1 | `QuestGiverRegistry.cs`, `QuestGiverUtils.cs`, `FriendlyNpcUtils.cs` | 反射枚举赋值：`int` → `Enum.ToObject(field.FieldType, int)`，消除运行时 `ArgumentException` |
+| C2 | `EnemyUtils.cs` | 反射参数类型：`Vector3.zero` → `Quaternion.identity`，修正 `CreateCharacterAsync` 调用 |
+| C5 | `FishSpawnerPatch.cs`, `ModManagerPatches.cs`, `NoteEventPatch.cs` | 3 个独立 Harmony 实例注册到 `ModBehaviour.ExtraHarmonies`，卸载时统一 `UnpatchAll` |
+| C6 | `ViewDispatcher.cs` | `UnregisterAll(modid)` 新增 `_ownerIndex`，按 mod 选择性清理而非清空全部 |
+| C7 | `EventBus.cs` | 同步 `Post` 添加 `try-catch`，与 `AsyncEventBus` 保持一致 |
+| C8 | `Identifier.cs` | 构造函数添加 `ArgumentNullException` 检查 |
+
+#### 🟠 设计修复
+
+| # | 文件 | 修复内容 |
+|---|------|---------|
+| M2 | `QuestGiverRegistry.cs`, `QuestGiverUtils.cs` | Registry 存储 `_spawnPositions`/`_spawnRotations`，`SpawnQuestGiver` 回退读取配置值 |
+| M3 | `QuestGiverRegistry.cs` | `new` 隐藏基类 `Set()`，抛 `InvalidOperationException` 防止绕过 ID 分配 |
+| M4 | `FriendlyNpcUtils.cs` | `NpcRole.QuestGiver` else 分支注释修正 |
+| M5+M6 | `QuestGiverIDPatch.cs` | 全面重写：4 个 Prefix 包裹 try-catch + `BindingFlags.Public` + `nameof()` 统一 |
+| M9 | `ShopRegistry.cs` | `_createdProfiles` 值类型 `List<string>` → `HashSet<string>`（O(n²)→O(n)） |
+
+#### 🟡 轻量修复
+
+| # | 文件 | 修复内容 |
+|---|------|---------|
+| M1 | `QuestGiverRegistry.cs` | 移除死存储 `_boundQuests` 字典和 `TryGetBoundQuests` 方法 |
+| m1 | `QuestGiverRegistry.cs`, `QuestGiverIDPatch.cs` | 文档/代码阈值统一为 ≥50，添加 `MinCustomQuestGiverId` 常量 |
+| m2 | `QuestGiverIDPatch.cs` | 字符串方法名全部改为 `nameof()` |
+| — | `ModBehaviour.cs` | 补全 `using System`/`System.Collections.Generic`/`UnityEngine` |
+
+### 文件变更清单
+
+| 操作 | 文件 | 改动 |
+|------|------|------|
+| 修改 | `QuestGivers/QuestGiverRegistry.cs` | ~8 处：Enum.ToObject + Set 保护 + 位置存储 + BoundQuests 移除 + 常量 + OnRemoved |
+| 修改 | `QuestGivers/QuestGiverUtils.cs` | ~2 处：Enum.ToObject + SpawnQuestGiver 位置回退 |
+| 重写 | `QuestGivers/Patches/QuestGiverIDPatch.cs` | try-catch + Flags 常量 + nameof 统一 |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | Enum.ToObject + 注释修正 |
+| 修改 | `Entities/EnemyUtils.cs` | Vector3→Quaternion |
+| 修改 | `Events/EventBus.cs` | try-catch + using UnityEngine |
+| 修改 | `Interaction/ViewDispatcher.cs` | _ownerIndex + Register/UnregisterAll 重写 |
+| 修改 | `Utils/Identifier.cs` | null 检查 |
+| 修改 | `Fishing/Patches/FishSpawnerPatch.cs` | ExtraHarmonies 注册 |
+| 修改 | `Modding/ModManagerPatches.cs` | ExtraHarmonies 注册 |
+| 修改 | `Notes/Patches/NoteEventPatch.cs` | ExtraHarmonies 注册 |
+| 修改 | `ModBehaviour.cs` | ExtraHarmonies 列表 + using |
+| 修改 | `Shop/ShopRegistry.cs` | List→HashSet |
+| 修改 | `Docs/USAGE.md` | BindQuestGiver Identifier 重载文档 |
+| 修改 | `Docs/PROGRESS.md` | 本记录 |
+
+### 设计偏离
+
+- 无重大偏离。所有修复保持**完全向后兼容**，已有 Mod 的 API 调用行为不变。
+- `QuestGiverRegistry.Set()` 被 `new` 隐藏——若外部代码直接调用基类 `Set()` 会抛异常，但该路径从未暴露给 modder（内部调用已改用 `base.Set()`）。
+
+### 未修复项
+
+以下问题评估为低风险或需大量改动，留待后续：
+
+- `BuildingUtils.cs` 静态初始化 + 事件钩子泄漏
+- `EnemyRegistry.OnRemoved` 未清理原生 preset 列表
+- `ItemUtils.HasTag` 反射缓存 + 空 catch
+- `GameItemLookup` 50K 启动扫描
+- API 命名不一致系列（Create/Register/Add/Spawn/Attach 混用）
+- EndowmentRegistry/SettlementRegistry 反向索引缺失
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误）
+- [ ] 功能回归测试（待游戏运行时验证）
+- [ ] Harmony 卸载顺序验证
+
+---
+
+## Building 成本 API 补充 — ✅ 已完成
+
+**完成时间**: 2026-07-16
+**耗时**: 约 1 小时
+
+### 背景
+
+Building 系统的成本定义长期依赖游戏原生 `Cost` struct（裸 `int TypeID`），违反 FML 的 Identifier 优先原则。modder 必须手写 `new Cost.ItemEntry { id = 1001, amount = 5 }`，无法使用 FML 已有的 `ItemEntry.Of(Identifier, amount)` 模式。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 新建 | `FastModdingLib/Buildings/BuildingConfig.cs` | BuildingConfig DTO（Id/Dimensions/Money/CostItems/PrefabName/MaxAmount/UnlockedByDefault），含 `BuildCost()` 自动 Identifier→TypeID 解析 |
+| 修改 | `FastModdingLib/Buildings/BuildingUtils.cs` | ~80 行新增：`CreateCost()` 成本转换桥、`RegisterBuilding(BuildingConfig)` 重载、`GetBuildingCost()` / `CanAffordBuilding()` / `SpendBuildingCost()` 成本查询、`GetBuildingPrefab()` Prefab 查询 |
+
+### 新增 API
+
+| API | 用途 |
+|-----|------|
+| `BuildingConfig` | 建筑配置 DTO，对标 `EndowmentConfig` |
+| `CreateCost(long, ItemEntry[])` | 从 FML ItemEntry 构建原生 Cost（自动 Identifier→TypeID） |
+| `RegisterBuilding(BuildingConfig, Building?)` | 一键注册（自动创建 prefab + 构建 BuildingInfo + 成本解析） |
+| `GetBuildingCost(Identifier)` → `Cost?` | 查询建筑成本（返回原生 Cost，可调 `.Enough` / `.Pay()`） |
+| `CanAffordBuilding(Identifier)` → `bool` | 检查玩家是否负担得起（委托 `Cost.Enough`） |
+| `SpendBuildingCost(Identifier)` → `bool` | 手动扣除成本（委托 `Cost.Pay()`） |
+| `GetBuildingPrefab(Identifier)` → `Building?` | Prefab 查询（优先 Registry，回退原生） |
+
+### 设计偏离
+
+- 无重大偏离。`CanAffordBuilding` / `SpendBuildingCost` 直接委托游戏原生 `Cost.Enough` / `Cost.Pay()`，不自行实现背包枚举——复用游戏中已验证的扣费逻辑。
+- `BuildingConfig.RequireBuildings` / `RequireQuests` 字段仅用于 DTO 存储，当前不在 `RegisterBuilding(BuildingConfig)` 中自动设置到 `BuildingInfo`（字段名因游戏版本可能变化，后续稳定后再启用）。
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误，46 预存警告，0 新增）
+- [ ] 功能测试（待游戏运行时验证——BuildingConfig 注册 + 成本询价 + PlaceBuilding 自动扣费）
+
+### 后续修复（2026-07-16）
+
+- **NRE 修复**：`BuildingInfo.RequirementsSatisfied()` 遍历 `requireBuildings`/`requireQuests` 时 crash。根本原因：`new BuildingInfo { ... }` 创建 struct 时这些 `string[]` 字段为 null。修复方案：`SanitizeBuildingInfo()` 在注册时用反射将 null 数组初始化为 `Array.Empty<string[]>()`，`BuildingCollectionPatch` 追加前再做一层防御。
+- **Decompose 重复 key 修复**：`AddDecomposeFormulaInternal` 的 `instance.Dic.Add(sourceItemId, item)` 对已有原版配方的物品抛 `ArgumentException`。改为 `instance.Dic[sourceItemId] = item`（索引器允许覆盖），覆盖时输出 warning。
+- **文档重写**：`Docs/USAGE.md` §13 建筑章节全面重写——按实战场景重新组织示例（BuildingConfig 快速开始 → 完整配置 → 三种注册模式 → 放置查询 → 回调），精简 Prefab 规格说明。

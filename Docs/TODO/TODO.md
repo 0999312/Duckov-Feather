@@ -6,14 +6,14 @@
 
 | 文件 | 状态 | 说明 |
 |------|------|------|
-| `PLAN.md` | ⏳ Phase 5/6 未启动 | 高层路线图，Phase 0-4 已完成 |
+| `PLAN.md` | ✅ Phase 0-5 已完成 | 高层路线图，Phase 6 待启动 |
 | `ISSUES.md` | ⏳ | 已知问题追踪 |
 
 ## 设计文档
 
 | 文件 | 状态 | 说明 |
 |------|------|------|
-| `DESIGN-FaceCustomization.md` | ⏳ | 捏脸自定义设计 |
+| `DESIGN-FaceCustomization.md` | ✅ 已实现 | 捏脸自定义设计（FaceRefResolver 已完成） |
 | `DESIGN-QuestTaskExtension.md` | ⏳ | 任务扩展设计 |
 | `DESIGN-TagCrafting.md` | ⏳ | 标签合成设计 |
 | `PATCH-DESIGN.md` | ⏳ | Patch 架构设计 |
