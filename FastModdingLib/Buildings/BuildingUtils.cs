@@ -314,6 +314,9 @@ namespace FeatherMod
         /// 注册建筑建成回调。当指定 buildingId 的建筑建造完成时触发。
         /// FML 内部订阅 <c>BuildingManager.OnBuildingBuiltComplex</c>，按 buildingInfo.id 匹配。
         /// owner modid 自动从 <paramref name="buildingId"/>.<see cref="Identifier.Domain"/> 推导。
+        ///
+        /// 🆕 Bug Fix: 注册回调时立即检查场景中是否已存在匹配建筑（存档加载后建筑已存在但回调未注册）。
+        /// 若存在，立即调用回调，确保 NPC、交互点等在存档加载后正确生成。
         /// </summary>
         public static void OnBuildingBuilt(Identifier buildingId, Action<Building> callback)
         {
@@ -325,6 +328,20 @@ namespace FeatherMod
                 _buildingCallbacks[path] = new List<(Identifier, Action<Building>)>();
 
             _buildingCallbacks[path].Add((buildingId, callback));
+
+            // 🆕 立即检查场景中是否已存在匹配建筑：遍历所有场景中的 Building 实例，
+            // 查找 buildingInfo.id 匹配的建筑并立即执行回调。
+            // 这解决了存档加载后的时序问题：建筑在 RepaintAll 时已实例化，
+            // 但 OnBuildingBuiltComplex 不触发——回调在 mod OnAfterSetup 时才注册。
+            var existing = UnityEngine.Object.FindObjectsOfType<Building>();
+            foreach (var b in existing)
+            {
+                if (b != null && b.data.Info.id == path)
+                {
+                    try { callback?.Invoke(b); }
+                    catch (Exception e) { Debug.LogError($"[BuildingUtils.OnBuildingBuilt] replay callback for '{buildingId}' threw: {e}"); }
+                }
+            }
         }
 
         /// <summary>移除建筑建成回调。</summary>

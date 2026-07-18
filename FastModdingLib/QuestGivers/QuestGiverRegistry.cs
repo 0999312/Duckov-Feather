@@ -2,6 +2,7 @@ using Duckov.Quests;
 using Duckov.Utilities;
 using FeatherMod.Register;
 using FeatherMod.Utils;
+using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -19,6 +20,7 @@ namespace FeatherMod
 
         private readonly Dictionary<Identifier, int> _questGiverIdIndex = new Dictionary<Identifier, int>();
         private readonly Dictionary<int, Identifier> _reverseIdIndex = new Dictionary<int, Identifier>();
+        private readonly Dictionary<int, string> _displayNameKeyCache = new Dictionary<int, string>();
         private int _nextQuestGiverId = MinCustomQuestGiverId;
 
         /// <summary>禁止直接调用基类 Set()——必须通过 Register() 确保 questGiverID 分配。</summary>
@@ -50,6 +52,31 @@ namespace FeatherMod
             _reverseIdIndex[questGiverId] = id;
 
             return questGiverId;
+        }
+
+        /// <summary>
+        /// 缓存 QuestGiver 的显示名本地化键，供语言切换时重新解析。
+        /// 由 <see cref="QuestGiverUtils.RegisterQuestGiver"/> 内部调用。
+        /// </summary>
+        internal void CacheDisplayNameKey(int questGiverId, string displayNameKey)
+        {
+            _displayNameKeyCache[questGiverId] = displayNameKey;
+        }
+
+        /// <summary>
+        /// 刷新所有已缓存 QuestGiver 的本地化重定向。
+        /// 在语言切换时调用，确保 <c>Character_{ID}</c> 显示名随语言更新。
+        /// </summary>
+        internal void RefreshDisplayNameOverrides()
+        {
+            foreach (var kvp in _displayNameKeyCache)
+            {
+                var displayText = kvp.Value.ToPlainText();
+                if (!displayText.StartsWith("*") || !displayText.EndsWith("*"))
+                {
+                    LocalizationManager.SetOverrideText($"Character_{kvp.Key}", displayText);
+                }
+            }
         }
 
         // ═══════════════════════════════════════════════════

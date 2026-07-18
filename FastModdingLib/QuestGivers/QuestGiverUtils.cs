@@ -1,7 +1,10 @@
 using Duckov.Quests;
 using Duckov.Utilities;
+using FeatherMod.Events;
+using FeatherMod.Events.GameEvents;
 using FeatherMod.Register;
 using FeatherMod.Utils;
+using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -35,6 +38,14 @@ namespace FeatherMod
                 nonAlt.SetIfAbsent(id, _registry, RegistryManager.CurrentModid);
             else
                 meta.Set(id, _registry, RegistryManager.CurrentModid);
+
+            // 订阅语言切换事件：QuestGiver 显示名本地化键需随语言刷新
+            EventBusManager.Instance.Sync.Register<LanguageChangedEvent>(OnLanguageChanged);
+        }
+
+        private static void OnLanguageChanged(LanguageChangedEvent evt)
+        {
+            _registry.RefreshDisplayNameOverrides();
         }
 
         // ═══════════════════════════════════════════════════
@@ -45,18 +56,48 @@ namespace FeatherMod
         /// 注册自定义 QuestGiver，自动分配唯一 questGiverID (int >= 50)。
         /// 不创建 GameObject——交互点通过 <see cref="CreateQuestGiver"/> 或
         /// <see cref="FriendlyNpcUtils.BindQuestGiver"/> 挂载。
+        ///
+        /// 游戏对 QuestGiver 的显示名使用本地化键 <c>Character_{questGiverID}</c>
+        /// （如 <c>Character_Jeff</c>）。由于自定义 ID 是动态分配的，modder 无法预知具体数值，
+        /// 因此框架自动注册本地化重定向：<c>Character_{assignedID}</c> → <paramref name="displayNameKey"/>。
         /// </summary>
         /// <param name="id">QuestGiver 的 Identifier。</param>
+        /// <param name="displayNameKey">
+        /// QuestGiver 显示名的本地化键（如 "NPC_JeffCustom_Name"）。
+        /// 为空时使用 <paramref name="id"/>.<see cref="Identifier.Path"/> 作为显示文本。
+        /// 框架自动将游戏内键 <c>Character_{assignedID}</c> 映射到此键的翻译值。
+        /// </param>
         /// <param name="modid">owner modid；null 时从 id.Domain 推导。</param>
         /// <returns>分配的自定义 questGiverID (int)。</returns>
-        public static int RegisterQuestGiver(Identifier id, string? modid = null)
+        public static int RegisterQuestGiver(Identifier id, string? displayNameKey = null, string? modid = null)
         {
             Init();
             string owner = modid ?? id.Domain;
 
             int questGiverId = _registry.Register(id, owner);
 
-            Debug.Log($"[FML] Registered quest giver: {id} (custom ID: {questGiverId}) from mod: {owner}");
+            // 自动注册本地化重定向：Character_{questGiverID} → displayNameKey
+            // 游戏 Quest UI 使用 Character_{QuestGiverID} 作为显示名本地化键，
+            // 动态分配的 int ID 对 modder 不可预知，由框架自动桥接。
+            if (!string.IsNullOrEmpty(displayNameKey))
+            {
+                var displayText = displayNameKey.ToPlainText();
+                // 如果 ToPlainText 返回了 *key* 包裹形式（未找到翻译），说明 modder 尚未注册翻译，
+                // 此时暂不设置 override（等 I18n 加载后再补）。
+                if (!displayText.StartsWith("*") || !displayText.EndsWith("*"))
+                {
+                    LocalizationManager.SetOverrideText($"Character_{questGiverId}", displayText);
+                }
+                // 缓存映射：语言切换时 I18n 可通过此字典重新解析
+                _registry.CacheDisplayNameKey(questGiverId, displayNameKey);
+            }
+            else
+            {
+                // 无 displayNameKey → 使用 id.Path 作为显示名
+                LocalizationManager.SetOverrideText($"Character_{questGiverId}", id.Path);
+            }
+
+            Debug.Log($"[FML] Registered quest giver: {id} (custom ID: {questGiverId}, display key: {displayNameKey ?? id.Path}) from mod: {owner}");
             return questGiverId;
         }
 

@@ -1,6 +1,72 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-17
+> 最后更新：2026-07-19
+
+---
+
+## NPC 系统全面修复（5 合 1）— ✅ 已完成
+
+**完成时间**: 2026-07-19
+**耗时**: 约 4 小时
+**类型**: Bug 修复 + 功能补全
+
+### 问题来源
+
+测试 Mod 运行发现 5 个问题，经对照游戏原版 XiaoMing（小明）模板逐一诊断修复。
+
+### 根因摘要
+
+| # | 问题 | 根因 |
+|---|------|------|
+| 1 | 复合角色（商人+任务）失败 & 头顶标记缺失 & PerkTree 无法绑定 | 多独立 `InteractableBase` 碰撞体竞争；`interactMarkerOffset` 未设（脚底 0m）；PerkTreeUIInvoker 完全缺失 |
+| 2 | 对话 ActorId 不显示 | `DuckovDialogueActor.nameKey` 从未赋值；`DialogueTrigger` 回退用 `NpcId.Path` 非配置 ActorId |
+| 3 | 商店名空白 + 交易方式错误 | `StockShop` 只设了 `merchantID`，原版还需 `DisplayNameKey`/`accountAvaliable`/`refreshAfterTimeSpan` 等 |
+| 4 | NPC 不跟随旋转 | 闲置 NPC 的 `IsAiming()`=true → `UpdateAiming` 每帧用未设瞄准点覆盖 `targetAimDirection`；直接写方向被原生管线冲掉 |
+| 5 | NPC 系统与原版不匹配 | 逐一核对 XiaoMing 模板，补齐全量交互结构与字段 |
+
+### 修复方案
+
+严格参照 `SpecialAttachment_XiaoMing.prefab` 结构重建交互组装逻辑：
+- `interactableGroup=true` + `otherInterablesInGroup` 复合组装配，成员碰撞体禁用；
+- 标记偏移全用原版值（主标记 0.66m/任务 "!" 1.87m/技能标记 0.87m）；
+- `NpcFacePlayer` 从直接写 `targetAimDirection` 改为 `SetAimPoint` 原生管线（与原版 `AimToPlayer` 同机制）；
+- `StockShop` 补齐 6 个字段；`DuckovDialogueActor` 补齐 `nameKey`。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|----------|----------|
+| 修改 | `Entities/FriendlyNpcConfig.cs` | 新增 `PerkTreeId`/`ShopAccountAvaliable`/`ShopReturnCash`/`ShopSellFactor`/`FacePlayerRange` 共 5 个配置字段；`AutoFacePlayer` 默认改为 `true` |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | ~200 行重构：`AttachInteractionComponents` 组装配 + PerkTree 分支 + 原版偏移 + 商店全字段 + `actor.nameKey`；新增 `IsPerkTreeAvailable`/`ResolveShopNameKey`/`SetupInteractionGroup`/`ConfigureShopInteract` 辅助方法；新增 `TryGetNpcActorId`/`SetNpcFaceDirection`/`SetNpcFaceAngle`/`ClearNpcFaceDirection` 公共 API；`preset.nameKey` 改用 `DisplayNameKey`；消除 `InitializeEntries` 反射 |
+| 修改 | `Dialogues/NpcFacePlayer.cs` | 重写为 `CharacterMainControl.SetAimPoint` 原生管线 + `FixedDirection` 固定朝向模式 + `FollowRange` 距离门限 |
+| 修改 | `Dialogues/DialogueTrigger.cs` | `PlayDialogueForNpc` ActorId 回退链：显式传入 → NPC 配置缓存 → NpcId.Path |
+| 修改 | `Dialogues/NpcProximityTrigger.cs` | 同上 ActorId 回退链 |
+
+### 新增 public API
+
+```csharp
+// 查询 NPC 注册的 ActorId（DialogueTrigger 联动）
+FriendlyNpcUtils.TryGetNpcActorId(npcId, out string actorId);
+
+// 固定朝向（覆盖 AutoFacePlayer）
+FriendlyNpcUtils.SetNpcFaceDirection(npcId, direction);
+FriendlyNpcUtils.SetNpcFaceAngle(npcId, yAngle);
+FriendlyNpcUtils.ClearNpcFaceDirection(npcId);
+```
+
+### 向后兼容性
+
+全部改动向后兼容。已有字段默认值不变（仅 `AutoFacePlayer` 从 `false` 变 `true`——对齐原版小明行为）；所有新增字段均有合理默认值；public API 签名无 breaking change。
+
+### 设计偏离
+
+- **无 `aiController`**:FML 友善 NPC 不挂原版行为树（原版小明会巡逻游走），驻守 NPC 更符合 Mod 预期。跟随旋转已由 `SetAimPoint` 原生实现。
+- **PerkTreeId 为 `Identifier?`**:不使用 `NpcRole` 标志位（冗余），以字段是否为 null 判定是否绑定。
+
+### 验证结果
+
+- [x] 编译通过（0 错误）
+- [ ] 功能测试：复合交互菜单、头顶标记、ActorId 显示、商店名/账户支付、跟随旋转、固定朝向（需测试 Mod 实测）
 
 ---
 

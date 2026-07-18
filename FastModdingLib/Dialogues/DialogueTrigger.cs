@@ -25,7 +25,9 @@ namespace FeatherMod
             if (_initialized) return;
             _initialized = true;
 
-            var bfs = BindingFlags.Public | BindingFlags.Static;
+            // C# 编译器对 field-like event 生成的 backing field 是 private static，
+            // 必须同时包含 Public 和 NonPublic 才能通过 GetField 找到。
+            var bfs = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
 
             // onQuestActivated
             try
@@ -98,7 +100,7 @@ namespace FeatherMod
         }
 
         /// <summary>注册接受任务时触发对话。</summary>
-        /// <param name="actorId">DuckovDialogueActor.id。为空时回退到 npcId.Path。</param>
+        /// <param name="actorId">DuckovDialogueActor.id。为空时依次回退：NPC 配置 ActorId → npcId.Path。</param>
         public static void OnQuestAccepted(Identifier questId, Identifier npcId, DialogueLine[] lines,
             string? actorId = null, DialogueTriggerMode mode = DialogueTriggerMode.Once)
         {
@@ -110,7 +112,7 @@ namespace FeatherMod
         }
 
         /// <summary>注册完成任务时触发对话。</summary>
-        /// <param name="actorId">DuckovDialogueActor.id。为空时回退到 npcId.Path。</param>
+        /// <param name="actorId">DuckovDialogueActor.id。为空时依次回退：NPC 配置 ActorId → npcId.Path。</param>
         public static void OnQuestCompleted(Identifier questId, Identifier npcId, DialogueLine[] lines,
             string? actorId = null, DialogueTriggerMode mode = DialogueTriggerMode.Once)
         {
@@ -182,20 +184,33 @@ namespace FeatherMod
 
         private static async UniTask PlayDialogueForNpc(QuestTriggerEntry entry)
         {
-            var actorId = entry.ActorId ?? entry.NpcId.Path;
+            // 优先用注册时显式传入的 ActorId；未传入时查询 NPC 配置中的 ActorId
+            // （而非 NpcId.Path——DuckovDialogueActor 按 FriendlyNpcConfig.ActorId 注册，
+            // 用 NpcId.Path 会查不到 actor，导致对话无发言者显示）。
+            var actorId = entry.ActorId;
+            if (string.IsNullOrEmpty(actorId) && !FriendlyNpcUtils.TryGetNpcActorId(entry.NpcId, out actorId))
+                actorId = entry.NpcId.Path;
             await DialogueManager.PlayDialogue(actorId, entry.Lines);
         }
 
         private static Identifier? ResolveQuestId(Quest quest)
         {
+            // 🆕 Bug Fix: 优先使用 quest.ID 匹配（游戏激活 Quest 时 Instantiate 克隆体，
+            // Unity 会在克隆体名称追加 "(Clone)"，导致 quest.name 与 Registry 中的 Path 不匹配）。
+            // TryGetQuestIdentifier 通过数字 ID 反查 Identifier（O(1)），不受名称影响。
+            if (QuestUtils.TryGetQuestIdentifier(quest.ID, out var id))
+                return id;
+
+            // 回退：名称匹配（兼容 quest.name 不含 "(Clone)" 的情况）
             var questName = quest.name;
-            if (string.IsNullOrEmpty(questName)) return null;
+            if (!string.IsNullOrEmpty(questName))
+            {
+                foreach (var kvp in QuestUtils.Registry)
+                    if (kvp.Key.Path == questName)
+                        return kvp.Key;
+            }
 
-            foreach (var kvp in QuestUtils.Registry)
-                if (kvp.Key.Path == questName)
-                    return kvp.Key;
-
-            return new Identifier(FMLConstants.DuckovDomain, questName);
+            return null;
         }
 
         private class QuestTriggerEntry

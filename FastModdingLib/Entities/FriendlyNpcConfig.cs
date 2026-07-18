@@ -56,10 +56,33 @@ namespace FeatherMod
         public string? ShopId;
 
         /// <summary>
+        /// 商店是否支持账户余额支付（false = 仅现金，商店 UI 显示"只收现金"）。
+        /// 默认 true，与原版基地商人小明（accountAvaliable=1）一致。
+        /// </summary>
+        public bool ShopAccountAvaliable = true;
+
+        /// <summary>
+        /// 玩家出售物品时是否直接返还现金物品（true = 给现金物品，false = 计入账户余额）。
+        /// 默认 false，与原版小明一致（IslandShop 等野外商店为 true）。
+        /// </summary>
+        public bool ShopReturnCash;
+
+        /// <summary>商店回收价格倍率。默认 0.5，与原版一致。</summary>
+        public float ShopSellFactor = 0.5f;
+
+        /// <summary>
         /// 绑定的 QuestGiver Identifier。需先通过 QuestGiverUtils.RegisterQuestGiver() 注册。
         /// 设置后 SpawnFriendlyNpcAsync 自动绑定 questGiverID。
         /// </summary>
         public Identifier? QuestGiverId;
+
+        /// <summary>
+        /// 绑定的 PerkTree Identifier（Path = 游戏 perkTreeID 字符串）。
+        /// 设置后在 NPC 上添加 PerkTreeUIInvoker 交互点（原版 Interact_Skill 子对象模式），
+        /// 无需额外 NpcRole 标志。引用原版技能树用 Identifier("duckov", "PerkTree_Hacker")；
+        /// 引用自定义树需先通过 PerkTreeUtils.RegisterPerkTree() 注册，Path 与注册时的 id.Path 一致。
+        /// </summary>
+        public Identifier? PerkTreeId;
 
         // ── 模型与外观（🆕 Phase 6 — 重构后新增） ──
 
@@ -96,10 +119,16 @@ namespace FeatherMod
         public DialogueSequence? ProximityDialogue;
 
         /// <summary>
-        /// 是否自动面向玩家。默认 false（向后兼容）。
-        /// 设为 true 时，NPC 在运行时持续旋转朝向玩家位置（仅在水平面旋转，不影响俯仰）。
+        /// 是否自动面向玩家。默认 true（与原版友善 NPC 小明一致——其 AI 行为树含 AimToPlayer）。
+        /// 设为 true 时，NPC 在运行时通过游戏原生瞄准管线持续转向玩家（仅水平旋转）。
+        /// 可被 <see cref="FriendlyNpcUtils.SetNpcFaceDirection"/> 的固定朝向覆盖。
         /// </summary>
-        public bool AutoFacePlayer;
+        public bool AutoFacePlayer = true;
+
+        /// <summary>
+        /// 自动面向玩家的最大距离（米）。玩家超出该距离后 NPC 保持当前朝向。默认 10f。
+        /// </summary>
+        public float FacePlayerRange = 10f;
 
         /// <summary>
         /// 是否无敌（不可被攻击）。默认 true。

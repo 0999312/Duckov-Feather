@@ -2273,7 +2273,7 @@ FishingUtils.UnregisterAll("MyMod");
 
 基于 `CharacterRandomPreset.CreateCharacterAsync` 创建完整的可见 NPC（自动附带 `CharacterModel`、`CustomFaceInstance`、`Animator` 等组件）。
 
-> **重要**：必须在 NPC 创建前通过 `FriendlyNpcConfig.ActorId` 指定 `DuckovDialogueActor.id`，否则对话系统无法找到发言者。该 id 需与 DialogueUtils 的 `actorId` 参数一致。
+> **重要**：`FriendlyNpcConfig.ActorId` 既是 `DuckovDialogueActor.id`（系统查找用），也自动作为 `nameKey` 缺省值（对话 UI 发言者名——游戏经 `ToPlainText` 翻译，modder 可用 `I18n` 注册对应翻译）。`DisplayNameKey` 设后优先级更高，同时影响 NPC 头顶名字和商店名。
 
 ### 26.1 新版 API（推荐）
 
@@ -2282,18 +2282,23 @@ FishingUtils.UnregisterAll("MyMod");
 var config = new FriendlyNpcConfig
 {
     DisplayNameKey = "npc_merchant_name",
-    ActorId = "merchant_actor",         // DuckovDialogueActor.id（对话系统查找用）
-    Role = NpcRole.Merchant,            // Merchant / QuestGiver / Companion / DialogueOnly
+    ActorId = "merchant_actor",         // DuckovDialogueActor.id（对话系统查找用，兼缺省显示名 key）
+    Role = NpcRole.Merchant | NpcRole.QuestGiver, // Merchant / QuestGiver / Companion / DialogueOnly（可复合）
     Face = FaceRef.Preset("Duck_Default"), // 捏脸（见下方 FaceRef 模式表）
     Model = ModelRef.GamePrefab("CharacterModel_Duck_Jeff"), // 模型
     Team = Teams.middle,                // 友善阵营
     SpawnPosition = new Vector3(10f, 0f, 5f),
     ShopId = "merchant_shop",
-    QuestGiverId = new Identifier("mymod", "quest_giver"), // 🆕 Identifier 引用已注册的 QuestGiver
+    QuestGiverId = new Identifier("mymod", "quest_giver"), // Identifier 引用已注册的 QuestGiver
+    PerkTreeId = new Identifier("mymod", "MyPerkTree"),    // 绑定技能树（Path = perkTreeID）——无需额外 Role 标志
+    ShopAccountAvaliable = true,        // 支持账户余额支付（false=仅现金）
+    ShopReturnCash = false,             // 卖出物品后是否给现金物品（而非加账户余额）
+    ShopSellFactor = 0.5f,             // 回收价格倍率
     HeadEquipment = ItemEntry.Of("duckov:CowboyHat", 1),  // 头部装备
     BodyEquipment = ItemEntry.Of("duckov:Vest_A", 1),     // 身体装备
 
-    AutoFacePlayer = true,                                // 🆕 自动面向玩家（v0.7+，内部通过 Movement.ForceTurnTo 驱动）
+    AutoFacePlayer = true,              // 默认 true——NPC 跟随玩家视线（经游戏原生瞄准管线平滑转向）
+    FacePlayerRange = 10f,              // 跟随玩家的最大距离（超出后保持当前朝向）
     ProximityDialogue = new ProximityDialogueConfig       // 玩家接近时自动播放对话
     {
         Distance = 3f,                                    // 触发距离（米）
@@ -2338,7 +2343,7 @@ var go = FriendlyNpcUtils.CreateFriendlyNpc(id, config);
 
 ### 26.3 角色类型（NpcRole）
 
-`NpcRole` 为 `[Flags]` 枚举，支持复合角色（如 `Merchant | QuestGiver`）。
+`NpcRole` 为 `[Flags]` 枚举，支持复合角色（如 `Merchant | QuestGiver`）。复合角色在 NPC 上生成原版多交互菜单（交互键切换"交易/任务/技能"）。
 
 | 枚举值 | 位值 | 行为 |
 |--------|------|------|
@@ -2351,13 +2356,54 @@ var go = FriendlyNpcUtils.CreateFriendlyNpc(id, config);
 | `Enemy` | `1 << 0` | 敌对敌人 |
 
 ```csharp
-// 复合角色：既是商人也是任务提供方
+// 复合角色：既是商人也是任务提供方（PerkTree 不在 NpcRole 中——直接设 PerkTreeId 即可）
 config.Role = NpcRole.Merchant | NpcRole.QuestGiver;
 ```
 
 > **注意**：从 v0.7 起 `NpcRole` 从普通枚举升级为 `[Flags]`。旧版代码中 `Role == NpcRole.Merchant` 形式的比较需改为 `Role.HasFlag(NpcRole.Merchant)`。
+> **PerkTree 绑定**：不需要将其加入 `Role` 标志——设置 `config.PerkTreeId` 即可。自定义树需先 `PerkTreeUtils.RegisterPerkTree()`，原版树用 `Identifier("duckov", "PerkTree_Hacker")`。
 
-### 26.4 其他 API
+### 26.4 技能树绑定（PerkTreeId）
+
+通过 `config.PerkTreeId`（`Identifier?`）直接将技能树绑定到 NPC，无需额外 Role 标志。生成后在 NPC 上自动挂载原版 `PerkTreeUIInvoker`（`Interact_Skill` 子对象）。
+
+```csharp
+// 绑定自定义技能树（需先注册）
+PerkTreeUtils.RegisterPerkTree(new Identifier("mymod", "CombatPerks"));
+config.PerkTreeId = new Identifier("mymod", "CombatPerks");  // Path = "CombatPerks"
+
+// 绑定原版技能树
+config.PerkTreeId = new Identifier("duckov", "PerkTree_Hacker");
+```
+
+> 交互名本地化键默认为 `perkTreeID`（原版惯例，如 `"PerkTree_Hacker"` → `ToPlainText()` → 翻译文本）。
+
+### 26.5 NPC 朝向控制
+
+`AutoFacePlayer`（默认 `true`）使 NPC 经游戏原生瞄准管线平滑转向玩家（与原版 XiaoMing 行为树 `AimToPlayer` 同机制）。可通过 `FacePlayerRange` 设定最大跟随距离。
+
+```csharp
+// 固定朝向（覆盖跟随玩家）
+FriendlyNpcUtils.SetNpcFaceDirection(npcId, Vector3.right);  // 面向世界 +X
+FriendlyNpcUtils.SetNpcFaceAngle(npcId, 90f);                 // 面向世界 90°（+X）
+
+// 恢复跟随玩家（若 AutoFacePlayer=true）或冻结当前朝向
+FriendlyNpcUtils.ClearNpcFaceDirection(npcId);
+```
+
+> **技术说明**：朝向控制内部调用 `CharacterMainControl.SetAimPoint` 走游戏原生瞄准→旋转管线，避免直接写 `Movement.targetAimDirection` 被 `UpdateAiming` 覆盖。
+
+### 26.6 对话 ActorId 联动
+
+`FriendlyNpcUtils.TryGetNpcActorId(npcId, out string actorId)` 查询 NPC 注册时配置的 ActorId。`DialogueTrigger`（任务接受/完成对话）和 `NpcProximityTrigger`（接近触发）在未显式传 ActorId 时会自动回退到 NPC 配置中的值，无需手动对齐。
+
+```csharp
+// 自定义对话触发器亦可复用
+if (FriendlyNpcUtils.TryGetNpcActorId(npcId, out var actorId))
+    await DialogueManager.PlayDialogue(actorId, lines);
+```
+
+### 26.7 其他 API
 
 ```csharp
 // 世界空间对话气泡
@@ -2368,6 +2414,14 @@ FriendlyNpcUtils.ShowBubbleLocalized(id, "dialogue_welcome", 3f);
 FriendlyNpcUtils.BindShop(id, new Identifier("mymod", "shop"));
 FriendlyNpcUtils.BindQuestGiver(id, "daily_01");
 FriendlyNpcUtils.BindQuestGiver(id, new Identifier("mymod", "quest_giver_custom"));
+
+// 查询 NPC 的 ActorId（对话系统联动）
+FriendlyNpcUtils.TryGetNpcActorId(npcId, out string actorId);
+
+// 朝向控制（见 26.5）
+FriendlyNpcUtils.SetNpcFaceDirection(npcId, direction);
+FriendlyNpcUtils.SetNpcFaceAngle(npcId, 90f);
+FriendlyNpcUtils.ClearNpcFaceDirection(npcId);
 
 // 销毁 / 批量卸载
 FriendlyNpcUtils.RemoveNpc(id);
