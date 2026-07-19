@@ -43,7 +43,6 @@ namespace FeatherMod
         // NPC save/restore persistence
         private const string NpcSaveKey = "fml_friendly_npc_spawns";
         private static bool _saveRestoreHooked;
-        private static bool _restoreChecked; // 兜底恢复标记（防止事件错过）
 
         [Serializable]
         private struct NpcSpawnEntry
@@ -78,7 +77,6 @@ namespace FeatherMod
                 return;
             }
             _initialized = true;
-            _restoreChecked = false; // Domain Reload 后重置，允许重新触发兜底恢复
 
             Debug.Log("[FML FriendlyNpc] Init: creating new registries (first-time or domain reload).");
 
@@ -115,15 +113,15 @@ namespace FeatherMod
             }
         }
 
-        private static void OnLevelInitialized(LevelInitializedEvent evt) { RestoreNpcSpawns(); }
-        private static void OnMainSceneLoaded(MainSceneLoadedEvent evt) { RestoreNpcSpawns(); }
-        private static void OnSubSceneLoaded(SceneLoadFinishedEvent evt) { RestoreNpcSpawns(); }
+        private static void OnLevelInitialized(LevelInitializedEvent evt) { Debug.Log("[FML FriendlyNpc] OnLevelInitialized -> RestoreNpcSpawns"); RestoreNpcSpawns(); }
+        private static void OnMainSceneLoaded(MainSceneLoadedEvent evt) { Debug.Log("[FML FriendlyNpc] OnMainSceneLoaded -> RestoreNpcSpawns"); RestoreNpcSpawns(); }
+        private static void OnSubSceneLoaded(SceneLoadFinishedEvent evt) { Debug.Log($"[FML FriendlyNpc] OnSubSceneLoaded({evt.SceneId}) -> RestoreNpcSpawns"); RestoreNpcSpawns(); }
         private static void OnCollectSaveData(CollectSaveDataEvent evt)
         {
             try
             {
                 var entries = LoadNpcSpawnEntries();
-                Debug.Log($"[FML FriendlyNpc] OnCollectSaveData: loaded {entries.Count} entries, _registry active={_registry?.Count ?? 0}");
+                Debug.Log($"[FML FriendlyNpc] OnCollectSaveData: loaded {entries.Count} entries, _registry active={_registry?.Count() ?? 0}");
                 if (_registry != null)
                 {
                     foreach (var kvp in _registry)
@@ -210,15 +208,6 @@ namespace FeatherMod
             }
 
             Debug.Log($"[FML FriendlyNpc] Registered preset '{id}' (owner: {owner})");
-
-            // 兜底恢复：LevelInitializedEvent 可能在 HookSaveRestore 之前就已触发
-            // （mod 初始化晚于关卡初始化事件），此处补一次恢复检查。
-            if (!_restoreChecked)
-            {
-                _restoreChecked = true;
-                RestoreNpcSpawns();
-            }
-
             return preset;
         }
 
