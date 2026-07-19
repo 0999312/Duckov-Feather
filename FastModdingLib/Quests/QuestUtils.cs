@@ -25,14 +25,36 @@ namespace FeatherMod
             return _questRegistry.TryGetIdentifier(questId, out id);
         }
 
-        /// <summary>按 Identifier 解析为 quest 数字 ID。</summary>
+        /// <summary>按 Identifier 解析为 quest 数字 ID（含原版任务反查）。</summary>
+        /// <remarks>
+        /// 优先查 FML Registry，未命中时在 GameplayDataSettings.QuestCollection 中
+        /// 按 quest.name == "Quest_{Identifier.Path}" 匹配原版任务。
+        /// </remarks>
         public static bool TryGetQuestId(Identifier id, out int questId)
         {
             if (_questRegistry.TryGet(id, out var quest) && quest != null)
             {
-                questId = quest.id;
+                questId = quest.ID;
                 return true;
             }
+            // 反查原版任务：按名称模式匹配
+            try
+            {
+                var collection = GameplayDataSettings.QuestCollection;
+                if (collection != null)
+                {
+                    var targetName = $"Quest_{id.Path}";
+                    foreach (var q in collection)
+                    {
+                        if (q != null && q.name == targetName)
+                        {
+                            questId = q.ID;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch { }
             questId = -1;
             return false;
         }

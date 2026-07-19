@@ -134,8 +134,34 @@ namespace FeatherMod
                 id = config.Id.Path,
                 prefabName = prefabName,
                 maxAmount = config.MaxAmount,
-                cost = config.BuildCost()
+                cost = config.BuildCost(),
+                iconReference = config.Icon
             };
+
+            // ── 解析 RequireBuildings：Identifier[] → string[] ──
+            if (config.RequireBuildings != null && config.RequireBuildings.Length > 0)
+            {
+                var reqBuildings = new string[config.RequireBuildings.Length];
+                for (int i = 0; i < config.RequireBuildings.Length; i++)
+                    reqBuildings[i] = config.RequireBuildings[i].Path;
+                info.requireBuildings = reqBuildings;
+            }
+
+            // ── 解析 RequireQuests：Identifier[] → int[] ──
+            // 支持 FML 注册任务（QuestUtils.TryGetQuestId）和原版任务反查（TryGetVanillaQuestId）
+            if (config.RequireQuests != null && config.RequireQuests.Length > 0)
+            {
+                var reqQuests = new System.Collections.Generic.List<int>(config.RequireQuests.Length);
+                foreach (var qId in config.RequireQuests)
+                {
+                    if (QuestUtils.TryGetQuestId(qId, out int questIntId))
+                        reqQuests.Add(questIntId);
+                    else
+                        Debug.LogWarning($"[FML Building] RequireQuest '{qId}' not found (not in FML registry or vanilla collection).");
+                }
+                if (reqQuests.Count > 0)
+                    info.requireQuests = reqQuests.ToArray();
+            }
 
             // 修复 null 数组字段，防止 RequirementsSatisfied() NRE
             SanitizeBuildingInfo(ref info);

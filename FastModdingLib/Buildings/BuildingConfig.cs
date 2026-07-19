@@ -49,6 +49,12 @@ namespace FeatherMod
         /// <summary>最大建造数量。默认 1。</summary>
         public int MaxAmount { get; set; } = 1;
 
+        /// <summary>
+        /// 建筑图标 Sprite。设置后写入 BuildingInfo.iconReference，
+        /// 在 BuilderView 和建筑信息面板中显示。为 null 时使用原版默认图标。
+        /// </summary>
+        public Sprite? Icon { get; set; }
+
         // ── 成本 ──
 
         /// <summary>建造所需金钱。</summary>
@@ -65,11 +71,19 @@ namespace FeatherMod
         /// <summary>是否默认解锁（无需任务条件）。默认 true。</summary>
         public bool UnlockedByDefault { get; set; } = true;
 
-        /// <summary>前置建筑 id 列表（需先建造才能解锁）。</summary>
-        public string[]? RequireBuildings { get; set; }
+        /// <summary>
+        /// 前置建筑列表（Identifier 优先）。需先建造才能解锁。
+        /// 使用 Identifier("duckov", "Workbench") 引用原版建筑，
+        /// 使用 Identifier("mymod", "forge") 引用自定义建筑。
+        /// </summary>
+        public Identifier[]? RequireBuildings { get; set; }
 
-        /// <summary>前置任务 id 列表（需完成任务才能解锁）。</summary>
-        public string[]? RequireQuests { get; set; }
+        /// <summary>
+        /// 前置任务列表（Identifier 优先）。需完成任务才能解锁。
+        /// 使用 Identifier("duckov", "QuestName") 引用原版任务（自动反查 ID），
+        /// 使用 Identifier("mymod", "quest_xxx") 引用 FML 注册的任务。
+        /// </summary>
+        public Identifier[]? RequireQuests { get; set; }
 
         // ── 工厂 ──
 
