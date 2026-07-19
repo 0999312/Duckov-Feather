@@ -119,14 +119,13 @@ namespace FeatherMod
         private static void OnSubSceneLoaded(SceneLoadFinishedEvent evt) { RestoreNpcSpawns(); }
         private static void OnCollectSaveData(CollectSaveDataEvent evt)
         {
-            // 在游戏正式 save pipeline 中重新收集所有活跃 NPC 的位置并写入存档。
-            // 仅靠 spawn 时的实时 SavesSystem.Save() 不足——不同 ES3 实现可能
-            // 在 CollectSaveData 阶段才真正 flush 到文件，实时写入的数据会被丢弃。
+            // 在游戏正式 save pipeline 中重新收集活跃 NPC 的位置并更新存档。
+            // ⚠ 不能 Clear 再重建——玩家可能在 raid 中，此时 _registry 无基地 NPC，
+            // Clear 会清空 PersistNpcSpawn 写入的数据导致存档永久丢失。
+            // 正确做法：仅更新 _registry 中的活跃 NPC，保留不在当前场景的 NPC 条目。
             try
             {
                 var entries = LoadNpcSpawnEntries();
-                // 清除旧条目，用当前 _registry 中活跃 NPC 的位置重建
-                entries.Clear();
                 if (_registry != null)
                 {
                     foreach (var kvp in _registry)
@@ -135,12 +134,17 @@ namespace FeatherMod
                         {
                             var go = kvp.Value;
                             var id = kvp.Key;
+                            // 移除旧条目（如果存在），追加新条目（含当前 position/配置摘要）
+                            entries.RemoveAll(e => e.domain == id.Domain && e.path == id.Path);
                             entries.Add(BuildNpcSpawnEntry(id, go.transform.position, go.transform.rotation));
                         }
                     }
                 }
-                SavesSystem.Save(NpcSaveKey, entries);
-                Debug.Log($"[FML FriendlyNpc] Saved {entries.Count} NPC(s) during save collection.");
+                if (entries.Count > 0)
+                {
+                    SavesSystem.Save(NpcSaveKey, entries);
+                    Debug.Log($"[FML FriendlyNpc] Updated {entries.Count} NPC(s) during save collection.");
+                }
             }
             catch (Exception ex)
             {
