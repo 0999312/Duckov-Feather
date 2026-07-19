@@ -69,7 +69,7 @@
   </ItemGroup>
 	<ItemGroup>
 		<!-- All members in an assembly -->
-		<Publicize Include="TeamSoda.Duckov.Core" IncludeVirtualMembers="false" />
+		<Publicize Include="TeamSoda.Duckov.Core" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false" />
 		<Publicize Include="TeamSoda.Duckov.Utilities" IncludeVirtualMembers="false" />
     <Publicize Include="NodeCanvas.DialogueTrees" IncludeVirtualMembers="false" />
     <Publicize Include="NodeCanvas.Framework" IncludeVirtualMembers="false" />

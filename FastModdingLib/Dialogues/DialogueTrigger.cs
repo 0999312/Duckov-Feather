@@ -38,20 +38,8 @@ namespace FeatherMod
         /// </summary>
         private static void SubscribeQuestEvents()
         {
-            var bfs = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
-            var t = typeof(Quest);
-
-            var evtActivated = t.GetEvent("onQuestActivated", bfs);
-            if (evtActivated != null)
-                evtActivated.AddEventHandler(null, (Action<Quest>)OnQuestActivated);
-            else
-                Debug.LogWarning("[FML DialogueTrigger] Quest.onQuestActivated event not found — quest-accept dialogue disabled.");
-
-            var evtCompleted = t.GetEvent("onQuestCompleted", bfs);
-            if (evtCompleted != null)
-                evtCompleted.AddEventHandler(null, (Action<Quest>)OnQuestCompleted);
-            else
-                Debug.LogWarning("[FML DialogueTrigger] Quest.onQuestCompleted event not found — quest-complete dialogue disabled.");
+            Quest.onQuestActivated += OnQuestActivated;
+            Quest.onQuestCompleted += OnQuestCompleted;
         }
 
         // ═══════════════════════════════════════════════════════
