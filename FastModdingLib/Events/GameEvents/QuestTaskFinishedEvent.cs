@@ -1,22 +1,20 @@
-﻿using System;
-
-namespace FeatherMod.Events.GameEvents
+﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
-    /// 任务完成事件。桥接自游戏原生 <c>QuestManager.OnTaskFinishedEvent</c> 静态事件。
+    /// 任务完成事件。桥接自游戏原生 <c>QuestManager.OnTaskFinishedEvent</c>（Action&lt;Quest, Task&gt;）。
     /// 仅观察用途，不支持取消。
     /// </summary>
     public sealed class QuestTaskFinishedEvent : Event
     {
-        /// <summary>
-        /// 完成的任务。
-        /// TODO: 确认 QuestTask 命名空间后替换为强类型（当前 object 兜底保证编译）。
-        /// </summary>
+        /// <summary>所属 Quest。</summary>
+        public object Quest { get; }
+        /// <summary>完成的 Task。</summary>
         public object Task { get; }
 
-        public QuestTaskFinishedEvent(object task)
+        public QuestTaskFinishedEvent(object quest, object task)
         {
-            Task = task ?? throw new ArgumentNullException(nameof(task));
+            Quest = quest;
+            Task = task;
         }
     }
 }
