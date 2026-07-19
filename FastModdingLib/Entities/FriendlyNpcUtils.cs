@@ -43,6 +43,7 @@ namespace FeatherMod
         // NPC save/restore persistence
         private const string NpcSaveKey = "fml_friendly_npc_spawns";
         private static bool _saveRestoreHooked;
+        private static bool _restoreChecked; // 兜底恢复标记（防止事件错过）
 
         [Serializable]
         private struct NpcSpawnEntry
@@ -78,6 +79,7 @@ namespace FeatherMod
                 return;
             }
             _initialized = true;
+            _restoreChecked = false; // Domain Reload 后重置，允许重新触发兜底恢复
 
             Debug.Log("[FML FriendlyNpc] Init: creating new registries (first-time or domain reload).");
 
@@ -204,6 +206,15 @@ namespace FeatherMod
             }
 
             Debug.Log($"[FML FriendlyNpc] Registered preset '{id}' (owner: {owner})");
+
+            // 兜底恢复：LevelInitializedEvent 可能在 HookSaveRestore 之前就已触发
+            // （mod 初始化晚于关卡初始化事件），此处补一次恢复检查。
+            if (!_restoreChecked)
+            {
+                _restoreChecked = true;
+                RestoreNpcSpawns();
+            }
+
             return preset;
         }
 
@@ -808,9 +819,7 @@ namespace FeatherMod
                     // Awake 中会 foreach otherInterablesInGroup，AddComponent 创建的实例该字段为 null，
                     // 必须在 SetActive 前初始化为空列表，否则 NRE。
                     shopInteract.otherInterablesInGroup = new List<InteractableBase>();
-                    shopGo.SetActive(true); // Awake 现在运行，merchantID 已正确
-                    shop.entries.Clear();
-                    shop.InitializeEntries();
+                    shopGo.SetActive(true); // Awake 运行 InitializeEntries() + Load()，merchantID 已正确设置
                 }
 
                 // ── QuestGiver：独立子 GO 交互点（参照原版 Interact_Quest 子对象）──
@@ -975,9 +984,7 @@ namespace FeatherMod
                     si.interactCollider = col;
                     si.otherInterablesInGroup = new List<InteractableBase>();
 
-                    shopGo.SetActive(true);
-                    shop.entries.Clear();
-                    shop.InitializeEntries();
+                    shopGo.SetActive(true); // Awake 运行 InitializeEntries() + Load()，merchantID 已正确设置
                     shopInteract = si;
                 }
 
