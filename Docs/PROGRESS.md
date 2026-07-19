@@ -4,6 +4,76 @@
 
 ---
 
+## 测试 Mod 反馈五项问题修复 — ✅ 已完成
+
+**完成时间**: 2026-07-19
+**耗时**: 约 3 小时
+**类型**: Bug 修复（本地化 / 对话 / NPC 生成 / 交互点 / 建筑渲染）
+
+### 问题来源
+
+测试 Mod 实测反馈 5 个问题。经 5 路并行子代理调查（FML 源码 + 游戏逆向工程 `assembly_0625`），逐一诊断修复。参考原版 Jeff / XiaoMing（小明）实现。
+
+### 根因摘要
+
+| # | 问题 | 根因 |
+|---|------|------|
+| 1 | QuestGiver 本地化键 `Character_{int}` 不稳定 | questGiverID 每次会话从 50 起动态递增分配，跨会话变化 |
+| 2 | Quest 激活/完成 dialogue 不触发 | `QuestData` 无声明式对话字段；`DialogueTrigger` 用反射 `GetField`+`SetValue` 订阅 field-like event（依赖 backing field 名，不可靠） |
+| 3 | 旧存档进已有建筑不生成 Mod NPC | `RestoreNpcSpawns` 仅挂 `LevelInitializedEvent`（仅新游戏触发），读档/进出子场景不触发 |
+| 4 | 对话标识 Y 轴低 / 任务 "!" 不显示 | `DuckovDialogueActor.offset` 未设（默认 0，贴脚）；QuestGiver 在 active GO 上 AddComponent，Awake 用默认 `interactMarkerOffset(0)` 把指示器埋进模型 |
+| 5 | 新增建筑渲染到加载界面 | 建筑 prefab `DontDestroyOnLoad` 且 active，被 Curtain 相机（CullingMask=Everything, DepthOnly）渲染 |
+
+### 修复方案（以原版设计为准）
+
+1. **本地化键稳定化**：`QuestGiverRegistry` 把 `Identifier→int` 映射持久化到全局文件（`persistentDataPath/FML/questgiver_id_map.json`，跨存档槽），同一 Identifier 永远分配相同 int ID；`I18n` 加载语言文件后触发 `OnLanguageFileLoaded`，`QuestGiverUtils` 订阅并刷新 `Character_{int}` override（补齐注册时翻译未就绪的缺口）。
+2. **任务对话声明式**：`QuestData` 新增 `onActivateDialogue`/`onCompleteDialogue`（`QuestDialogue`），`RegisterQuestInternal` 自动注册到 `DialogueTrigger`；`DialogueTrigger` 改用 `EventInfo.AddEventHandler` 订阅原生 public static event（标准 event 订阅，绕开 Publicizer 导致的 event/field 二义 CS0229 与 CS0571）；用"激活集合"区分真实完成与读档恢复（读档恢复不经 `NotifyActivated`），避免读档时历史任务误播完成对话。
+3. **NPC 场景恢复**：桥接 `SceneLoader.onFinishedLoadingScene` 为 `MainSceneLoadedEvent`，连同已有 `SceneLoadFinishedEvent` 一起触发 `RestoreNpcSpawns`；`NpcSpawnEntry` 增加 `scene` 字段按场景过滤（旧存档无该字段按主场景处理），对齐原版 XiaoMing 进入即在原点位生成。
+4. **交互点对齐原版**：`DuckovDialogueActor.offset=(0,1.25,0)`（原版 Actor_Jeff 值，新增 `FriendlyNpcConfig.DialogueOffset` 可覆盖）；QuestGiver/PerkTreeUIInvoker 改"先禁用再挂组件"模式，使 Awake/Start 以最终字段执行（指示器自动定位头顶，`PossibleQuests` 缓存正确）；交互碰撞体对齐小明 `(2,1.3,2)`；`QuestGiverUtils.BindQuest` 后清 `_possibleQuests` 缓存并重启激活刷新指示器。
+5. **建筑 prefab 隔离**：建筑 prefab 挂入 inactive 容器 `FML_BuildingPrefabs`（`activeSelf=true` 保证 Instantiate 实例正常激活，`activeInHierarchy=false` 保证 prefab 本体不渲染），与原版 asset prefab 语义一致。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|----------|----------|
+| 修改 | `QuestGivers/QuestGiverRegistry.cs` | +ID 持久化（加载/保存/重复注册复用）；删死代码 `SetQuestGiverId` |
+| 修改 | `QuestGivers/QuestGiverUtils.cs` | 订阅 `I18n.OnLanguageFileLoaded` 刷新 override；`BindQuest` 后 `RefreshQuestGiverIndicators` 清缓存刷新 |
+| 修改 | `I18n.cs` | 新增 `OnLanguageFileLoaded` 事件，语言文件加载后触发 |
+| 修改 | `Quests/QuestData.cs` | 新增 `QuestDialogue` 类 + `onActivateDialogue`/`onCompleteDialogue` 字段 |
+| 修改 | `Quests/QuestUtils.cs` | 注册时自动绑定声明式对话到 `DialogueTrigger` |
+| 修改 | `Dialogues/DialogueTrigger.cs` | 反射 `GetField` 改为 `EventInfo.AddEventHandler`；`s_activatedQuestIds` 排除读档恢复误触发 |
+| 修改 | `Events/Adapters/GameEventAdapters.cs` | 桥接 `SceneLoader.onFinishedLoadingScene` → `MainSceneLoadedEvent` |
+| 新建 | `Events/GameEvents/MainSceneLoadedEvent.cs` | 主场景加载完成事件 |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | NPC 场景恢复（订阅+场景过滤+`scene` 字段）；`actor.offset`；禁启初始化；碰撞体对齐 |
+| 修改 | `Entities/FriendlyNpcConfig.cs` | 新增 `DialogueOffset` 可选字段 |
+| 修改 | `Buildings/BuildingUtils.cs` | 新增 `PrefabHolder` inactive 容器，prefab 挂入隔离 |
+
+### 新增 public API
+
+```csharp
+// QuestData 声明式对话
+new QuestData {
+    onActivateDialogue = new QuestDialogue(npcId, new DialogueSequence(actorId, "激活对话")),
+    onCompleteDialogue = new QuestDialogue(npcId, new DialogueSequence(actorId, "完成对话")),
+};
+
+// FriendlyNpcConfig 对话指示器偏移（可选，默认 1.25）
+config.DialogueOffset = new Vector3(0, 1.3f, 0);
+```
+
+### 设计说明 / 已知边界
+
+- **问题2 事件订阅方式**：按用户要求未用 Harmony patch。`EventInfo.AddEventHandler` 是标准 event 订阅反射（与框架 `GameEventAdapters.WireDynamicEvent` 同模式），不依赖 backing field 名，比原 `GetField`+`SetValue` 可靠。
+- **完成对话边缘**：玩家"激活后存档、读档继续完成"的 quest 因读档恢复不经 `onQuestActivated`，完成对话不播（可接受，避免读档历史任务乱播）。如需覆盖，后续可在读档后扫描 `activeQuests` 补入激活集合。
+- **OcclusionFadeChecker**：经核实原版中该组件挂在全局 `OcclusionFadeManager` 上（跟随玩家的 aim/character 两个 checker），**不在 NPC 交互点上**。原版 NPC 交互点（SpecialAttachment）同样没有该组件。FML 与原版保持一致——不添加。用户观察到的"CharacterChecker"是 Manager 的全局子物体，非 NPC 组件。
+
+### 验证结果
+
+- [x] 编译通过（0 错误；49 个警告均为预先存在的 nullable 警告，与本次改动无关）
+- [ ] 功能测试：本地化键稳定、任务激活/完成对话、旧存档 NPC 生成、交互点高度、任务 "!" 显示、建筑不进加载界面（需测试 Mod 实测）
+
+---
+
 ## NPC 系统全面修复（5 合 1）— ✅ 已完成
 
 **完成时间**: 2026-07-19
