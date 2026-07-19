@@ -1,7 +1,6 @@
 using Cysharp.Threading.Tasks;
 using FeatherMod.Utils;
 using Saves;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace FeatherMod
@@ -12,9 +11,6 @@ namespace FeatherMod
     /// 播放对话（优先全屏面板，失败时降级为气泡）。
     /// 由 <see cref="FriendlyNpcUtils.AttachInteractionComponents"/> 根据
     /// <see cref="FriendlyNpcConfig.ProximityDialogue"/> 自动挂载。
-    ///
-    /// 🆕 Bug Fix: <see cref="DialogueTriggerMode.Once"/> 状态通过静态字典跨 NPC 实例持久化，
-    /// 防止建筑重建/场景重载后对话重复触发。
     /// </summary>
     public class NpcProximityTrigger : MonoBehaviour
     {
@@ -33,9 +29,12 @@ namespace FeatherMod
         /// <summary>触发模式。</summary>
         public DialogueTriggerMode Mode = DialogueTriggerMode.Once;
 
-        // 🆕 Bug Fix: Once 模式触发状态由静态字典持久化（跨 NPC 实例/NPC 重生/NPC 销毁），
-        // 避免因建筑重建、场景重载导致新的 NpcProximityTrigger 实例重置 _triggered。
-        private static readonly Dictionary<Identifier, bool> s_triggeredOnceStates = new();
+        /// <summary>
+        /// Once 模式已触发标志（实例字段，跟随 GameObject 生命周期）。
+        /// 跨会话持久化由 SavesSystem（per-save ES3）负责：Start 时从存档恢复，
+        /// 触发时写入存档。新游戏开档自动重置。
+        /// </summary>
+        private bool _triggered;
 
         private Transform? _playerTransform;
         private float _nextCheckTime;
@@ -43,22 +42,21 @@ namespace FeatherMod
 
         private bool AlreadyTriggered
         {
-            get => Mode == DialogueTriggerMode.Once
-                   && s_triggeredOnceStates.TryGetValue(NpcId, out var v) && v;
-            set { if (Mode == DialogueTriggerMode.Once) s_triggeredOnceStates[NpcId] = value; }
+            get => Mode == DialogueTriggerMode.Once && _triggered;
+            set { if (Mode == DialogueTriggerMode.Once) _triggered = value; }
         }
 
         private void Start()
         {
             FindPlayer();
 
-            // ES3 跨会话持久化：Once 模式下，从存档恢复已触发状态
-            if (Mode == DialogueTriggerMode.Once && !AlreadyTriggered)
+            // SavesSystem 跨会话持久化：Once 模式下，从游戏存档恢复已触发状态
+            if (Mode == DialogueTriggerMode.Once && !_triggered)
             {
-                var saveKey = $"fml_npc_trigger_{NpcId.Domain}_{NpcId.Path}";
+                var saveKey = SaveKey();
                 if (SavesSystem.KeyExisits(saveKey) && SavesSystem.Load<bool>(saveKey))
                 {
-                    AlreadyTriggered = true;
+                    _triggered = true;
                 }
             }
         }
@@ -79,15 +77,16 @@ namespace FeatherMod
             if (Vector3.Distance(transform.position, _playerTransform.position) <= Distance)
             {
                 AlreadyTriggered = true;
-                // ES3 跨会话持久化：触发后写入存档
+                // SavesSystem 跨会话持久化：触发后写入游戏存档
                 if (Mode == DialogueTriggerMode.Once)
                 {
-                    var saveKey = $"fml_npc_trigger_{NpcId.Domain}_{NpcId.Path}";
-                    SavesSystem.Save(saveKey, true);
+                    SavesSystem.Save(SaveKey(), true);
                 }
                 PlayDialogue().Forget();
             }
         }
+
+        private string SaveKey() => $"fml_npc_trigger_{NpcId.Domain}_{NpcId.Path}";
 
         private void FindPlayer()
         {
