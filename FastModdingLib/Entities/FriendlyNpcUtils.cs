@@ -14,6 +14,7 @@ using Saves;
 using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
@@ -549,13 +550,27 @@ namespace FeatherMod
         {
             try
             {
-                if (SavesSystem.KeyExisits(NpcSaveKey))
+                // 直接调用 Load<T> 而非 KeyExisits + Load——SavesSystem 的文件缓存
+                // 可能在 CurrentSlot 确定之前就被锁定到错误的 save 文件，
+                // KeyExisits 返回 false 但实际 save 文件中数据完好。
+                var result = SavesSystem.Load<List<NpcSpawnEntry>>(NpcSaveKey);
+                if (result != null && result.Count > 0)
                 {
-                    var result = SavesSystem.Load<List<NpcSpawnEntry>>(NpcSaveKey);
-                    Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries: key='{NpcSaveKey}', count={result?.Count ?? 0}");
-                    return result ?? new List<NpcSpawnEntry>();
+                    Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries via SavesSystem: count={result.Count}");
+                    return result;
                 }
-                Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries: key='{NpcSaveKey}' not found.");
+                // 回退：直接通过 ES3 读取当前 save 文件
+                var path = System.IO.Path.Combine(SavesSystem.SavesFolder, SavesSystem.GetSaveFileName(SavesSystem.CurrentSlot));
+                if (ES3.FileExists(path))
+                {
+                    result = ES3.Load<List<NpcSpawnEntry>>(NpcSaveKey, path);
+                    if (result != null && result.Count > 0)
+                    {
+                        Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries via ES3 direct: path={path}, count={result.Count}");
+                        return result;
+                    }
+                }
+                Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries: no entries found (SavesSystem returned null, ES3 path={path}, exists={ES3.FileExists(path)})");
             }
             catch (Exception ex)
             {
