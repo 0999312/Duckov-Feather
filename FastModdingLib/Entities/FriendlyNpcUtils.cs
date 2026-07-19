@@ -107,6 +107,7 @@ namespace FeatherMod
                 // 对齐原版 XiaoMing——进入存档时自动在建筑确定的原生成点位重新出现。
                 EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoaded);
                 EventBusManager.Instance.Sync.Register<SceneLoadFinishedEvent>(OnSubSceneLoaded);
+                Debug.Log("[FML FriendlyNpc] HookSaveRestore: registered CollectSaveData + LevelInit + MainSceneLoaded + SubSceneLoaded handlers.");
             }
             catch (Exception ex)
             {
@@ -119,13 +120,10 @@ namespace FeatherMod
         private static void OnSubSceneLoaded(SceneLoadFinishedEvent evt) { RestoreNpcSpawns(); }
         private static void OnCollectSaveData(CollectSaveDataEvent evt)
         {
-            // 在游戏正式 save pipeline 中重新收集活跃 NPC 的位置并更新存档。
-            // ⚠ 不能 Clear 再重建——玩家可能在 raid 中，此时 _registry 无基地 NPC，
-            // Clear 会清空 PersistNpcSpawn 写入的数据导致存档永久丢失。
-            // 正确做法：仅更新 _registry 中的活跃 NPC，保留不在当前场景的 NPC 条目。
             try
             {
                 var entries = LoadNpcSpawnEntries();
+                Debug.Log($"[FML FriendlyNpc] OnCollectSaveData: loaded {entries.Count} entries, _registry active={_registry?.Count ?? 0}");
                 if (_registry != null)
                 {
                     foreach (var kvp in _registry)
@@ -134,7 +132,6 @@ namespace FeatherMod
                         {
                             var go = kvp.Value;
                             var id = kvp.Key;
-                            // 移除旧条目（如果存在），追加新条目（含当前 position/配置摘要）
                             entries.RemoveAll(e => e.domain == id.Domain && e.path == id.Path);
                             entries.Add(BuildNpcSpawnEntry(id, go.transform.position, go.transform.rotation));
                         }
@@ -143,7 +140,11 @@ namespace FeatherMod
                 if (entries.Count > 0)
                 {
                     SavesSystem.Save(NpcSaveKey, entries);
-                    Debug.Log($"[FML FriendlyNpc] Updated {entries.Count} NPC(s) during save collection.");
+                    Debug.Log($"[FML FriendlyNpc] OnCollectSaveData: saved {entries.Count} NPC(s).");
+                }
+                else
+                {
+                    Debug.Log($"[FML FriendlyNpc] OnCollectSaveData: no entries to save (empty after merge).");
                 }
             }
             catch (Exception ex)
@@ -521,6 +522,7 @@ namespace FeatherMod
                 entries.RemoveAll(e => e.domain == id.Domain && e.path == id.Path);
                 entries.Add(BuildNpcSpawnEntry(id, pos, rot));
                 SavesSystem.Save(NpcSaveKey, entries);
+                Debug.Log($"[FML FriendlyNpc] PersistNpcSpawn: '{id}' at ({pos.x:F1},{pos.y:F1},{pos.z:F1}), total entries={entries.Count}");
             }
             catch (Exception ex)
             {
@@ -559,9 +561,17 @@ namespace FeatherMod
             try
             {
                 if (SavesSystem.KeyExisits(NpcSaveKey))
-                    return SavesSystem.Load<List<NpcSpawnEntry>>(NpcSaveKey) ?? new List<NpcSpawnEntry>();
+                {
+                    var result = SavesSystem.Load<List<NpcSpawnEntry>>(NpcSaveKey);
+                    Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries: key='{NpcSaveKey}', count={result?.Count ?? 0}");
+                    return result ?? new List<NpcSpawnEntry>();
+                }
+                Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries: key='{NpcSaveKey}' not found.");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[FML FriendlyNpc] LoadNpcSpawnEntries failed: {ex.GetType().Name}: {ex.Message}");
+            }
             return new List<NpcSpawnEntry>();
         }
 
@@ -570,6 +580,7 @@ namespace FeatherMod
             try
             {
                 var entries = LoadNpcSpawnEntries();
+                Debug.Log($"[FML FriendlyNpc] RestoreNpcSpawns: loaded {entries.Count} entries, currentScene='{(GetCurrentSceneKey() == "" ? "<main>" : GetCurrentSceneKey())}'");
                 if (entries.Count == 0) return;
                 string currentScene = GetCurrentSceneKey();
                 int restored = 0;
