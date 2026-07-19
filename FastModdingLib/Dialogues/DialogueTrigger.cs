@@ -24,50 +24,34 @@ namespace FeatherMod
         {
             if (_initialized) return;
             _initialized = true;
+            SubscribeQuestEvents();
+        }
 
-            // C# 编译器对 field-like event 生成的 backing field 是 private static，
-            // 必须同时包含 Public 和 NonPublic 才能通过 GetField 找到。
+        /// <summary>
+        /// 订阅游戏原生 <c>Quest.onQuestActivated</c> / <c>Quest.onQuestCompleted</c>。
+        /// 用 <see cref="EventInfo.AddEventHandler"/>（标准 event 订阅，与
+        /// <c>GameEventAdapters.WireDynamicEvent</c> 同一模式）——不依赖 backing field 名，
+        /// 也不需要手动 Combine/SetValue。
+        /// 注：Publicizer 把 field-like event 的私有 backing field 公开为同名 public 字段，
+        /// 使源码级 <c>Quest.onQuestActivated +=</c> 产生 event/field 二义（CS0229），
+        /// 且 C# 禁止显式调 add_ 访问器（CS0571），因此必须经 EventInfo 反射订阅。
+        /// </summary>
+        private static void SubscribeQuestEvents()
+        {
             var bfs = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+            var t = typeof(Quest);
 
-            // onQuestActivated
-            try
-            {
-                var fiActivated = typeof(Quest).GetField("onQuestActivated", bfs);
-                if (fiActivated != null)
-                {
-                    var evt = fiActivated.GetValue(null) as Action<Quest>;
-                    evt += OnQuestActivated;
-                    fiActivated.SetValue(null, evt);
-                }
-                else
-                {
-                    Debug.LogWarning("[FML DialogueTrigger] Quest.onQuestActivated field not found — quest-accept triggers disabled.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[FML DialogueTrigger] Failed to subscribe Quest.onQuestActivated: {ex.Message}");
-            }
+            var evtActivated = t.GetEvent("onQuestActivated", bfs);
+            if (evtActivated != null)
+                evtActivated.AddEventHandler(null, (Action<Quest>)OnQuestActivated);
+            else
+                Debug.LogWarning("[FML DialogueTrigger] Quest.onQuestActivated event not found — quest-accept dialogue disabled.");
 
-            // onQuestCompleted
-            try
-            {
-                var fiCompleted = typeof(Quest).GetField("onQuestCompleted", bfs);
-                if (fiCompleted != null)
-                {
-                    var evt = fiCompleted.GetValue(null) as Action<Quest>;
-                    evt += OnQuestCompleted;
-                    fiCompleted.SetValue(null, evt);
-                }
-                else
-                {
-                    Debug.LogWarning("[FML DialogueTrigger] Quest.onQuestCompleted field not found — quest-complete triggers disabled.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[FML DialogueTrigger] Failed to subscribe Quest.onQuestCompleted: {ex.Message}");
-            }
+            var evtCompleted = t.GetEvent("onQuestCompleted", bfs);
+            if (evtCompleted != null)
+                evtCompleted.AddEventHandler(null, (Action<Quest>)OnQuestCompleted);
+            else
+                Debug.LogWarning("[FML DialogueTrigger] Quest.onQuestCompleted event not found — quest-complete dialogue disabled.");
         }
 
         // ═══════════════════════════════════════════════════════
@@ -141,8 +125,17 @@ namespace FeatherMod
         //  Quest 事件回调
         // ═══════════════════════════════════════════════════════
 
+        // 本次会话内经 onQuestActivated 真实激活的 quest ID 集合。
+        // 用于区分"真实完成"与"读档恢复"：读档恢复历史任务时 QuestManager 调用
+        // ForceComplete()（同样触发 onQuestCompleted），但那些 quest 从未经过
+        // ActivateQuest → NotifyActivated，不在此集合中，故不会误播完成对话。
+        // 注：该判断不依赖 QuestManager 事件订阅顺序（其会把完成的 quest 移出
+        // activeQuests），比检查 activeQuests 更可靠。
+        private static readonly HashSet<int> s_activatedQuestIds = new();
+
         private static void OnQuestActivated(Quest quest)
         {
+            s_activatedQuestIds.Add(quest.ID);
             var questId = ResolveQuestId(quest);
             if (questId == null) return;
             HandleQuestTrigger(s_questAcceptedTriggers, questId);
@@ -150,6 +143,9 @@ namespace FeatherMod
 
         private static void OnQuestCompleted(Quest quest)
         {
+            // 排除读档恢复路径：未在本次会话中激活过的 quest 不播完成对话。
+            if (!s_activatedQuestIds.Contains(quest.ID)) return;
+
             var questId = ResolveQuestId(quest);
             if (questId == null) return;
             HandleQuestTrigger(s_questCompletedTriggers, questId);

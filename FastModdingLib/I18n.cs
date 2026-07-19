@@ -3,6 +3,7 @@ using FeatherMod.Events.GameEvents;
 using FeatherMod.Utils;
 using Newtonsoft.Json.Linq;
 using SodaCraft.Localizations;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -26,6 +27,12 @@ namespace FeatherMod
             { SystemLanguage.Swedish, "sv_se.json" }
         };
         private static string _modDirectory = string.Empty;
+
+        /// <summary>
+        /// 语言文件加载完成时触发（首次加载与语言切换均触发）。
+        /// 供本地化重定向模块（如 QuestGiver 显示名）在翻译就绪后刷新 override。
+        /// </summary>
+        public static event Action? OnLanguageFileLoaded;
 
         /// <summary>
         /// 初始化 I18n。mod 目录从 <see cref="ModPathResolver"/> 自动探测。
@@ -106,6 +113,7 @@ namespace FeatherMod
                     string value = item.Value.ToString();
                     LocalizationManager.SetOverrideText(key, value);
                 }
+                OnLanguageFileLoaded?.Invoke();
             }
             else
             {

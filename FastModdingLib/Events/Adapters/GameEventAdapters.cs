@@ -108,6 +108,10 @@ namespace FeatherMod.Events.Adapters
             // SavesCounter.OnKillCountChanged → KillCountChangedEvent（仅观察）
             // 原生签名：Action<int>（PLAN §6 表）
             WireDynamicEvent("SavesCounter", "OnKillCountChanged", nameof(OnKillCountChangedBridge));
+
+            // SceneLoader.onFinishedLoadingScene → MainSceneLoadedEvent（仅观察）
+            // 原生签名：Action<SceneLoadingContext>（1 参，桥接丢弃参数）
+            WireDynamicEvent("SceneLoader", "onFinishedLoadingScene", nameof(OnMainSceneLoadedBridge));
         }
 
         /// <summary>
@@ -250,6 +254,12 @@ namespace FeatherMod.Events.Adapters
         {
             // 原生事件无参；Manager 字段留空（见 LevelInitializedEvent 文档）。
             EventBusManager.Instance.Sync.Post(new LevelInitializedEvent(null));
+        }
+
+        private static void OnMainSceneLoadedBridge(object context)
+        {
+            // 原生签名 Action<SceneLoadingContext>；桥接丢弃 context，仅通知"主场景已加载完成"。
+            EventBusManager.Instance.Sync.Post(new MainSceneLoadedEvent());
         }
 
         private static void OnMoneyChangedBridge(object oldMoney, object nowMoney)

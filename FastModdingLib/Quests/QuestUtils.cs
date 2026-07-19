@@ -130,6 +130,14 @@ namespace FeatherMod
             GameplayDataSettings.QuestCollection.Add(quest);
             // 使用传入的 Identifier（domain = modid）作为 registry key
             _questRegistry.Set(id, quest, modid);
+
+            // 🆕 声明式任务对话：激活/完成时自动在指定 NPC 上播放
+            // （事件经 DialogueTrigger 订阅游戏原生 Quest.onQuestActivated/onQuestCompleted 驱动）。
+            if (data.onActivateDialogue is { } ad && ad.sequence.HasContent)
+                DialogueTrigger.OnQuestAccepted(id, ad.npcId, ad.sequence.Lines, ad.actorId, ad.sequence.Mode);
+            if (data.onCompleteDialogue is { } cd && cd.sequence.HasContent)
+                DialogueTrigger.OnQuestCompleted(id, cd.npcId, cd.sequence.Lines, cd.actorId, cd.sequence.Mode);
+
             Debug.Log($"[FML] Registered quest: {data.displayName} (ID: {data.ID}) from mod: {modid} (identifier: {id})");
         }
 

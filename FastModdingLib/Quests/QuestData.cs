@@ -37,6 +37,40 @@ namespace FeatherMod
         public string requireScene = string.Empty;
         public List<TaskData> tasks = new List<TaskData>();
         public List<RewardData> rewards = new List<RewardData>();
+
+        /// <summary>
+        /// 🆕 可选：任务激活时在指定 NPC 上自动播放的对话。
+        /// 对齐原版 <c>ShowDialogueOnQuestActivate</c>（挂 Quest GO 上监听激活事件）。
+        /// </summary>
+        public QuestDialogue? onActivateDialogue;
+
+        /// <summary>
+        /// 🆕 可选：任务完成时在指定 NPC 上自动播放的对话。
+        /// 读档恢复历史任务（ForceComplete）不会触发。
+        /// </summary>
+        public QuestDialogue? onCompleteDialogue;
+    }
+
+    /// <summary>
+    /// 🆕 任务对话配置。任务激活/完成时在指定 NPC 上自动播放一段对话。
+    /// </summary>
+    public class QuestDialogue
+    {
+        /// <summary>对话播放的目标 NPC Identifier（FriendlyNpcUtils 注册的 NPC）。</summary>
+        public Identifier npcId;
+
+        /// <summary>对话内容。</summary>
+        public DialogueSequence sequence = new DialogueSequence();
+
+        /// <summary>可选：覆盖发言者 DuckovDialogueActor.id。为空时按 NPC 配置回退。</summary>
+        public string? actorId;
+
+        public QuestDialogue(Identifier npcId, DialogueSequence sequence, string? actorId = null)
+        {
+            this.npcId = npcId;
+            this.sequence = sequence;
+            this.actorId = actorId;
+        }
     }
 
     public abstract class TaskData

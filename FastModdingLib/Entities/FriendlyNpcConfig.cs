@@ -37,6 +37,12 @@ namespace FeatherMod
         /// <summary>DuckovDialogueActor.id——引用已有对话角色（用于 NodeCanvas DialogueTree）。</summary>
         public string ActorId = "";
 
+        /// <summary>
+        /// 对话 UI 指示器偏移（DuckovDialogueActor.offset，世界空间 Y 轴高度）。
+        /// null 时使用原版值 (0, 1.25, 0)（与原版 Actor_Jeff 一致）。
+        /// </summary>
+        public Vector3? DialogueOffset;
+
         /// <summary>NPC 角色类型（决定交互行为）。</summary>
         public NpcRole Role = NpcRole.None;
 

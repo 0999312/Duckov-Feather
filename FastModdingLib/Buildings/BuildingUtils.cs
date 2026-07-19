@@ -23,6 +23,28 @@ namespace FeatherMod
         /// <summary>暴露给 RegisterBootstrap 和 Patch 层用于注册到元表和查询。</summary>
         public static BuildingRegistry Registry => _buildingRegistry;
 
+        /// <summary>
+        /// 建筑 prefab 的 inactive 容器。代码创建的 prefab 必须跨场景存活
+        /// （DontDestroyOnLoad），但 active 的 prefab 会被加载界面 Curtain 相机
+        /// （CullingMask=Everything，DepthOnly）渲染，导致"建筑出现在加载界面"。
+        /// 挂到 inactive 容器下：prefab.activeSelf 保持 true（Instantiate 的实例正常激活），
+        /// 但 activeInHierarchy=false（prefab 本身不渲染，与原版 asset prefab 语义一致）。
+        /// </summary>
+        private static GameObject? _prefabHolder;
+        private static GameObject PrefabHolder
+        {
+            get
+            {
+                if (_prefabHolder == null)
+                {
+                    _prefabHolder = new GameObject("FML_BuildingPrefabs");
+                    _prefabHolder.SetActive(false);
+                    UnityEngine.Object.DontDestroyOnLoad(_prefabHolder);
+                }
+                return _prefabHolder;
+            }
+        }
+
         /// <summary>初始化：将 BuildingRegistry 注册到 RegistryManager 元表。</summary>
         internal static void Init()
         {
@@ -54,6 +76,9 @@ namespace FeatherMod
 
             // Prefab 需跨场景存活（纯代码创建的 GameObject 在场景切换时会被销毁）
             UnityEngine.Object.DontDestroyOnLoad(prefab.gameObject);
+            // 挂到 inactive 容器下：prefab 本体不渲染（修复加载界面 Curtain 相机误渲染），
+            // Instantiate 出的实例 activeSelf=true 不受影响，正常显示。
+            prefab.gameObject.transform.SetParent(PrefabHolder.transform, false);
 
             // 仅将 prefab 写入原生 collection.prefabs（游戏 BeginPlacing 直接遍历此列表取 prefab），
             // BuildingInfo 不写 infos（由 Harmony GetBuildingsToDisplay_Postfix 追加，避免双注册）
@@ -336,7 +361,7 @@ namespace FeatherMod
             var existing = UnityEngine.Object.FindObjectsOfType<Building>();
             foreach (var b in existing)
             {
-                if (b != null && b.data.Info.id == path)
+                if (b != null && b.data != null && b.data.Info.id == path)
                 {
                     try { callback?.Invoke(b); }
                     catch (Exception e) { Debug.LogError($"[BuildingUtils.OnBuildingBuilt] replay callback for '{buildingId}' threw: {e}"); }

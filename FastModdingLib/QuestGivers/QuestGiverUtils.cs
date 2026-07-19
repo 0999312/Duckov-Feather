@@ -41,9 +41,17 @@ namespace FeatherMod
 
             // 订阅语言切换事件：QuestGiver 显示名本地化键需随语言刷新
             EventBusManager.Instance.Sync.Register<LanguageChangedEvent>(OnLanguageChanged);
+            // 订阅语言文件加载完成：注册时若翻译未就绪（ToPlainText 返回 *key* 包裹形式），
+            // override 会被推迟——I18n 加载语言文件后补一次刷新，确保 Character_{int} 及时生效。
+            I18n.OnLanguageFileLoaded += OnI18nLoaded;
         }
 
         private static void OnLanguageChanged(LanguageChangedEvent evt)
+        {
+            _registry.RefreshDisplayNameOverrides();
+        }
+
+        private static void OnI18nLoaded()
         {
             _registry.RefreshDisplayNameOverrides();
         }
@@ -155,11 +163,34 @@ namespace FeatherMod
                 if (quest != null && quest.ID == questIntId)
                 {
                     quest.questGiverID = (QuestGiverID)giverIntId;
+                    RefreshQuestGiverIndicators(giverIntId);
                     Debug.Log($"[FML] Bound quest {questId} to quest giver {questGiverId}");
                     return true;
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// 刷新场景中该 giver 的 QuestGiver 组件的任务缓存与 "!" 指示器。
+        /// <see cref="QuestGiver._possibleQuests"/> 为 lazy 缓存且不会自行失效，
+        /// BindQuest 后若不清理，<c>AnyQuestAvaliable()</c> 永远拿到旧列表导致指示器不显示。
+        /// </summary>
+        private static void RefreshQuestGiverIndicators(int giverIntId)
+        {
+            foreach (var qg in UnityEngine.Object.FindObjectsOfType<QuestGiver>(true))
+            {
+                if (qg == null || (int)qg.questGiverID != giverIntId) continue;
+                // Publicizer 已公开字段，直接清缓存（非反射）
+                qg._possibleQuests = null;
+                // 重启激活状态触发 Start() → RefreshInspectionIndicator()
+                var go = qg.gameObject;
+                if (go.activeSelf)
+                {
+                    go.SetActive(false);
+                    go.SetActive(true);
+                }
+            }
         }
 
         // ═══════════════════════════════════════════════════

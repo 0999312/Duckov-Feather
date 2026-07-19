@@ -32,10 +32,10 @@ namespace FeatherMod
         private static Dictionary<Identifier, string> _ownerCache;
         private static bool _initialized;
 
-        // ── 原版小明（SpecialAttachment_XiaoMing.prefab）交互标记偏移值 ──
-        private static readonly Vector3 ShopMarkerOffset = new Vector3(0f, 1.37f, 0f);   // 主交互（商店）头顶标记
-        private static readonly Vector3 QuestMarkerOffset = new Vector3(0f, 1.37f, 0f);  // 任务给予者标记（"!" 在其上再 +0.5m）
-        private static readonly Vector3 PerkMarkerOffset = new Vector3(0f, 1.37f, 0f);   // 技能树标记
+        // ── 交互标记偏移（参照原版小明 Interact_Quest ≈1.37m 微调）──
+        private static readonly Vector3 ShopMarkerOffset = new Vector3(0f, 1.4f, 0f);   // 主交互（商店）头顶标记
+        private static readonly Vector3 QuestMarkerOffset = new Vector3(0f, 1.4f, 0f);  // 任务给予者标记（"!" 在其上再 +0.5m）
+        private static readonly Vector3 PerkMarkerOffset = new Vector3(0f, 1.4f, 0f);   // 技能树标记
         private const long DefaultShopRefreshTicks = 6000000000L; // 原版小明：库存刷新间隔 10 分钟
 
         // NPC save/restore persistence
@@ -49,6 +49,8 @@ namespace FeatherMod
             public string path;
             public float posX, posY, posZ;
             public float rotX, rotY, rotZ, rotW;
+            /// <summary>生成时所属场景（子场景 ID；空串 = 主场景/基地）。旧存档无此字段 → null，按主场景处理。</summary>
+            public string scene;
         }
 
         public static SimpleRegistry<GameObject> Registry => _registry;
@@ -86,6 +88,11 @@ namespace FeatherMod
             {
                 EventBusManager.Instance.Sync.Register<CollectSaveDataEvent>(OnCollectSaveData);
                 EventBusManager.Instance.Sync.Register<LevelInitializedEvent>(OnLevelInitialized);
+                // 读档 / 场景切换恢复：LevelInitializedEvent 仅新游戏触发；
+                // 主场景加载完成（读档回基地）与进入子场景（进出建筑）也需恢复 NPC，
+                // 对齐原版 XiaoMing——进入存档时自动在建筑确定的原生成点位重新出现。
+                EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoaded);
+                EventBusManager.Instance.Sync.Register<SceneLoadFinishedEvent>(OnSubSceneLoaded);
             }
             catch (Exception ex)
             {
@@ -94,6 +101,8 @@ namespace FeatherMod
         }
 
         private static void OnLevelInitialized(LevelInitializedEvent evt) { RestoreNpcSpawns(); }
+        private static void OnMainSceneLoaded(MainSceneLoadedEvent evt) { RestoreNpcSpawns(); }
+        private static void OnSubSceneLoaded(SceneLoadFinishedEvent evt) { RestoreNpcSpawns(); }
         private static void OnCollectSaveData(CollectSaveDataEvent evt) { /* PersistNpcSpawn already saves in real-time */ }
 
         // ═══════════════════════════════════════════════════
@@ -409,7 +418,8 @@ namespace FeatherMod
                 {
                     domain = id.Domain, path = id.Path,
                     posX = pos.x, posY = pos.y, posZ = pos.z,
-                    rotX = rot.x, rotY = rot.y, rotZ = rot.z, rotW = rot.w
+                    rotX = rot.x, rotY = rot.y, rotZ = rot.z, rotW = rot.w,
+                    scene = GetCurrentSceneKey()
                 });
                 SavesSystem.Save(NpcSaveKey, entries);
             }
@@ -417,6 +427,18 @@ namespace FeatherMod
             {
                 Debug.LogWarning($"[FML FriendlyNpc] Failed to persist spawn data for '{id}': {ex.Message}");
             }
+        }
+
+        /// <summary>当前场景标识：子场景 ID（MultiSceneCore.ActiveSubSceneID）；主场景返回空串。</summary>
+        private static string GetCurrentSceneKey()
+        {
+            try
+            {
+                var sub = Duckov.Scenes.MultiSceneCore.ActiveSubSceneID;
+                if (!string.IsNullOrEmpty(sub)) return sub;
+            }
+            catch { }
+            return string.Empty;
         }
 
         private static void RemoveNpcFromSave(Identifier id)
@@ -450,19 +472,28 @@ namespace FeatherMod
             {
                 var entries = LoadNpcSpawnEntries();
                 if (entries.Count == 0) return;
-                Debug.Log($"[FML FriendlyNpc] Restoring {entries.Count} saved NPC(s)...");
+                string currentScene = GetCurrentSceneKey();
+                int restored = 0;
                 foreach (var entry in entries)
                 {
+                    // 场景过滤：仅在 NPC 所属场景加载时生成。
+                    // 旧存档无 scene 字段（null/空）→ 视为基地（主场景）NPC，仅在主场景恢复。
+                    bool sceneMatch = string.IsNullOrEmpty(entry.scene)
+                        ? string.IsNullOrEmpty(currentScene)
+                        : entry.scene == currentScene;
+                    if (!sceneMatch) continue;
+
                     var id = new Identifier(entry.domain, entry.path);
+                    if (_registry != null && _registry.TryGet(id, out var existingGo) && existingGo != null)
+                        continue;
+
                     var pos = new Vector3(entry.posX, entry.posY, entry.posZ);
                     var rot = new Quaternion(entry.rotX, entry.rotY, entry.rotZ, entry.rotW);
-                    if (_registry != null && _registry.TryGet(id, out var existingGo) && existingGo != null)
-                    {
-                        Debug.Log($"[FML FriendlyNpc] NPC '{id}' already exists, skipping restore.");
-                        continue;
-                    }
                     SpawnFriendlyNpcAsync(id, pos, rot).Forget();
+                    restored++;
                 }
+                if (restored > 0)
+                    Debug.Log($"[FML FriendlyNpc] Restored {restored} NPC(s) in scene '{(currentScene == "" ? "<main>" : currentScene)}'.");
             }
             catch (Exception ex)
             {
@@ -585,6 +616,9 @@ namespace FeatherMod
                 var actor = go.AddComponent<DuckovDialogueActor>();
                 actor.id = config.ActorId;
                 actor.nameKey = !string.IsNullOrEmpty(config.DisplayNameKey) ? config.DisplayNameKey : config.ActorId;
+                // 原版 Actor_Jeff offset={0,1.25,0}——对话 UI 指示器（气泡）挂点。
+                // 不设置时默认 (0,0,0)，对话标识会贴在 NPC 脚部。
+                actor.offset = config.DialogueOffset ?? new Vector3(0f, 1.25f, 0f);
             }
 
             try
@@ -635,6 +669,11 @@ namespace FeatherMod
                     try
                     {
                         var questGo = CreateInteractChild(go, "Interact_Quest");
+                        // 先禁用再挂组件：对齐原版 prefab 语义——字段全部就绪后才触发 Awake/Start。
+                        // 否则 Awake 会以默认 interactMarkerOffset(0) 把 inspectionIndicator
+                        // 生成在 0.5m 膝盖处埋进模型，且 PossibleQuests 以默认 questGiverID
+                        // 缓存错误列表，导致任务 "!" 指示器不显示。
+                        questGo.SetActive(false);
                         questGiver = questGo.AddComponent<QuestGiver>();
                         questGiver.spawnPOI = false; // 与原版小明一致（spawnPOI 是地图 POI，非头顶 "!"）
                         questGiver.interactMarkerOffset = QuestMarkerOffset;
@@ -642,15 +681,11 @@ namespace FeatherMod
                         questGiver._overrideInteractNameKey = "UI_Interact_Quest";
                         questGiver.interactTime = 0f;
                         questGiver.finishWhenTimeOut = false;
-                        // Awake 中 inspectionIndicator 按 offset=0 生成在 0.5m 膝盖处（埋在模型里看不见），
-                        // 按原版 1.37+0.5=1.87m 头顶位置重新定位
-                        if (questGiver.inspectionIndicator != null)
-                        {
-                            questGiver.inspectionIndicator.transform.position =
-                                questGo.transform.TransformPoint(QuestMarkerOffset + Vector3.up * 0.5f);
-                        }
                         if (config.QuestGiverId != null)
                             BindQuestGiverToComponent(questGiver, config.QuestGiverId);
+                        // 激活后 Awake/Start 以正确字段执行：inspectionIndicator 自动定位到
+                        // interactMarkerOffset+0.5m 头顶处，RefreshInspectionIndicator 用正确 giverID 刷新。
+                        questGo.SetActive(true);
                     }
                     catch (Exception ex)
                     {
@@ -673,6 +708,8 @@ namespace FeatherMod
                                 "Register it via PerkTreeUtils.RegisterPerkTree() first, or reference a vanilla tree (e.g. Identifier(\"duckov\", \"PerkTree_Hacker\")).");
                         }
                         var perkGo = CreateInteractChild(go, "Interact_Skill");
+                        // 同 QuestGiver：先禁用再挂组件，字段就绪后再激活触发 Awake/Start。
+                        perkGo.SetActive(false);
                         perkInvoker = perkGo.AddComponent<PerkTreeUIInvoker>();
                         perkInvoker.perkTreeID = config.PerkTreeId!.Path;
                         perkInvoker.interactMarkerOffset = PerkMarkerOffset;
@@ -681,6 +718,7 @@ namespace FeatherMod
                         perkInvoker.interactTime = 0f;
                         perkInvoker.finishWhenTimeOut = true;
                         perkInvoker.coolTime = 0.2f;
+                        perkGo.SetActive(true);
                     }
                     catch (Exception ex)
                     {
@@ -806,10 +844,11 @@ namespace FeatherMod
 
             // 必须有 Collider，否则物理交互检测（OverlapSphere/Raycast）
             // 无法发现此子对象，导致 QuestGiver 等交互组件不可用。
+            // 尺寸对齐原版小明 Interact_Quest 子对象：size (2, 1.3, 2)，center (0, 0.5, 0)。
             var col = child.AddComponent<BoxCollider>();
             col.isTrigger = true;
             col.center = new Vector3(0f, 0.5f, 0f);
-            col.size = new Vector3(1.5f, 2.5f, 1.5f);
+            col.size = new Vector3(2f, 1.3f, 2f);
 
             return child;
         }
