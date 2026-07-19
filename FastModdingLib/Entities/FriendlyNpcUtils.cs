@@ -14,6 +14,7 @@ using Saves;
 using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -27,8 +28,9 @@ namespace FeatherMod
     public static class FriendlyNpcUtils
     {
         private static SimpleRegistry<GameObject> _registry;           // 运行时 NPC GameObject 注册表
-        private static SimpleRegistry<CharacterRandomPreset> _presetReg; // NPC 预设注册表
-        private static Dictionary<Identifier, FriendlyNpcConfig> _configCache; // 配置缓存（用于生成后挂载交互组件）
+        // ⚠ _presetReg 已删除。preset 存在于游戏全局列表 GameplayDataSettings.CharacterRandomPresetData.presets，
+        //   按 nameKey（= Identifier.Path）查找即可。Domain Reload 后全局列表自动持久化。
+        private static Dictionary<Identifier, FriendlyNpcConfig> _configCache; // 配置缓存（用于 modder 主动 spawn 路径）
         private static Dictionary<Identifier, string> _ownerCache;
         private static bool _initialized;
 
@@ -51,6 +53,18 @@ namespace FeatherMod
             public float rotX, rotY, rotZ, rotW;
             /// <summary>生成时所属场景（子场景 ID；空串 = 主场景/基地）。旧存档无此字段 → null，按主场景处理。</summary>
             public string scene;
+            // ── 恢复所需配置摘要（Domain Reload 后 _configCache 丢失时的自包含恢复数据源）──
+            /// <summary>NpcRole 组合标志位（int cast）。0 表示旧存档回退 _configCache。</summary>
+            public int roleFlags;
+            public string? shopId;
+            public string? questGiverIdentifier;
+            public string? perkTreeId;
+            public string? actorId;
+            public string? displayNameKey;
+            public bool autoFacePlayer;
+            public float facePlayerRange;
+            public bool invincible;
+            public bool hasProximityDialogue;
         }
 
         public static SimpleRegistry<GameObject> Registry => _registry;
@@ -68,7 +82,6 @@ namespace FeatherMod
             Debug.Log("[FML FriendlyNpc] Init: creating new registries (first-time or domain reload).");
 
             _registry = new SimpleRegistry<GameObject>();
-            _presetReg = new SimpleRegistry<CharacterRandomPreset>();
             _configCache = new Dictionary<Identifier, FriendlyNpcConfig>();
             _ownerCache = new Dictionary<Identifier, string>();
 
@@ -124,7 +137,7 @@ namespace FeatherMod
             string owner = modid ?? id.Domain;
 
             var preset = BuildFriendlyPreset(id, config);
-            _presetReg.Set(id, preset, owner);
+            // preset 已注入游戏全局列表（FindPresetInGlobalList 按 nameKey 查找），无需独立 _presetReg
             _configCache[id] = config;
             _ownerCache[id] = owner;
 
@@ -150,12 +163,19 @@ namespace FeatherMod
         public static async UniTask<GameObject?> SpawnFriendlyNpcAsync(
             Identifier id, Vector3? position = null, Quaternion? rotation = null)
         {
-            if (!_presetReg.TryGet(id, out var preset))
+            // 优先从游戏全局 preset 列表查找（Domain Reload 后仍存在）
+            var preset = FindPresetInGlobalList(id.Path);
+            if (preset == null && _configCache.TryGetValue(id, out var cachedCfg))
             {
-                bool configExists = _configCache.TryGetValue(id, out _);
-                bool ownerExists = _ownerCache.TryGetValue(id, out _);
-                Debug.LogError($"[FML FriendlyNpc] Preset '{id}' not registered. " +
-                    $"(configInCache={configExists}, ownerInCache={ownerExists}, initialized={_initialized}). " +
+                // preset 不在全局列表但 config 在缓存 → 自动重新注册 preset
+                preset = BuildFriendlyPreset(id, cachedCfg);
+                var presets = GameplayDataSettings.CharacterRandomPresetData.presets;
+                if (presets != null && !presets.Contains(preset))
+                    presets.Add(preset);
+            }
+            if (preset == null)
+            {
+                Debug.LogError($"[FML FriendlyNpc] Preset '{id}' not found in global list. " +
                     $"Call RegisterFriendlyNpc first.");
                 return null;
             }
@@ -378,10 +398,8 @@ namespace FeatherMod
             }
             _registry.Remove(id);
             RemoveNpcFromSave(id);
-            // 注意：不删除 _presetReg / _configCache / _ownerCache。
-            // preset 是注册数据，应在 mod 生命周期内持久存在；
-            // 建筑回收/重放时不应丢失 preset（否则重建时无法生成 NPC）。
-            // 批量清理由 RemoveAllNpcs 在 mod 卸载时负责。
+            // 注意：不删除 _configCache / _ownerCache。
+            // preset 在游戏全局列表中持久存在，mod 卸载时由 RemoveAllNpcs 清理。
             return true;
         }
 
@@ -390,8 +408,28 @@ namespace FeatherMod
         {
             Debug.Log($"[FML FriendlyNpc] RemoveAllNpcs modid='{modid}' called. Stack: {Environment.StackTrace}");
             int count = _registry.RemoveAllByOwner(modid);
-            int presetRemoved = _presetReg.RemoveAllByOwner(modid);
-            Debug.Log($"[FML FriendlyNpc] RemoveAllNpcs modid='{modid}': removed {count} GO instances, {presetRemoved} presets.");
+            // 从游戏全局 preset 列表移除该 mod 注册的 preset（按 nameKey 匹配）
+            int presetRemoved = 0;
+            try
+            {
+                var presets = GameplayDataSettings.CharacterRandomPresetData?.presets;
+                if (presets != null)
+                {
+                    var presetRemoveList = new List<CharacterRandomPreset>();
+                    foreach (var kvp in _ownerCache)
+                    {
+                        if (kvp.Value == modid)
+                            presetRemoveList.AddRange(presets.Where(p => p != null && p.nameKey == kvp.Key.Path));
+                    }
+                    foreach (var p in presetRemoveList)
+                    {
+                        presets.Remove(p);
+                        presetRemoved++;
+                    }
+                }
+            }
+            catch { }
+            Debug.Log($"[FML FriendlyNpc] RemoveAllNpcs modid='{modid}': removed {count} GO instances, {presetRemoved} presets from global list.");
             // 清理 config/owner 缓存
             var toRemove = new List<Identifier>();
             foreach (var kvp in _ownerCache)
@@ -414,13 +452,31 @@ namespace FeatherMod
             {
                 var entries = LoadNpcSpawnEntries();
                 entries.RemoveAll(e => e.domain == id.Domain && e.path == id.Path);
-                entries.Add(new NpcSpawnEntry
+
+                var entry = new NpcSpawnEntry
                 {
                     domain = id.Domain, path = id.Path,
                     posX = pos.x, posY = pos.y, posZ = pos.z,
                     rotX = rot.x, rotY = rot.y, rotZ = rot.z, rotW = rot.w,
                     scene = GetCurrentSceneKey()
-                });
+                };
+
+                // 写入配置摘要（Domain Reload 后自包含恢复所需）
+                if (_configCache.TryGetValue(id, out var cfg))
+                {
+                    entry.roleFlags = (int)cfg.Role;
+                    entry.shopId = cfg.ShopId;
+                    entry.questGiverIdentifier = cfg.QuestGiverId?.ToString();
+                    entry.perkTreeId = cfg.PerkTreeId?.Path;
+                    entry.actorId = cfg.ActorId;
+                    entry.displayNameKey = cfg.DisplayNameKey;
+                    entry.autoFacePlayer = cfg.AutoFacePlayer;
+                    entry.facePlayerRange = cfg.FacePlayerRange;
+                    entry.invincible = cfg.Invincible;
+                    entry.hasProximityDialogue = cfg.ProximityDialogue != null && cfg.ProximityDialogue.Lines.Length > 0;
+                }
+
+                entries.Add(entry);
                 SavesSystem.Save(NpcSaveKey, entries);
             }
             catch (Exception ex)
@@ -487,9 +543,8 @@ namespace FeatherMod
                     if (_registry != null && _registry.TryGet(id, out var existingGo) && existingGo != null)
                         continue;
 
-                    var pos = new Vector3(entry.posX, entry.posY, entry.posZ);
-                    var rot = new Quaternion(entry.rotX, entry.rotY, entry.rotZ, entry.rotW);
-                    SpawnFriendlyNpcAsync(id, pos, rot).Forget();
+                    // ── 自包含恢复：preset 从全局列表查找，config 从存档摘要或 _configCache 获取 ──
+                    SpawnFriendlyNpcFromSave(entry, id).Forget();
                     restored++;
                 }
                 if (restored > 0)
@@ -498,6 +553,60 @@ namespace FeatherMod
             catch (Exception ex)
             {
                 Debug.LogWarning($"[FML FriendlyNpc] Failed to restore NPC spawns: {ex.Message}");
+            }
+        }
+
+        /// <summary>从存档条目自包含恢复 NPC（不依赖 _configCache）。</summary>
+        private static async UniTask SpawnFriendlyNpcFromSave(NpcSpawnEntry entry, Identifier id)
+        {
+            try
+            {
+                // 1. 获取 preset：全局列表 → 自动注册
+                var preset = FindPresetInGlobalList(id.Path);
+                if (preset == null && _configCache.TryGetValue(id, out var cachedCfg))
+                {
+                    preset = BuildFriendlyPreset(id, cachedCfg);
+                    var presets = GameplayDataSettings.CharacterRandomPresetData?.presets;
+                    if (presets != null && !presets.Contains(preset))
+                        presets.Add(preset);
+                }
+                if (preset == null)
+                {
+                    Debug.LogWarning($"[FML FriendlyNpc] Restore skipped for '{id}': preset not in global list and no config cached. Mod may need to re-register.");
+                    return;
+                }
+
+                // 2. 生成角色
+                Vector3 pos = new Vector3(entry.posX, entry.posY, entry.posZ);
+                Quaternion rot = new Quaternion(entry.rotX, entry.rotY, entry.rotZ, entry.rotW);
+                Vector3 dir = rot * Vector3.forward;
+                int sceneBuildIndex = UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex;
+
+                var method = typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync",
+                    new Type[] { typeof(Vector3), typeof(Vector3), typeof(int), typeof(CharacterSpawnerGroup), typeof(bool) });
+                if (method == null) { Debug.LogError("[FML FriendlyNpc] CreateCharacterAsync not found."); return; }
+
+                var uniTaskObj = method.Invoke(preset, new object[] { pos, dir, sceneBuildIndex, null, false });
+                var character = await (UniTask<CharacterMainControl>)uniTaskObj;
+
+                // 3. 从存档摘要重建交互组件
+                AttachInteractionComponentsFromSave(character.gameObject, id, entry);
+
+                // 4. 设置无敌
+                if (entry.invincible)
+                {
+                    var health = character.GetComponent<global::Health>();
+                    if (health != null) health.invincible = true;
+                }
+
+                string owner = _ownerCache.TryGetValue(id, out var o) ? o : id.Domain;
+                _registry.Set(id, character.gameObject, owner);
+                EventBusManager.Instance.Sync.Post(new NpcCreatedEvent(id));
+                Debug.Log($"[FML FriendlyNpc] Restored '{id}' from save at {pos}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[FML FriendlyNpc] Failed to restore '{id}' from save: {ex.Message}");
             }
         }
 
@@ -632,14 +741,23 @@ namespace FeatherMod
                 QuestGiver? questGiver = null;
                 PerkTreeUIInvoker? perkInvoker = null;
 
-                // ── Merchant：StockShop 数据组件 + NpcShopInteract 交互入口 ──
+                // ── Merchant：Interact_Shop 子 GO（对齐 QuestGiver/PerkTree 模式 ——
+                //     先 inactive 再挂组件再 active，确保 StockShop.Awake 在 merchantID 就绪后运行，
+                //     消除 "未配置商人 Albert" 日志）──
                 if (isMerchant)
                 {
-                    var shop = go.AddComponent<global::Duckov.Economy.StockShop>();
+                    var shopGo = new GameObject("Interact_Shop");
+                    shopGo.transform.SetParent(go.transform);
+                    shopGo.transform.localPosition = Vector3.zero;
+                    shopGo.transform.localRotation = Quaternion.identity;
+                    int shopLayer = LayerMask.NameToLayer("Interactable");
+                    if (shopLayer != -1) shopGo.layer = shopLayer;
+                    shopGo.SetActive(false); // Awake 不运行
+
+                    var shop = shopGo.AddComponent<global::Duckov.Economy.StockShop>();
                     if (!string.IsNullOrEmpty(config.ShopId))
                     {
                         shop.merchantID = config.ShopId;
-                        // 联动校验：merchant profile 需先经 ShopUtils.CreateMerchantProfile 注册
                         if (GameplayDataSettings.StockshopDatabase == null
                             || GameplayDataSettings.StockshopDatabase.GetMerchantProfile(config.ShopId) == null)
                         {
@@ -647,20 +765,19 @@ namespace FeatherMod
                                 "Call ShopUtils.CreateMerchantProfile() before SpawnFriendlyNpcAsync, or the shop will have no goods.");
                         }
                     }
-                    // 原版小明字段值（SpecialAttachment_XiaoMing.prefab）：
                     shop.DisplayNameKey = ResolveShopNameKey(config);
                     shop.accountAvaliable = config.ShopAccountAvaliable;
                     shop.returnCash = config.ShopReturnCash;
                     shop.sellFactor = config.ShopSellFactor;
                     shop.refreshAfterTimeSpan = DefaultShopRefreshTicks;
                     shop.refreshStockOnStart = false;
-                    // AddComponent 时 Awake 已用默认 merchantID("Albert") 跑过一次
-                    // InitializeEntries（查无此商人，entries 为空），此处按正确 merchantID 重初始化。
+
+                    shopInteract = shopGo.AddComponent<NpcShopInteract>();
+                    ConfigureShopInteract(shopInteract, shopGo);
+
+                    shopGo.SetActive(true); // Awake 现在运行，merchantID 已正确
                     shop.entries.Clear();
                     shop.InitializeEntries();
-
-                    shopInteract = go.AddComponent<NpcShopInteract>();
-                    ConfigureShopInteract(shopInteract, go);
                 }
 
                 // ── QuestGiver：独立子 GO 交互点（参照原版 Interact_Quest 子对象）──
@@ -762,6 +879,130 @@ namespace FeatherMod
             }
         }
 
+        /// <summary>从存档恢复时挂载交互组件（使用存档摘要，不依赖 _configCache）。</summary>
+        private static void AttachInteractionComponentsFromSave(GameObject go, Identifier id, NpcSpawnEntry entry)
+        {
+            // 对话角色
+            if (!string.IsNullOrEmpty(entry.actorId))
+            {
+                var actor = go.AddComponent<DuckovDialogueActor>();
+                actor.id = entry.actorId;
+                actor.nameKey = !string.IsNullOrEmpty(entry.displayNameKey) ? entry.displayNameKey : entry.actorId;
+                actor.offset = new Vector3(0f, 1.25f, 0f);
+            }
+
+            try
+            {
+                var role = (NpcRole)entry.roleFlags;
+                if (role == 0) return; // 旧存档无 roleFlags → 略过交互组件（下次 spawn 会补全）
+
+                bool isMerchant = role.HasFlag(NpcRole.Merchant);
+                bool isQuestGiver = role.HasFlag(NpcRole.QuestGiver);
+                bool hasPerkTree = entry.perkTreeId != null;
+
+                NpcShopInteract? shopInteract = null;
+                QuestGiver? questGiver = null;
+                PerkTreeUIInvoker? perkInvoker = null;
+
+                // ── Merchant：Interact_Shop 子 GO（避免 StockShop.Awake 在 merchantID 未就绪时运行）──
+                if (isMerchant && !string.IsNullOrEmpty(entry.shopId))
+                {
+                    var shopGo = new GameObject("Interact_Shop");
+                    shopGo.transform.SetParent(go.transform);
+                    shopGo.transform.localPosition = Vector3.zero;
+                    shopGo.transform.localRotation = Quaternion.identity;
+                    int layer = LayerMask.NameToLayer("Interactable");
+                    if (layer != -1) shopGo.layer = layer;
+                    shopGo.SetActive(false);
+
+                    var shop = shopGo.AddComponent<global::Duckov.Economy.StockShop>();
+                    shop.merchantID = entry.shopId;
+                    shop.DisplayNameKey = !string.IsNullOrEmpty(entry.displayNameKey) ? entry.displayNameKey : $"MerchantName_{entry.shopId}";
+                    shop.accountAvaliable = true;
+                    shop.returnCash = false;
+                    shop.sellFactor = 1f;
+                    shop.refreshAfterTimeSpan = DefaultShopRefreshTicks;
+                    shop.refreshStockOnStart = false;
+
+                    var si = shopGo.AddComponent<NpcShopInteract>();
+                    si.interactMarkerOffset = ShopMarkerOffset;
+                    si.overrideInteractName = true;
+                    si._overrideInteractNameKey = "UI_Trade";
+                    si.zoomIn = false;
+                    si.interactTime = 0.2f;
+                    si.coolTime = 0.2f;
+                    var col = shopGo.AddComponent<SphereCollider>();
+                    col.isTrigger = false;
+                    col.radius = 4f;
+                    col.center = Vector3.zero;
+                    col.gameObject.layer = layer != -1 ? layer : 0;
+                    si.interactCollider = col;
+
+                    shopGo.SetActive(true);
+                    shop.entries.Clear();
+                    shop.InitializeEntries();
+                    shopInteract = si;
+                }
+
+                // ── QuestGiver ──
+                if (isQuestGiver && !string.IsNullOrEmpty(entry.questGiverIdentifier))
+                {
+                    try
+                    {
+                        var questGo = CreateInteractChild(go, "Interact_Quest");
+                        questGo.SetActive(false);
+                        questGiver = questGo.AddComponent<QuestGiver>();
+                        questGiver.spawnPOI = false;
+                        questGiver.interactMarkerOffset = QuestMarkerOffset;
+                        questGiver.overrideInteractName = true;
+                        questGiver._overrideInteractNameKey = "UI_Interact_Quest";
+                        questGiver.interactTime = 0f;
+                        questGiver.finishWhenTimeOut = false;
+                        var qgId = Identifier.Parse(entry.questGiverIdentifier);
+                        if (qgId != null)
+                            BindQuestGiverToComponent(questGiver, qgId);
+                        questGo.SetActive(true);
+                    }
+                    catch { questGiver = null; }
+                }
+
+                // ── PerkTree ──
+                if (hasPerkTree)
+                {
+                    try
+                    {
+                        var perkGo = CreateInteractChild(go, "Interact_Skill");
+                        perkGo.SetActive(false);
+                        perkInvoker = perkGo.AddComponent<PerkTreeUIInvoker>();
+                        perkInvoker.perkTreeID = entry.perkTreeId!;
+                        perkInvoker.interactMarkerOffset = PerkMarkerOffset;
+                        perkInvoker.overrideInteractName = true;
+                        perkInvoker._overrideInteractNameKey = entry.perkTreeId!;
+                        perkInvoker.interactTime = 0f;
+                        perkInvoker.finishWhenTimeOut = true;
+                        perkInvoker.coolTime = 0.2f;
+                        perkGo.SetActive(true);
+                    }
+                    catch { perkInvoker = null; }
+                }
+
+                SetupInteractionGroup(shopInteract, questGiver, perkInvoker);
+
+                if (role.HasFlag(NpcRole.Companion))
+                    go.AddComponent<global::InteractablePMC>();
+
+                if (entry.autoFacePlayer)
+                {
+                    var facePlayer = go.AddComponent<NpcFacePlayer>();
+                    facePlayer.FollowRange = entry.facePlayerRange;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[FML FriendlyNpc] Failed to attach components from save for '{id}': {ex.Message}");
+            }
+        }
+
         /// <summary>按原版小明配置商店主交互体：标记偏移、交互名、缩放、冷却与检测碰撞体。</summary>
         private static void ConfigureShopInteract(NpcShopInteract interact, GameObject go)
         {
@@ -772,11 +1013,14 @@ namespace FeatherMod
             interact.interactTime = 0.2f;
             interact.coolTime = 0.2f;
             // 原版使用 radius=4 的专用 SphereCollider 做交互检测。
-            // 显式指定，避免 Awake 回退拾取到角色自身胶囊体。
+            // 显式指定并设置 Interactable 层，避免 Awake 回退拾取到角色自身胶囊体
+            // 以及 CA_Interact.SearchInteractableAround OverlapSphere 扫描不到。
             var col = go.AddComponent<SphereCollider>();
             col.isTrigger = false;
             col.radius = 4f;
             col.center = Vector3.zero;
+            int interactLayer = LayerMask.NameToLayer("Interactable");
+            if (interactLayer != -1) col.gameObject.layer = interactLayer;
             interact.interactCollider = col;
         }
 
@@ -851,6 +1095,27 @@ namespace FeatherMod
             col.size = new Vector3(2f, 1.3f, 2f);
 
             return child;
+        }
+
+        /// <summary>从游戏全局 preset 列表按 nameKey 查找 FML 注册的 preset。</summary>
+        /// <remarks>
+        /// FML 在 BuildFriendlyPreset 中将 preset.nameKey 设为 Identifier.Path（或 DisplayNameKey），
+        /// Domain Reload 后全局列表自动持久化，此方法不依赖 _presetReg。
+        /// </remarks>
+        private static CharacterRandomPreset? FindPresetInGlobalList(string nameKey)
+        {
+            try
+            {
+                var presets = GameplayDataSettings.CharacterRandomPresetData?.presets;
+                if (presets == null) return null;
+                foreach (var p in presets)
+                {
+                    if (p != null && p.nameKey == nameKey)
+                        return p;
+                }
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>按 nameKey 查找已生成的 CharacterMainControl（回退方案）。</summary>
