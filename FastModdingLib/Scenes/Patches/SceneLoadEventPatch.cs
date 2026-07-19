@@ -19,12 +19,13 @@ namespace FeatherMod
                     BindingFlags.Public | BindingFlags.Static);
                 var unloading = typeof(MultiSceneCore).GetEvent("OnSubSceneWillBeUnloaded",
                     BindingFlags.Public | BindingFlags.Static);
-                loaded?.AddEventHandler(null, (Action)OnLoaded);
-                unloading?.AddEventHandler(null, (Action)OnUnloading);
+                // 原生签名：Action<MultiSceneCore, Scene>
+                loaded?.AddEventHandler(null, (Action<MultiSceneCore, Scene>)OnLoaded);
+                unloading?.AddEventHandler(null, (Action<MultiSceneCore, Scene>)OnUnloading);
             }
             catch (Exception e) { Debug.LogError($"[FML Scenes] {e}"); _patched = false; }
         }
-        static void OnLoaded()
+        static void OnLoaded(MultiSceneCore core, Scene scene)
         {
             try
             {
@@ -34,7 +35,7 @@ namespace FeatherMod
             }
             catch { }
         }
-        static void OnUnloading()
+        static void OnUnloading(MultiSceneCore core, Scene scene)
         {
             try
             {

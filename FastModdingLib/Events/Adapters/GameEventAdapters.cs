@@ -99,11 +99,11 @@ namespace FeatherMod.Events.Adapters
 
             // QuestManager.OnTaskFinishedEvent → QuestTaskFinishedEvent（仅观察）
             // 原生签名：Action<QuestTask>（PLAN §6 表）
-            WireDynamicEvent("QuestManager", "OnTaskFinishedEvent", nameof(OnQuestTaskFinishedBridge));
+            WireDynamicEvent("Duckov.Quests.QuestManager", "OnTaskFinishedEvent", nameof(OnQuestTaskFinishedBridge));
 
             // SavesSystem.OnCollectSaveData → CollectSaveDataEvent（仅观察）
             // 原生签名待确认：推测 Action<SaveData>（1 参）
-            WireDynamicEvent("SavesSystem", "OnCollectSaveData", nameof(OnCollectSaveDataBridge));
+            WireDynamicEvent("Saves.SavesSystem", "OnCollectSaveData", nameof(OnCollectSaveDataBridge));
 
             // SavesCounter.OnKillCountChanged → KillCountChangedEvent（仅观察）
             // 原生签名：Action<int>（PLAN §6 表）

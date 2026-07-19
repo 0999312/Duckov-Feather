@@ -75,7 +75,6 @@ namespace FeatherMod
         {
             if (_initialized)
             {
-                Debug.Log($"[FML FriendlyNpc] Init called but already initialized (no-op). Stack: {Environment.StackTrace}");
                 return;
             }
             _initialized = true;
@@ -456,7 +455,6 @@ namespace FeatherMod
         /// <summary>按 Identifier 销毁 NPC 运行时实例（保留 preset/config，允许重建）。</summary>
         public static bool RemoveNpc(Identifier id)
         {
-            Debug.Log($"[FML FriendlyNpc] RemoveNpc '{id}' called. Stack: {Environment.StackTrace}");
             if (_registry.TryGet(id, out var go) && go != null)
             {
                 // DuckovDialogueActor.OnDisable() 自动 Unregister——销毁 GO 即可
@@ -472,7 +470,6 @@ namespace FeatherMod
         /// <summary>批量卸载指定 mod 的全部 NPC。</summary>
         public static int RemoveAllNpcs(string modid)
         {
-            Debug.Log($"[FML FriendlyNpc] RemoveAllNpcs modid='{modid}' called. Stack: {Environment.StackTrace}");
             int count = _registry.RemoveAllByOwner(modid);
             // 从游戏全局 preset 列表移除该 mod 注册的 preset（按 nameKey 匹配）
             int presetRemoved = 0;
