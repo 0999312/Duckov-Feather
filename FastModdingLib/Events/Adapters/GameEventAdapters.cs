@@ -327,9 +327,10 @@ namespace FeatherMod.Events.Adapters
             EventBusManager.Instance.Sync.Post(new QuestTaskFinishedEvent(task));
         }
 
-        private static void OnCollectSaveDataBridge(object saveData)
+        private static void OnCollectSaveDataBridge()
         {
-            EventBusManager.Instance.Sync.Post(new CollectSaveDataEvent(saveData));
+            // 原生事件无参（反编译确认：SavesSystem.OnCollectSaveData 为无参 Action）
+            EventBusManager.Instance.Sync.Post(new CollectSaveDataEvent(null));
         }
 
         private static void OnKillCountChangedBridge(object total)
