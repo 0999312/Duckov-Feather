@@ -116,7 +116,62 @@ namespace FeatherMod
         private static void OnLevelInitialized(LevelInitializedEvent evt) { RestoreNpcSpawns(); }
         private static void OnMainSceneLoaded(MainSceneLoadedEvent evt) { RestoreNpcSpawns(); }
         private static void OnSubSceneLoaded(SceneLoadFinishedEvent evt) { RestoreNpcSpawns(); }
-        private static void OnCollectSaveData(CollectSaveDataEvent evt) { /* PersistNpcSpawn already saves in real-time */ }
+        private static void OnCollectSaveData(CollectSaveDataEvent evt)
+        {
+            // 在游戏正式 save pipeline 中重新收集所有活跃 NPC 的位置并写入存档。
+            // 仅靠 spawn 时的实时 SavesSystem.Save() 不足——不同 ES3 实现可能
+            // 在 CollectSaveData 阶段才真正 flush 到文件，实时写入的数据会被丢弃。
+            try
+            {
+                var entries = LoadNpcSpawnEntries();
+                // 清除旧条目，用当前 _registry 中活跃 NPC 的位置重建
+                entries.Clear();
+                if (_registry != null)
+                {
+                    foreach (var kvp in _registry)
+                    {
+                        if (kvp.Value != null && kvp.Value)
+                        {
+                            var go = kvp.Value;
+                            var id = kvp.Key;
+                            entries.Add(BuildNpcSpawnEntry(id, go.transform.position, go.transform.rotation));
+                        }
+                    }
+                }
+                SavesSystem.Save(NpcSaveKey, entries);
+                Debug.Log($"[FML FriendlyNpc] Saved {entries.Count} NPC(s) during save collection.");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[FML FriendlyNpc] Failed to save NPCs during save collection: {ex.Message}");
+            }
+        }
+
+        /// <summary>从 Identifier + position/rotation 构建 NpcSpawnEntry（含配置摘要）。</summary>
+        private static NpcSpawnEntry BuildNpcSpawnEntry(Identifier id, Vector3 pos, Quaternion rot)
+        {
+            var entry = new NpcSpawnEntry
+            {
+                domain = id.Domain, path = id.Path,
+                posX = pos.x, posY = pos.y, posZ = pos.z,
+                rotX = rot.x, rotY = rot.y, rotZ = rot.z, rotW = rot.w,
+                scene = GetCurrentSceneKey()
+            };
+            if (_configCache.TryGetValue(id, out var cfg))
+            {
+                entry.roleFlags = (int)cfg.Role;
+                entry.shopId = cfg.ShopId;
+                entry.questGiverIdentifier = cfg.QuestGiverId?.ToString();
+                entry.perkTreeId = cfg.PerkTreeId?.Path;
+                entry.actorId = cfg.ActorId;
+                entry.displayNameKey = cfg.DisplayNameKey;
+                entry.autoFacePlayer = cfg.AutoFacePlayer;
+                entry.facePlayerRange = cfg.FacePlayerRange;
+                entry.invincible = cfg.Invincible;
+                entry.hasProximityDialogue = cfg.ProximityDialogue != null && cfg.ProximityDialogue.Lines.Length > 0;
+            }
+            return entry;
+        }
 
         // ═══════════════════════════════════════════════════
         //  新版 API：Register → SpawnAsync（推荐）
@@ -452,31 +507,7 @@ namespace FeatherMod
             {
                 var entries = LoadNpcSpawnEntries();
                 entries.RemoveAll(e => e.domain == id.Domain && e.path == id.Path);
-
-                var entry = new NpcSpawnEntry
-                {
-                    domain = id.Domain, path = id.Path,
-                    posX = pos.x, posY = pos.y, posZ = pos.z,
-                    rotX = rot.x, rotY = rot.y, rotZ = rot.z, rotW = rot.w,
-                    scene = GetCurrentSceneKey()
-                };
-
-                // 写入配置摘要（Domain Reload 后自包含恢复所需）
-                if (_configCache.TryGetValue(id, out var cfg))
-                {
-                    entry.roleFlags = (int)cfg.Role;
-                    entry.shopId = cfg.ShopId;
-                    entry.questGiverIdentifier = cfg.QuestGiverId?.ToString();
-                    entry.perkTreeId = cfg.PerkTreeId?.Path;
-                    entry.actorId = cfg.ActorId;
-                    entry.displayNameKey = cfg.DisplayNameKey;
-                    entry.autoFacePlayer = cfg.AutoFacePlayer;
-                    entry.facePlayerRange = cfg.FacePlayerRange;
-                    entry.invincible = cfg.Invincible;
-                    entry.hasProximityDialogue = cfg.ProximityDialogue != null && cfg.ProximityDialogue.Lines.Length > 0;
-                }
-
-                entries.Add(entry);
+                entries.Add(BuildNpcSpawnEntry(id, pos, rot));
                 SavesSystem.Save(NpcSaveKey, entries);
             }
             catch (Exception ex)
