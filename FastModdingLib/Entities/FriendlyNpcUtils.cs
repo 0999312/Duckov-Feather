@@ -774,7 +774,9 @@ namespace FeatherMod
 
                     shopInteract = shopGo.AddComponent<NpcShopInteract>();
                     ConfigureShopInteract(shopInteract, shopGo);
-
+                    // Awake 中会 foreach otherInterablesInGroup，AddComponent 创建的实例该字段为 null，
+                    // 必须在 SetActive 前初始化为空列表，否则 NRE。
+                    shopInteract.otherInterablesInGroup = new List<InteractableBase>();
                     shopGo.SetActive(true); // Awake 现在运行，merchantID 已正确
                     shop.entries.Clear();
                     shop.InitializeEntries();
@@ -800,6 +802,8 @@ namespace FeatherMod
                         questGiver.finishWhenTimeOut = false;
                         if (config.QuestGiverId != null)
                             BindQuestGiverToComponent(questGiver, config.QuestGiverId);
+                        // Awake 中会 foreach otherInterablesInGroup，动态创建实例该字段为 null，预初始化为空。
+                        questGiver.otherInterablesInGroup = new List<InteractableBase>();
                         // 激活后 Awake/Start 以正确字段执行：inspectionIndicator 自动定位到
                         // interactMarkerOffset+0.5m 头顶处，RefreshInspectionIndicator 用正确 giverID 刷新。
                         questGo.SetActive(true);
@@ -835,6 +839,7 @@ namespace FeatherMod
                         perkInvoker.interactTime = 0f;
                         perkInvoker.finishWhenTimeOut = true;
                         perkInvoker.coolTime = 0.2f;
+                        perkInvoker.otherInterablesInGroup = new List<InteractableBase>();
                         perkGo.SetActive(true);
                     }
                     catch (Exception ex)
@@ -937,6 +942,7 @@ namespace FeatherMod
                     col.center = Vector3.zero;
                     col.gameObject.layer = layer != -1 ? layer : 0;
                     si.interactCollider = col;
+                    si.otherInterablesInGroup = new List<InteractableBase>();
 
                     shopGo.SetActive(true);
                     shop.entries.Clear();
@@ -961,6 +967,7 @@ namespace FeatherMod
                         var qgId = Identifier.Parse(entry.questGiverIdentifier);
                         if (qgId != null)
                             BindQuestGiverToComponent(questGiver, qgId);
+                        questGiver.otherInterablesInGroup = new List<InteractableBase>();
                         questGo.SetActive(true);
                     }
                     catch { questGiver = null; }
@@ -981,6 +988,7 @@ namespace FeatherMod
                         perkInvoker.interactTime = 0f;
                         perkInvoker.finishWhenTimeOut = true;
                         perkInvoker.coolTime = 0.2f;
+                        perkInvoker.otherInterablesInGroup = new List<InteractableBase>();
                         perkGo.SetActive(true);
                     }
                     catch { perkInvoker = null; }
