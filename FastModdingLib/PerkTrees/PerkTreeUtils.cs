@@ -152,7 +152,8 @@ namespace FeatherMod
                     Debug.Log($"[PerkTreeUtils] Connecting '{perk.name}': {entry.config.RequiredPerks.Length} required perk(s)");
                     foreach (var reqId in entry.config.RequiredPerks)
                     {
-                        var reqPerk = ResolvePerk(reqId);
+                        // 直接在当前 tree 中搜索前置 Perk（避免 PerkTreeManager.GetPerkTree 在场景重载后返回陈旧实例）
+                        var reqPerk = ResolvePerkDirect(tree, reqId);
                         if (reqPerk != null)
                         {
                             ConnectPerksInternal(reqPerk, perk, entry.config.Position);
@@ -710,6 +711,35 @@ namespace FeatherMod
 
             var tree = PerkTreeManager.GetPerkTree(treeId);
             if (tree == null) return null;
+
+            foreach (var p in tree.perks)
+            {
+                if (p != null && p.name == perkName)
+                {
+                    _perkRegistry.Set(perkId, p, FMLConstants.VanillaOwner);
+                    return p;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 在指定树中直接搜索前置 Perk（不走 PerkTreeManager，避免场景重载后返回陈旧实例）。
+        /// 先在 _perkRegistry 中查找，未命中则在 tree.perks 中按 name 匹配。
+        /// </summary>
+        private static Perk? ResolvePerkDirect(PerkTree tree, Identifier perkId)
+        {
+            // 先查 Registry（已注册的自定义 Perk 或已懒注册的原版 Perk）
+            if (_perkRegistry.TryGet(perkId, out var perk) && perk != null)
+                return perk;
+
+            // 原版 Perk：从 Path 提取 perkName，在 tree.perks 中直接搜索
+            if (perkId.Domain != FMLConstants.DuckovDomain) return null;
+
+            var slashIndex = perkId.Path.IndexOf('/');
+            if (slashIndex <= 0 || slashIndex >= perkId.Path.Length - 1) return null;
+            var perkName = perkId.Path.Substring(slashIndex + 1);
 
             foreach (var p in tree.perks)
             {
