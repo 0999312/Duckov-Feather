@@ -84,14 +84,13 @@ namespace FeatherMod
 
         private static void OnMainSceneLoadedRetryInjects(MainSceneLoadedEvent evt)
         {
-            // 一次性导出原版 PerkTree 节点参考表（帮助 modder 配置 RequiredPerks）
-            // 取消注释下行即可启用自动 dump：
-            // if (!_dumped) { _dumped = true; DumpAllPerkTrees(); }
-
             if (_deferredVanillaInjects.Count == 0) return;
             Debug.Log($"[PerkTreeUtils] MainSceneLoaded: retrying {_deferredVanillaInjects.Count} deferred vanilla inject(s)...");
 
-            var loadedTrees = new HashSet<string>(); // 每个 tree 仅 Load 一次
+            // ═══ Pass 1：收集需要重建的条目 + 创建 Perk GameObject + 注册 ═══
+            // 先创建所有 Perk 再建连接，确保 ResolvePerk(reqId) 始终返回新实例（非临时 Perk）。
+            var rebuildList = new List<(DeferredVanillaInject entry, PerkTree tree, PerkRelationGraph graph, Perk perk)>();
+            var deadTreeIds = new List<int>(); // 待移除的无效条目索引
 
             for (int i = _deferredVanillaInjects.Count - 1; i >= 0; i--)
             {
@@ -102,42 +101,26 @@ namespace FeatherMod
                 if (tree == null)
                 {
                     Debug.LogWarning($"[PerkTreeUtils] Retry failed: vanilla tree '{entry.treeId}' not found.");
-                    _deferredVanillaInjects.RemoveAt(i);
+                    deadTreeIds.Add(i);
                     _completedPerkInjects.Remove(perkIdStr);
                     continue;
                 }
 
                 var graph = tree.relationGraphOwner?.graph as PerkRelationGraph;
-                if (graph == null)
-                {
-                    Debug.LogWarning($"[PerkTreeUtils] Retry deferred: tree '{entry.treeId}' still has no graph. Will retry on next MainSceneLoaded.");
-                    continue; // graph 仍未就绪，保留在队列中
-                }
+                if (graph == null) continue; // graph 未就绪，保留等待
 
-                // ── 存活检测：检查已注册的 Perk 是否仍存活（场景重载后 Unity 对象被销毁）──
+                // 存活检测
                 bool isCompleted = _completedPerkInjects.Contains(perkIdStr);
                 bool perkAlive = false;
                 if (_perkRegistry.TryGet(entry.config.PerkId, out var existingPerk)
                     && existingPerk != null && existingPerk.gameObject != null)
-                {
                     perkAlive = true;
-                }
 
-                if (isCompleted && perkAlive)
-                {
-                    // 已完成注入且 Perk 仍存活（非场景重载），跳过
-                    continue;
-                }
+                if (isCompleted && perkAlive) continue; // 已完成且存活，跳过
 
-                // ── 需要重建：首次注入 或 场景重载后 Perk 被销毁 ──
+                // ── 需要重建 ──
+                DestroyOldPerkChild(tree, entry.config.PerkId.Path);
 
-                // 销毁旧的同名子对象（AddPerk 创建的临时 Perk 或上次注入的残留），
-                // 避免 tree.Collect() 收集重复 Perk 导致链接混乱和状态丢失。
-                var oldChild = tree.transform.Find(entry.config.PerkId.Path);
-                if (oldChild != null)
-                    UnityEngine.Object.Destroy(oldChild);
-
-                // 重新创建 Perk 子对象 + graph 节点
                 var perkGo = new GameObject(entry.config.PerkId.Path);
                 perkGo.transform.SetParent(tree.transform, false);
                 var perk = perkGo.AddComponent<Perk>();
@@ -150,8 +133,19 @@ namespace FeatherMod
 
                 tree.Collect();
                 _perkRegistry.Set(entry.config.PerkId, perk, entry.config.PerkId.Domain);
+                _completedPerkInjects.Add(perkIdStr);
 
-                // ★ 先建立连线（ConnectPerksInternal 基于父节点计算子节点坐标）
+                rebuildList.Add((entry, tree, graph, perk));
+            }
+
+            // 移除无效条目
+            for (int i = deadTreeIds.Count - 1; i >= 0; i--)
+                _deferredVanillaInjects.RemoveAt(deadTreeIds[i]);
+
+            // ═══ Pass 2：建立连接（此时所有 Perk 新实例均已在 _perkRegistry 中） ═══
+            var loadedTrees = new HashSet<string>();
+            foreach (var (entry, tree, graph, perk) in rebuildList)
+            {
                 if (entry.config.RequiredPerks != null)
                 {
                     foreach (var reqId in entry.config.RequiredPerks)
@@ -162,25 +156,28 @@ namespace FeatherMod
                     }
                 }
 
-                // 兜底：无 RequiredPerks 时创建独立节点
                 EnsureGraphNode(tree, perk, entry.config);
 
-                // 从存档恢复注入节点状态（原版 PerkTree.Awake→Load 在注入前执行，perk 不在列表中被跳过）
                 if (loadedTrees.Add(entry.treeId))
                     tree.Load();
 
-                // 重新应用 PerkBehaviour 声明式配置（场景重载后原 MonoBehaviour 已销毁）
                 if (entry.config.Behaviours != null)
                 {
                     foreach (var bhCfg in entry.config.Behaviours)
                         bhCfg.ApplyTo(perk.gameObject);
                 }
-
-                // ★ 标记已完成，保留在 _deferredVanillaInjects 中作为永久追踪
-                _completedPerkInjects.Add(perkIdStr);
-                Debug.Log($"[PerkTreeUtils] Retried vanilla inject: '{entry.config.PerkId.Path}' into tree '{entry.treeId}'."
-                    + (isCompleted ? " (scene reload rebuild)" : " (first inject)"));
             }
+
+            if (rebuildList.Count > 0)
+                Debug.Log($"[PerkTreeUtils] Retried {rebuildList.Count} vanilla inject(s).");
+        }
+
+        /// <summary>销毁 PerkTree 上指定名称的旧子对象（避免 tree.Collect 收集重复 Perk）。</summary>
+        private static void DestroyOldPerkChild(PerkTree tree, string childName)
+        {
+            var oldChild = tree.transform.Find(childName);
+            if (oldChild != null)
+                UnityEngine.Object.Destroy(oldChild);
         }
 
         // ===== 注册 PerkTree =====
