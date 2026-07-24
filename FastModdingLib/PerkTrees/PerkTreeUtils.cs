@@ -4,7 +4,6 @@ using FeatherMod.Events.GameEvents;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using NodeCanvas.Framework;
-using Saves;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -149,34 +148,18 @@ namespace FeatherMod
             {
                 if (entry.config.RequiredPerks != null && entry.config.RequiredPerks.Length > 0)
                 {
-                    Debug.Log($"[PerkTreeUtils] Connecting '{perk.name}': {entry.config.RequiredPerks.Length} required perk(s)");
                     foreach (var reqId in entry.config.RequiredPerks)
                     {
-                        // 直接在当前 tree 中搜索前置 Perk（避免 PerkTreeManager.GetPerkTree 在场景重载后返回陈旧实例）
                         var reqPerk = ResolvePerkDirect(tree, reqId);
                         if (reqPerk != null)
-                        {
                             ConnectPerksInternal(reqPerk, perk, entry.config.Position);
-                            Debug.Log($"[PerkTreeUtils]   -> connected to '{reqPerk.name}' (Master={reqPerk.Master?.ID})");
-                        }
-                        else
-                            Debug.LogWarning($"[PerkTreeUtils]   -> FAILED to resolve required perk: {reqId}");
                     }
-                }
-                else
-                {
-                    Debug.Log($"[PerkTreeUtils] No RequiredPerks for '{perk.name}' — standalone node.");
                 }
 
                 EnsureGraphNode(tree, perk, entry.config);
 
                 if (loadedTrees.Add(entry.treeId))
-                {
-                    var saveKey = "PerkTree_" + tree.ID;
-                    bool hasSave = SavesSystem.KeyExisits(saveKey);
-                    Debug.Log($"[PerkTreeUtils] tree.Load() for '{tree.ID}': SavesSystem.KeyExisits({saveKey}) = {hasSave}, perks.Count = {tree.perks.Count}");
                     tree.Load();
-                }
 
                 if (entry.config.Behaviours != null)
                 {
