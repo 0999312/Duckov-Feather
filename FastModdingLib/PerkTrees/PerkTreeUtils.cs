@@ -4,6 +4,7 @@ using FeatherMod.Events.GameEvents;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using NodeCanvas.Framework;
+using Saves;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -159,7 +160,12 @@ namespace FeatherMod
                 EnsureGraphNode(tree, perk, entry.config);
 
                 if (loadedTrees.Add(entry.treeId))
+                {
+                    var saveKey = "PerkTree_" + tree.ID;
+                    bool hasSave = SavesSystem.KeyExisits(saveKey);
+                    Debug.Log($"[PerkTreeUtils] tree.Load() for '{tree.ID}': SavesSystem.KeyExisits({saveKey}) = {hasSave}, perks.Count = {tree.perks.Count}");
                     tree.Load();
+                }
 
                 if (entry.config.Behaviours != null)
                 {
