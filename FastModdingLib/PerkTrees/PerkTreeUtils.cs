@@ -178,12 +178,13 @@ namespace FeatherMod
                 Debug.Log($"[PerkTreeUtils] Retried {rebuildList.Count} vanilla inject(s).");
         }
 
-        /// <summary>销毁 PerkTree 上指定名称的旧子对象（避免 tree.Collect 收集重复 Perk）。</summary>
+        /// <summary>销毁 PerkTree 上指定名称的旧子对象（避免 tree.Collect 收集重复 Perk）。
+        /// 注意：<c>Transform.Find</c> 返回 Transform，必须取其 gameObject 再 Destroy。</summary>
         private static void DestroyOldPerkChild(PerkTree tree, string childName)
         {
             var oldChild = tree.transform.Find(childName);
             if (oldChild != null)
-                UnityEngine.Object.Destroy(oldChild);
+                UnityEngine.Object.Destroy(oldChild.gameObject);
         }
 
         // ===== 注册 PerkTree =====
