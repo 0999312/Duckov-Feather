@@ -1,23 +1,62 @@
 ﻿using Duckov.PerkTrees;
+using FeatherMod.Events;
+using FeatherMod.Events.GameEvents;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using NodeCanvas.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod
 {
+    /// <summary>
+    /// PerkTree 与 Perk 系统公共 API。
+    /// 所有 public API 使用 <see cref="Identifier"/> 作为资源标识符。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Identifier 约定</b>：</para>
+    /// <list type="bullet">
+    /// <item><b>PerkTree</b> — Domain=modid 或 "duckov"（原版），Path=treeID</item>
+    /// <item><b>自定义 Perk</b> — Domain=modid，Path=perk名（通过 <see cref="AddPerk"/> 显式指定 treeId）</item>
+    /// <item><b>原版 Perk 引用</b> — Domain="duckov"，Path="treeID/perkName"（首次使用时自动懒注册到 Registry）</item>
+    /// </list>
+    /// <para><b>多树支持</b>：一个 mod 可注册多棵 PerkTree，Perk 通过 treeId 参数显式指定归属树。</para>
+    /// </remarks>
     public static class PerkTreeUtils
     {
         private static readonly PerkTreeRegistry _perkRegistry = new PerkTreeRegistry();
         private static readonly HashSet<string> _registeredTreeIds = new HashSet<string>();
         private static readonly Dictionary<string, HashSet<string>> _treeIdsByOwner = new Dictionary<string, HashSet<string>>();
+        /// <summary>FML 内部 PerkTree 缓存。key=treeId(path)，独立于 PerkTreeManager.Instance 时序。</summary>
+        private static readonly Dictionary<string, PerkTree> _registeredTrees = new Dictionary<string, PerkTree>();
         private static bool _initialized;
+        private static bool _vanillaRetryHooked;
+        private static bool _dumped; // 一次性 dump 标记
+
+        /// <summary>原版树注入延迟队列：graph 在 OnAfterSetup 时未反序列化，待 MainSceneLoaded 后重试。</summary>
+        private static readonly List<DeferredVanillaInject> _deferredVanillaInjects = new();
+
+        /// <summary>已完成注入的原版 Perk 追踪集（PerkId 字符串形式）。
+        /// 场景重载后 Perk 子对象被销毁，MainSceneLoaded 时检测到已销毁则重建。</summary>
+        private static readonly HashSet<string> _completedPerkInjects = new();
+
+        private struct DeferredVanillaInject
+        {
+            public string treeId;
+            public PerkConfig config;
+        }
 
         /// <summary>使用 <c>"PerkTree_"</c> 前缀标记 FML 注册的自定义 PerkTree。</summary>
         internal const string FML_TREE_PREFIX = "PerkTree_";
+
+        // ── 全局重布局参数（首次访问时触发一次） ──
+        private const float LAYOUT_X_SPACING = 120f;  // 居中布局的 X 间距
+        private const float LAYOUT_Y_SPACING = 100f;  // 居中布局的 Y 间距
+        private static readonly HashSet<Graph> _layoutedGraphs = new HashSet<Graph>();
+        private static readonly HashSet<PerkRelationNode> _manualNodes = new HashSet<PerkRelationNode>();
 
         internal static PerkTreeRegistry Registry => _perkRegistry;
 
@@ -31,189 +70,114 @@ namespace FeatherMod
                 nonAlt.SetIfAbsent(id, _perkRegistry, RegistryManager.CurrentModid);
             else
                 meta.Set(id, _perkRegistry, RegistryManager.CurrentModid);
+
+            HookVanillaRetry();
         }
 
-        /// <summary>从 Identifier.Domain 反查对应的 PerkTree ID。</summary>
-        private static string ResolveTreeId(string domain)
+        /// <summary>订阅 MainSceneLoaded，重试 graph 加载期间暂缓的原版树注入。</summary>
+        private static void HookVanillaRetry()
         {
-            // 1) 遍历已注册条目，查找 domain 匹配的树
-            foreach (var kvp in _perkRegistry)
-            {
-                if (kvp.Key.Domain == domain && kvp.Key.Path != null && kvp.Key.Path.StartsWith("tree_"))
-                {
-                    // registry key 为 "domain:tree_{treeId}"，提取 treeId
-                    return kvp.Key.Path.Substring("tree_".Length);
-                }
-            }
-
-            // 2) 尝试直接用 domain 作为原生 treeId
-            var nativeTree = PerkTreeManager.GetPerkTree(domain);
-            if (nativeTree != null)
-                return domain;
-
-            // 3) 兜底：检查是否有 PerkTreeManager 中名称以 domain 开头的树
-            var perkTreesField = typeof(PerkTreeManager).GetField("perkTrees",
-                BindingFlags.Static | BindingFlags.NonPublic);
-            if (perkTreesField?.GetValue(null) is System.Collections.IList trees)
-            {
-                foreach (var t in trees)
-                {
-                    if (t is PerkTree pt && pt.name != null && pt.name.StartsWith(domain))
-                        return pt.name;
-                }
-            }
-
-            return domain;
+            if (_vanillaRetryHooked) return;
+            _vanillaRetryHooked = true;
+            EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoadedRetryInjects);
         }
 
-        // ===== 注册 Perk =====
-
-        /// <summary>
-        /// 在技能树上注册新 Perk。
-        /// id.Domain → 推导 treeId（匹配已注册的 PerkTree 或作为原生 treeId 使用）
-        /// id.Path → perk 唯一名称（兼作 GameObject.name，影响存档 key）
-        /// </summary>
-        public static Perk AddPerk(Identifier id, PerkRequirement req, Sprite icon, string? modid = null)
+        private static void OnMainSceneLoadedRetryInjects(MainSceneLoadedEvent evt)
         {
-            Init();
-            string owner = modid ?? id.Domain;
-            string treeId = ResolveTreeId(id.Domain);
+            // 一次性导出原版 PerkTree 节点参考表（帮助 modder 配置 RequiredPerks）
+            // 取消注释下行即可启用自动 dump：
+            // if (!_dumped) { _dumped = true; DumpAllPerkTrees(); }
 
-            var tree = PerkTreeManager.GetPerkTree(treeId);
-            if (tree == null)
-                throw new ArgumentException($"PerkTree '{treeId}' not found (resolved from domain '{id.Domain}').");
+            if (_deferredVanillaInjects.Count == 0) return;
+            Debug.Log($"[PerkTreeUtils] MainSceneLoaded: retrying {_deferredVanillaInjects.Count} deferred vanilla inject(s)...");
 
-            string perkName = id.Path;
+            var loadedTrees = new HashSet<string>(); // 每个 tree 仅 Load 一次
 
-            // 创建子 GameObject 挂 Perk 组件
-            var perkGo = new GameObject(perkName);
-            perkGo.transform.SetParent(tree.transform, false);
-            var perk = perkGo.AddComponent<Perk>();
-
-            // 反射设置字段（Perk 的字段是 [SerializeField]）
-            var idField = typeof(Perk).GetField("id", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (idField != null) idField.SetValue(perk, 0);
-
-            // 设置 Perk 图标
-            if (icon != null)
+            for (int i = _deferredVanillaInjects.Count - 1; i >= 0; i--)
             {
-                var iconField = typeof(Perk).GetField("icon",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (iconField != null)
+                var entry = _deferredVanillaInjects[i];
+                var perkIdStr = entry.config.PerkId.ToString();
+
+                var tree = ResolvePerkTree(new Identifier(FMLConstants.DuckovDomain, entry.treeId));
+                if (tree == null)
                 {
-                    iconField.SetValue(perk, icon);
+                    Debug.LogWarning($"[PerkTreeUtils] Retry failed: vanilla tree '{entry.treeId}' not found.");
+                    _deferredVanillaInjects.RemoveAt(i);
+                    _completedPerkInjects.Remove(perkIdStr);
+                    continue;
                 }
-                else
+
+                var graph = tree.relationGraphOwner?.graph as PerkRelationGraph;
+                if (graph == null)
                 {
-                    Debug.LogWarning($"[PerkTreeUtils.AddPerk] Perk.icon field not found; icon not set for '{perkName}'.");
+                    Debug.LogWarning($"[PerkTreeUtils] Retry deferred: tree '{entry.treeId}' still has no graph. Will retry on next MainSceneLoaded.");
+                    continue; // graph 仍未就绪，保留在队列中
                 }
-            }
 
-            // 设置 Perk 前置条件
-            if (req != null)
-            {
-                var reqField = typeof(Perk).GetField("requirement",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (reqField != null)
+                // ── 存活检测：检查已注册的 Perk 是否仍存活（场景重载后 Unity 对象被销毁）──
+                bool isCompleted = _completedPerkInjects.Contains(perkIdStr);
+                bool perkAlive = false;
+                if (_perkRegistry.TryGet(entry.config.PerkId, out var existingPerk)
+                    && existingPerk != null && existingPerk.gameObject != null)
                 {
-                    reqField.SetValue(perk, req);
+                    perkAlive = true;
                 }
-                else
+
+                if (isCompleted && perkAlive)
                 {
-                    Debug.LogWarning($"[PerkTreeUtils.AddPerk] Perk.requirement field not found; requirement not set for '{perkName}'.");
+                    // 已完成注入且 Perk 仍存活（非场景重载），跳过
+                    continue;
                 }
-            }
 
-            // 强制让 PerkTree 重新扫描子 Perk
-            tree.Collect();
+                // ── 需要重建：首次注入 或 场景重载后 Perk 被销毁 ──
 
-            // 注册到 FML Registry（使用 id 本身作为 key）
-            _perkRegistry.Set(id, perk, owner);
+                // 重新创建 Perk 子对象 + graph 节点（原 Perk 可能已被场景重载销毁）
+                var perkGo = new GameObject(entry.config.PerkId.Path);
+                perkGo.transform.SetParent(tree.transform, false);
+                var perk = perkGo.AddComponent<Perk>();
+                perk.icon = entry.config.Icon;
+                perk.displayName = entry.config.DisplayNameKey;
+                perk.hasDescription = entry.config.HasDescription;
+                perk.quality = entry.config.Quality;
+                perk.defaultUnlocked = entry.config.DefaultUnlocked;
+                perk.requirement = entry.config.BuildPerkRequirement();
 
-            return perk;
-        }
+                tree.Collect();
+                _perkRegistry.Set(entry.config.PerkId, perk, entry.config.PerkId.Domain);
 
-        /// <summary>在现有技能树上注册新 Perk（旧版 string 签名）。</summary>
-        [Obsolete("Use AddPerk(Identifier, PerkRequirement, Sprite, string) instead.")]
-        public static Perk AddPerk(string treeId, string perkName, PerkRequirement req, Sprite icon, string modid)
-        {
-            return AddPerk(new Identifier(modid, perkName), req, icon, modid);
-        }
+                // ★ 先建立连线（ConnectPerksInternal 基于父节点计算子节点坐标）
+                if (entry.config.RequiredPerks != null)
+                {
+                    foreach (var reqId in entry.config.RequiredPerks)
+                    {
+                        var reqPerk = ResolvePerk(reqId);
+                        if (reqPerk != null)
+                            ConnectPerksInternal(reqPerk, perk, entry.config.Position);
+                    }
+                }
 
-        // ===== 连接 Perk =====
+                // 兜底：无 RequiredPerks 时创建独立节点
+                EnsureGraphNode(tree, perk, entry.config);
 
-        /// <summary>
-        /// 建立 Perk 前置关系：fromPerk 是 toPerk 的前置条件。
-        /// 两个参数均为 Identifier——FML 从 Registry 反查对应的 Perk 实例。
-        /// 使用 NodeCanvas Graph API 创建 PerkRelationNode 连接。
-        /// </summary>
-        public static void ConnectPerks(Identifier fromPerkId, Identifier toPerkId)
-        {
-            if (!_perkRegistry.TryGet(fromPerkId, out var fromPerk)) return;
-            if (!_perkRegistry.TryGet(toPerkId, out var toPerk)) return;
+                // 从存档恢复注入节点状态（原版 PerkTree.Awake→Load 在注入前执行，perk 不在列表中被跳过）
+                if (loadedTrees.Add(entry.treeId))
+                    tree.Load();
 
-            // 两者应在同一棵树上——从 Master 反查验证
-            if (fromPerk.Master == null || toPerk.Master == null) return;
-            if (fromPerk.Master != toPerk.Master) return;
+                // 重新应用 PerkBehaviour 声明式配置（场景重载后原 MonoBehaviour 已销毁）
+                if (entry.config.Behaviours != null)
+                {
+                    foreach (var bhCfg in entry.config.Behaviours)
+                        bhCfg.ApplyTo(perk.gameObject);
+                }
 
-            var graph = fromPerk.Master.relationGraphOwner?.graph as PerkRelationGraph;
-            if (graph == null) return;
-
-            // 确保两者在图中都有节点
-            var fromNode = graph.GetRelatedNode(fromPerk)
-                ?? graph.AddNode<PerkRelationNode>(Vector2.zero);
-            fromNode.relatedNode = fromPerk;
-
-            var toNode = graph.GetRelatedNode(toPerk)
-                ?? graph.AddNode<PerkRelationNode>(Vector2.zero);
-            toNode.relatedNode = toPerk;
-
-            // NodeCanvas API：尝试 ConnectTo，回退反射
-            var connectMethod = fromNode.GetType().GetMethod("ConnectTo",
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
-                null, new[] { typeof(NodeCanvas.Framework.Node) }, null);
-            if (connectMethod != null)
-            {
-                connectMethod.Invoke(fromNode, new object[] { toNode });
-            }
-            else
-            {
-                // 回退：使用 graph.ConnectNodes
-                var altMethod = graph.GetType().GetMethod("ConnectNodes",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
-                    null, new[] { typeof(NodeCanvas.Framework.Node), typeof(NodeCanvas.Framework.Node) }, null);
-                altMethod?.Invoke(graph, new object[] { fromNode, toNode });
+                // ★ 标记已完成，保留在 _deferredVanillaInjects 中作为永久追踪
+                _completedPerkInjects.Add(perkIdStr);
+                Debug.Log($"[PerkTreeUtils] Retried vanilla inject: '{entry.config.PerkId.Path}' into tree '{entry.treeId}'."
+                    + (isCompleted ? " (scene reload rebuild)" : " (first inject)"));
             }
         }
 
-        /// <summary>建立 Perk 前置关系（旧版 string 签名）。</summary>
-        [Obsolete("Use ConnectPerks(Identifier, Identifier) instead.")]
-        public static void ConnectPerks(string treeId, string fromPerkName, string toPerkName)
-        {
-            var tree = PerkTreeManager.GetPerkTree(treeId);
-            if (tree == null) return;
-
-            var fromPerk = FindPerkInTree(tree, fromPerkName);
-            var toPerk = FindPerkInTree(tree, toPerkName);
-            if (fromPerk == null || toPerk == null) return;
-
-            foreach (var kvp in _perkRegistry)
-            {
-                if (kvp.Value == fromPerk)
-                    ConnectPerks(kvp.Key, new Identifier(treeId, toPerkName));
-            }
-        }
-
-        // ===== PerkBehaviour 辅助 =====
-
-        /// <summary>在已有 Perk 上挂载自定义 PerkBehaviour。perkId 为 Identifier。</summary>
-        public static T AddPerkBehaviour<T>(Identifier perkId) where T : PerkBehaviour
-        {
-            if (!_perkRegistry.TryGet(perkId, out var perk)) return null;
-            return perk.gameObject.AddComponent<T>();
-        }
-
-        // ===== 注册完整 PerkTree =====
+        // ===== 注册 PerkTree =====
 
         /// <summary>
         /// 完整注册一棵自定义 PerkTree，含 LevelConfig patch。
@@ -228,37 +192,43 @@ namespace FeatherMod
             string treeId = id.Path;
 
             // 1. 创建 PerkTree GameObject + PerkTree 组件
+            //    先 SetActive(false) 阻止 Awake() 在 perkTreeID 未设置时执行，
+            //    避免 Load() 使用空 SaveKey 导致存档永久无法恢复（Bug #1）。
             var go = new GameObject($"{FML_TREE_PREFIX}{treeId}");
+            go.SetActive(false);
             var tree = go.AddComponent<PerkTree>();
 
             // PerkTree 模板需跨场景存活，防止场景切换后 PerkTreeManager 持有僵尸引用
             UnityEngine.Object.DontDestroyOnLoad(go);
 
-            // 反射设置 tree ID 字段
-            var idField = typeof(PerkTree).GetField("perkTreeID", BindingFlags.Instance | BindingFlags.NonPublic);
-            idField?.SetValue(tree, treeId);
+            // 所有字段必须在 SetActive(true) 前设置完毕，确保 Awake→Load 时已就绪
+            tree.perkTreeID = treeId;
+            tree.horizontal = horizontal;
 
-            // 2. 创建 PerkRelationGraph（ScriptableObject）+ PerkTreeRelationGraphOwner
+            // 2. 创建 PerkTreeRelationGraphOwner（graph 暂不赋值，匹配原版 null-graph 防御路径）
             var graph = ScriptableObject.CreateInstance<PerkRelationGraph>();
             graph.name = $"PerkRelationGraph_{treeId}";
             var graphOwner = go.AddComponent<PerkTreeRelationGraphOwner>();
+            tree.relationGraphOwner = graphOwner;
 
-            var graphField = typeof(PerkTreeRelationGraphOwner).GetField("graph",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            graphField?.SetValue(graphOwner, graph);
+            // ★ 此时 Awake() 才执行：perkTreeID 已正确，Load() 用正确 SaveKey 读档
+            //    GraphOwner.Awake 遇到 null graph 走原版防御路径，不会 NRE
+            go.SetActive(true);
 
-            var relGraphOwnerField = typeof(PerkTree).GetField("relationGraphOwner",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            relGraphOwnerField?.SetValue(tree, graphOwner);
+            // graph 在 Awake 之后赋值（匹配原版时序：AddComponent 触发 Awake → 再设 graph）
+            graphOwner.graph = graph;
 
-            // 3. 注入到 PerkTreeManager.perkTrees（internal 字段，通过反射访问）
-            var perkTreesField = typeof(PerkTreeManager).GetField("perkTrees",
-                BindingFlags.Static | BindingFlags.NonPublic);
-            var perkTrees = perkTreesField?.GetValue(null) as System.Collections.IList;
-            if (perkTrees != null && !perkTrees.Contains(tree))
-                perkTrees.Add(tree);
+            // 3. 注入到 PerkTreeManager.perkTrees（public 字段，直接访问）
+            if (PerkTreeManager.Instance != null)
+            {
+                var perkTrees = PerkTreeManager.Instance.perkTrees;
+                if (perkTrees != null && !perkTrees.Contains(tree))
+                    perkTrees.Add(tree);
+            }
 
             // 4. 记录已注册的 treeId（供 IsFMLTree / patches 使用）和 owner 映射
+            //    同时缓存 PerkTree 引用到 FML 内部字典，避免依赖 PerkTreeManager.Instance 时序
+            _registeredTrees[treeId] = tree;
             _registeredTreeIds.Add(treeId);
             if (!_treeIdsByOwner.TryGetValue(id.Domain, out var treeSet))
             {
@@ -270,7 +240,10 @@ namespace FeatherMod
             var registryId = new Identifier(id.Domain, $"tree_{treeId}");
             _perkRegistry.Set(registryId, null!, id.Domain);
 
-            Debug.Log($"[PerkTreeUtils] Registered PerkTree '{treeId}' from mod '{id.Domain}'.");
+            Debug.Log($"[PerkTreeUtils] Registered PerkTree '{treeId}' from mod '{id.Domain}'. "
+                + $"(cached={_registeredTrees.ContainsKey(treeId)}, "
+                + $"treeIds={_registeredTreeIds.Contains(treeId)}, "
+                + $"instanceNull={PerkTreeManager.Instance == null})");
             return tree;
         }
 
@@ -280,24 +253,366 @@ namespace FeatherMod
             return _registeredTreeIds.Contains(treeId);
         }
 
-        // ===== 解锁 =====
-
-        /// <summary>强制解锁指定 Perk。perkId 为 Identifier。</summary>
-        public static void ForceUnlock(Identifier perkId)
+        /// <summary>从 FML 内部缓存查找已注册的 PerkTree（供 PerkTreeManager 补丁使用）。</summary>
+        internal static bool TryGetRegisteredTree(string treeId, out PerkTree tree)
         {
-            if (!_perkRegistry.TryGet(perkId, out var perk)) return;
-            perk.ForceUnlock();
+            return _registeredTrees.TryGetValue(treeId, out tree);
         }
 
-        /// <summary>强制解锁指定 Perk（旧版 string 签名）。</summary>
-        [Obsolete("Use ForceUnlock(Identifier) instead.")]
-        public static void ForceUnlock(string treeId, string perkName)
+        // ===== 添加 Perk =====
+
+        /// <summary>
+        /// 在指定 PerkTree 上注册新 Perk。
+        /// </summary>
+        /// <param name="treeId">
+        /// 目标 PerkTree 的 Identifier。
+        /// <br/>Domain="duckov" → 原版树，按 Path=treeID 从 <see cref="PerkTreeManager"/> 查找；
+        /// <br/>其他 Domain → FML 注册的自定义树。
+        /// </param>
+        /// <param name="config">Perk 配置 DTO。PerkId.Domain=modid, PerkId.Path=perk名（兼作 GameObject.name，影响存档 key）。</param>
+        /// <returns>创建的 Perk 实例。</returns>
+        /// <exception cref="ArgumentException">目标 PerkTree 不存在时抛出。</exception>
+        public static Perk AddPerk(Identifier treeId, PerkConfig config)
         {
-            var tree = PerkTreeManager.GetPerkTree(treeId);
-            if (tree == null) return;
-            var perk = FindPerkInTree(tree, perkName);
+            if (config == null) throw new ArgumentNullException(nameof(config));
+            Init();
+            string owner = config.PerkId.Domain;
+
+            // 解析目标 PerkTree
+            PerkTree? tree = ResolvePerkTree(treeId);
+            if (tree == null)
+                throw new ArgumentException($"PerkTree '{treeId}' not found.");
+
+            // 创建子 GameObject 挂 Perk 组件
+            var perkGo = new GameObject(config.PerkId.Path);
+            perkGo.transform.SetParent(tree.transform, false);
+            var perk = perkGo.AddComponent<Perk>();
+
+            // 直接设置 Perk 字段（[SerializeField] private 经 Publicizer 已公开）
+            if (config.Icon != null)
+                perk.icon = config.Icon;
+            perk.displayName = config.DisplayNameKey;
+            perk.hasDescription = config.HasDescription;
+            perk.quality = config.Quality;
+            perk.defaultUnlocked = config.DefaultUnlocked;
+            perk.requirement = config.BuildPerkRequirement();
+
+            // 注册 Perk 到 PerkTree：
+            // - 原版树正常走 Collect（扫描子对象 + 设置 Master）
+            // - FML 自定义树由 PerkTreeCollectGuard 拦截 Collect，需手动注册
+            if (IsFMLTree(tree.perkTreeID))
+            {
+                perk.Master = tree;
+                tree.perks.Add(perk);
+                // 自动从存档恢复解锁状态（PerkTreeLoadDeferPatch 在 Awake 期拦截了空 perks 的 Load，此处补触发）
+                tree.Load();
+            }
+            else
+            {
+                tree.Collect();
+
+                // 原版树注入：OnAfterSetup 时 graph 未反序列化，延迟到 MainSceneLoaded 重试
+                var graph = tree.relationGraphOwner?.graph as PerkRelationGraph;
+                if (graph == null)
+                {
+                    Debug.Log($"[PerkTreeUtils] Deferring vanilla inject: '{config.PerkId.Path}' into '{tree.perkTreeID}' (graph not loaded yet).");
+                    _deferredVanillaInjects.Add(new DeferredVanillaInject
+                    {
+                        treeId = tree.perkTreeID,
+                        config = config
+                    });
+                    // 仍注册到 Registry（供 modder 当前会话查询），MainSceneLoaded 时会被覆盖
+                    _perkRegistry.Set(config.PerkId, perk, owner);
+                    return perk;
+                }
+
+                // graph 已就绪：从存档恢复注入节点的解锁状态
+                // 原版 PerkTree.Awake→Load 在注入前执行，此时 perk 不在列表中会被跳过；
+                // 此处补触发 Load 以恢复存档中的 perk 状态。
+                tree.Load();
+            }
+
+            // 注册到 FML Registry
+            _perkRegistry.Set(config.PerkId, perk, owner);
+
+            // ★ 先建立连线（ConnectPerksInternal 基于父节点坐标计算子节点位置）
+            if (config.RequiredPerks != null)
+            {
+                foreach (var requiredId in config.RequiredPerks)
+                {
+                    var requiredPerk = ResolvePerk(requiredId);
+                    if (requiredPerk != null)
+                        ConnectPerksInternal(requiredPerk, perk, config.Position);
+                }
+            }
+
+            // 兜底：无 RequiredPerks 或连线后仍缺失时创建独立节点
+            EnsureGraphNode(tree, perk, config);
+
+            // 处理 PerkBehaviour 声明式配置
+            if (config.Behaviours != null)
+            {
+                foreach (var bhCfg in config.Behaviours)
+                {
+                    bhCfg.ApplyTo(perk.gameObject);
+                }
+            }
+
+            return perk;
+        }
+
+        /// <summary>解析 PerkTree：Domain="duckov" → 原版树，否则 → FML/PerkTreeManager 查找。</summary>
+        private static PerkTree? ResolvePerkTree(Identifier treeId)
+        {
+            if (treeId.Domain == FMLConstants.DuckovDomain)
+            {
+                // 原版树：直接按 Path=treeID 查找
+                return PerkTreeManager.GetPerkTree(treeId.Path);
+            }
+
+            // FML 注册的自定义树：优先走 FML 内部缓存（不依赖 PerkTreeManager.Instance 时序）
+            if (_registeredTrees.TryGetValue(treeId.Path, out var cachedTree))
+            {
+                // 延迟注入：PerkTreeManager 已可用但 RegisterPerkTree 时 Instance 为 null 导致未注入
+                // 此处自动补注入，使树对游戏存档/UI 等原生系统可见
+                if (PerkTreeManager.Instance != null)
+                {
+                    var perkTrees = PerkTreeManager.Instance.perkTrees;
+                    if (perkTrees != null && !perkTrees.Contains(cachedTree))
+                        perkTrees.Add(cachedTree);
+                }
+                return cachedTree;
+            }
+
+            // 回退：已追踪但缓存丢失时，尝试从 PerkTreeManager 查找
+            if (_registeredTreeIds.Contains(treeId.Path))
+            {
+                var prefixName = $"{FML_TREE_PREFIX}{treeId.Path}";
+                if (PerkTreeManager.Instance?.perkTrees != null)
+                {
+                    foreach (var t in PerkTreeManager.Instance.perkTrees)
+                    {
+                        if (t != null && t.name == prefixName)
+                            return t;
+                    }
+                }
+            }
+
+            // 回退：直接走 PerkTreeManager（支持未被 FML 追踪但存在于游戏中的树）
+            return PerkTreeManager.GetPerkTree(treeId.Path);
+        }
+
+        // ===== 连接 Perk =====
+
+        /// <summary>
+        /// 建立 Perk 前置关系：fromPerk 是 toPerk 的前置条件。
+        /// 两个参数均为 Identifier。自定义 Perk 直接从 Registry 查询，
+        /// 原版 Perk（Domain="duckov"）首次引用时自动懒注册到 Registry。
+        /// </summary>
+        public static void ConnectPerks(Identifier fromPerkId, Identifier toPerkId)
+        {
+            var fromPerk = ResolvePerk(fromPerkId);
+            var toPerk = ResolvePerk(toPerkId);
+            if (fromPerk == null || toPerk == null) return;
+
+            ConnectPerksInternal(fromPerk, toPerk);
+        }
+
+        /// <summary>Perk → Perk 内部连接（无需 Identifier 解析）。创建 Graph 节点并建立连线。</summary>
+        private static void ConnectPerksInternal(Perk fromPerk, Perk toPerk, Vector2? manualPos = null)
+        {
+            if (fromPerk.Master == null || toPerk.Master == null) return;
+            if (fromPerk.Master != toPerk.Master) return;
+
+            var graph = fromPerk.Master.relationGraphOwner?.graph as PerkRelationGraph;
+            if (graph == null) return;
+
+            // 确保 fromNode 存在
+            var fromNode = graph.GetRelatedNode(fromPerk)
+                ?? graph.AddNode<PerkRelationNode>(Vector2.zero);
+            fromNode.relatedNode = fromPerk;
+
+            // 确保 toNode 存在
+            var toNode = graph.GetRelatedNode(toPerk);
+            if (toNode == null)
+            {
+                Vector2 pos;
+                if (manualPos.HasValue)
+                {
+                    pos = manualPos.Value;
+                }
+                else if (IsFMLTree(fromPerk.Master.perkTreeID))
+                {
+                    // FML 自定义树：占位，等 TryLayoutGraph 全局居中布局
+                    pos = Vector2.zero;
+                }
+                else
+                {
+                    // 原版树注入节点：即时计算位置（不会触发全局布局）
+                    var existing = graph.GetOutgoingNodes(fromNode);
+                    pos = new Vector2(
+                        fromNode.cachedPosition.x + (existing?.Count ?? 0) * LAYOUT_X_SPACING,
+                        fromNode.cachedPosition.y + LAYOUT_Y_SPACING);
+                }
+
+                toNode = graph.AddNode<PerkRelationNode>(pos);
+                toNode.cachedPosition = pos;
+                if (manualPos.HasValue) _manualNodes.Add(toNode);
+            }
+            toNode.relatedNode = toPerk;
+
+            graph.ConnectNodes(fromNode, toNode);
+        }
+
+        /// <summary>为 Perk 创建 Graph 节点。FML 树用占位，原版树注入用即时位置。</summary>
+        private static void EnsureGraphNode(PerkTree tree, Perk perk, PerkConfig config)
+        {
+            var graph = tree.relationGraphOwner?.graph as PerkRelationGraph;
+            if (graph == null)
+            {
+                if (!IsFMLTree(tree.perkTreeID))
+                    Debug.LogWarning($"[PerkTreeUtils] EnsureGraphNode: tree '{tree.perkTreeID}' has no graph (owner={tree.relationGraphOwner != null}).");
+                return;
+            }
+            if (graph.GetRelatedNode(perk) != null)
+            {
+                Debug.Log($"[PerkTreeUtils] EnsureGraphNode: node for '{perk.name}' already exists in graph.");
+                return;
+            }
+
+            Vector2 pos;
+            if (config.Position.HasValue)
+            {
+                pos = config.Position.Value;
+            }
+            else if (IsFMLTree(tree.perkTreeID))
+            {
+                // FML 树：占位，留待 TryLayoutGraph 全局居中
+                pos = Vector2.zero;
+            }
+            else
+            {
+                // 原版树注入：放在现有节点最右侧，避免覆盖
+                float maxX = 0f;
+                foreach (var n in graph.allNodes.OfType<PerkRelationNode>())
+                {
+                    if (n.relatedNode != null && n.cachedPosition.x > maxX)
+                        maxX = n.cachedPosition.x;
+                }
+                pos = new Vector2(maxX + LAYOUT_X_SPACING, 0);
+            }
+
+            var node = graph.AddNode<PerkRelationNode>(pos);
+            node.relatedNode = perk;
+            node.cachedPosition = pos;
+            if (config.Position.HasValue) _manualNodes.Add(node);
+
+            if (!IsFMLTree(tree.perkTreeID))
+            {
+                Debug.Log($"[PerkTreeUtils] Injected graph node for '{perk.name}' into vanilla tree '{tree.perkTreeID}' at ({pos.x:F0}, {pos.y:F0}).");
+            }
+        }
+
+        // ===== 全局布局 =====
+
+        /// <summary>对 graph 执行 BFS 分层居中布局。每个 graph 仅布局一次（幂等）。</summary>
+        internal static void TryLayoutGraph(PerkRelationGraph graph)
+        {
+            if (graph == null || !_layoutedGraphs.Add(graph)) return;
+
+            var allNodes = graph.allNodes.OfType<PerkRelationNode>()
+                .Where(n => n.relatedNode != null).ToList();
+            if (allNodes.Count == 0) return;
+
+            // Step 1: BFS 分配深度（处理多前置取最大值）
+            var depth = new Dictionary<PerkRelationNode, int>();
+            var queue = new Queue<PerkRelationNode>();
+            foreach (var n in allNodes)
+            {
+                var incoming = graph.GetIncomingNodes(n);
+                if (incoming == null || incoming.Count == 0) { depth[n] = 0; queue.Enqueue(n); }
+            }
+            while (queue.Count > 0)
+            {
+                var cur = queue.Dequeue();
+                var outgoing = graph.GetOutgoingNodes(cur);
+                if (outgoing == null) continue;
+                int nextD = depth[cur] + 1;
+                foreach (var child in outgoing)
+                {
+                    if (!depth.TryGetValue(child, out var d) || d < nextD)
+                    { depth[child] = nextD; if (!queue.Contains(child)) queue.Enqueue(child); }
+                }
+            }
+
+            // Step 2: 按深度分组，每层居中排列
+            var byDepth = new Dictionary<int, List<PerkRelationNode>>();
+            int maxDepth = 0;
+            foreach (var n in allNodes)
+            {
+                int d = depth.TryGetValue(n, out var v) ? v : 0;
+                if (!byDepth.TryGetValue(d, out var list)) byDepth[d] = list = new List<PerkRelationNode>();
+                list.Add(n);
+                if (d > maxDepth) maxDepth = d;
+            }
+
+            for (int d = 0; d <= maxDepth; d++)
+            {
+                if (!byDepth.TryGetValue(d, out var nodes)) continue;
+                // 按父节点期望 X 排序（使同分支节点聚合）
+                nodes.Sort((a, b) => AvgParentX(graph, a).CompareTo(AvgParentX(graph, b)));
+
+                // 收集非手动节点，居中排列
+                var autoNodes = nodes.Where(n => !_manualNodes.Contains(n)).ToList();
+                if (autoNodes.Count == 0) continue;
+
+                float totalWidth = (autoNodes.Count - 1) * LAYOUT_X_SPACING;
+                float startX = -totalWidth / 2f;
+
+                for (int i = 0; i < autoNodes.Count; i++)
+                    autoNodes[i].cachedPosition = new Vector2(startX + i * LAYOUT_X_SPACING, d * LAYOUT_Y_SPACING);
+            }
+        }
+
+        private static float AvgParentX(PerkRelationGraph graph, PerkRelationNode node)
+        {
+            var incoming = graph.GetIncomingNodes(node);
+            if (incoming == null || incoming.Count == 0) return 0f;
+            return incoming.Average(n => n.cachedPosition.x);
+        }
+
+        // ===== PerkBehaviour 辅助 =====
+
+        /// <summary>在已有 Perk 上挂载自定义 PerkBehaviour。perkId 为 Identifier。</summary>
+        public static T AddPerkBehaviour<T>(Identifier perkId) where T : PerkBehaviour
+        {
+            var perk = ResolvePerk(perkId);
+            if (perk == null) return null!;
+            return perk.gameObject.AddComponent<T>();
+        }
+
+        // ===== 解锁 =====
+
+        /// <summary>
+        /// 强制解锁指定 Perk。自定义 Perk 直接从 Registry 查询，
+        /// 原版 Perk（Domain="duckov"）首次引用时自动懒注册。
+        /// </summary>
+        public static void ForceUnlock(Identifier perkId)
+        {
+            var perk = ResolvePerk(perkId);
             if (perk != null)
                 perk.ForceUnlock();
+        }
+
+        /// <summary>
+        /// 检查指定 Perk 是否已解锁。
+        /// 自定义 Perk 直接从 Registry 查询，原版 Perk 首次引用时自动懒注册。
+        /// </summary>
+        public static bool IsPerkUnlocked(Identifier perkId)
+        {
+            var perk = ResolvePerk(perkId);
+            if (perk == null) return false;
+            return perk.defaultUnlocked || perk.Unlocked;
         }
 
         // ===== 移除 =====
@@ -315,24 +630,28 @@ namespace FeatherMod
             {
                 foreach (var treeId in treeSet)
                 {
-                    // 从 PerkTreeManager 移除
-                    var perkTreesField = typeof(PerkTreeManager).GetField("perkTrees",
-                        BindingFlags.Static | BindingFlags.NonPublic);
-                    if (perkTreesField?.GetValue(null) is System.Collections.IList trees)
+                    // 从 FML 内部缓存移除
+                    _registeredTreeIds.Remove(treeId);
+                    if (_registeredTrees.TryGetValue(treeId, out var cachedTree))
+                    {
+                        _registeredTrees.Remove(treeId);
+                        if (cachedTree != null && cachedTree.gameObject != null)
+                            UnityEngine.Object.Destroy(cachedTree.gameObject);
+                    }
+
+                    // 从 PerkTreeManager 同步移除（如果 Instance 可用）
+                    var trees = PerkTreeManager.Instance?.perkTrees;
+                    if (trees != null)
                     {
                         for (int i = trees.Count - 1; i >= 0; i--)
                         {
-                            if (trees[i] is PerkTree t && t.name != null &&
-                                t.name == $"{FML_TREE_PREFIX}{treeId}")
+                            if (trees[i] != null && trees[i].name == $"{FML_TREE_PREFIX}{treeId}")
                             {
                                 trees.RemoveAt(i);
-                                if (t.gameObject != null)
-                                    UnityEngine.Object.Destroy(t.gameObject);
                                 break;
                             }
                         }
                     }
-                    _registeredTreeIds.Remove(treeId);
                     count++;
                 }
                 treeSet.Clear();
@@ -343,14 +662,102 @@ namespace FeatherMod
 
         // ===== 内部辅助 =====
 
-        private static Perk? FindPerkInTree(PerkTree tree, string perkName)
+        /// <summary>
+        /// 按 Identifier 解析 Perk 实例。先在 Registry 中查找，
+        /// 未找到且 Domain="duckov" 时触发懒注册（从原版 PerkTree 中查找对应 Perk）。
+        /// </summary>
+        private static Perk? ResolvePerk(Identifier perkId)
         {
-            foreach (var perk in tree.perks)
+            if (_perkRegistry.TryGet(perkId, out var perk))
+                return perk;
+            return TryLazyRegister(perkId);
+        }
+
+        /// <summary>
+        /// 懒注册原版 Perk。从 PerkTreeManager 中按 "treeID/perkName" 路径查找对应 Perk，
+        /// 找到后写入 _perkRegistry（owner = FMLConstants.VanillaOwner），供后续 API 使用。
+        /// </summary>
+        private static Perk? TryLazyRegister(Identifier perkId)
+        {
+            if (perkId.Domain != FMLConstants.DuckovDomain) return null;
+
+            // Path 格式: "treeID/perkName"
+            var slashIndex = perkId.Path.IndexOf('/');
+            if (slashIndex <= 0 || slashIndex >= perkId.Path.Length - 1) return null;
+
+            var treeId = perkId.Path.Substring(0, slashIndex);
+            var perkName = perkId.Path.Substring(slashIndex + 1);
+
+            var tree = PerkTreeManager.GetPerkTree(treeId);
+            if (tree == null) return null;
+
+            foreach (var p in tree.perks)
             {
-                if (perk != null && perk.name == perkName)
-                    return perk;
+                if (p != null && p.name == perkName)
+                {
+                    _perkRegistry.Set(perkId, p, FMLConstants.VanillaOwner);
+                    return p;
+                }
             }
+
             return null;
+        }
+
+        // ===== 诊断：导出原版 PerkTree 节点数据 =====
+
+        /// <summary>
+        /// 导出所有 PerkTree（含原版和 FML 自定义树）的节点信息到日志。
+        /// 用于帮助 modder 确认 <c>RequiredPerks</c> 中正确的 perkName 格式。
+        /// <para>输出包含：Tree ID、perk GameObject.name（用于匹配）、DisplayName 本地化结果、DefaultUnlocked 状态。</para>
+        /// </summary>
+        public static void DumpAllPerkTrees()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("═══════════════════════════════════════════════");
+            sb.AppendLine("  PerkTree Node Reference — copy-paste ready");
+            sb.AppendLine("═══════════════════════════════════════════════");
+
+            var trees = PerkTreeManager.Instance?.perkTrees;
+            if (trees == null)
+            {
+                Debug.LogWarning("[PerkTreeUtils] Cannot dump: PerkTreeManager.Instance or perkTrees is null. "
+                    + "Call this after scene load (e.g. in OnLevelInitialized).");
+                return;
+            }
+
+            foreach (var tree in trees)
+            {
+                if (tree == null) continue;
+                sb.AppendLine();
+                sb.AppendLine($"── PerkTree: {tree.ID} ──");
+                sb.AppendLine($"   GameObject.name: {tree.name}");
+                sb.AppendLine($"   DisplayName: {tree.DisplayName}");
+                sb.AppendLine($"   IsFML: {IsFMLTree(tree.ID)}");
+                sb.AppendLine($"   Perk count: {tree.perks.Count}");
+                sb.AppendLine();
+
+                for (int i = 0; i < tree.perks.Count; i++)
+                {
+                    var perk = tree.perks[i];
+                    if (perk == null) continue;
+                    sb.AppendLine($"   [{i}] name=\"{perk.name}\""
+                        + $"  displayKey=\"{perk.displayName}\""
+                        + $"  displayName=\"{perk.DisplayName}\""
+                        + $"  defaultUnlocked={perk.defaultUnlocked}"
+                        + $"  quality={perk.quality}");
+                    sb.AppendLine($"       → Identifier: new Identifier(\"duckov\", \"{tree.ID}/{perk.name}\")");
+                }
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("═══════════════════════════════════════════════");
+            sb.AppendLine("  Usage in PerkConfig:");
+            sb.AppendLine("    RequiredPerks = new[] {");
+            sb.AppendLine("        new Identifier(\"duckov\", \"TreeID/perkName\"),");
+            sb.AppendLine("    }");
+            sb.AppendLine("═══════════════════════════════════════════════");
+
+            Debug.Log(sb.ToString());
         }
     }
 }

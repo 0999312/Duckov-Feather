@@ -1,6 +1,11 @@
-﻿using Duckov.Buildings;
+﻿using Duckov;
+using Duckov.Buildings;
 using Duckov.Economy;
 using Duckov.Utilities;
+using FeatherMod.Events;
+using FeatherMod.Events.GameEvents;
+using FeatherMod.Interaction;
+using FeatherMod.Interaction.Components;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using System;
@@ -16,9 +21,8 @@ namespace FeatherMod
         private static readonly BuildingRegistry _buildingRegistry = new BuildingRegistry();
         private static bool _initialized;
 
-        /// <summary>用于反射调用 <c>BuildingManager.BuyAndPlace</c> 的 MethodInfo 缓存。</summary>
-        private static readonly MethodInfo? _buyAndPlaceMethod = typeof(BuildingManager)
-            .GetMethod("BuyAndPlace", BindingFlags.NonPublic | BindingFlags.Static);
+        // BuyAndPlace 经 Publicizer 公开，可直接调用。
+        // 保留 PlaceBuilding 方法通过 BuildingManager.BuyAndPlace(...) 直接调用。
 
         /// <summary>暴露给 RegisterBootstrap 和 Patch 层用于注册到元表和查询。</summary>
         public static BuildingRegistry Registry => _buildingRegistry;
@@ -56,6 +60,10 @@ namespace FeatherMod
                 nonAlt.SetIfAbsent(id, _buildingRegistry, RegistryManager.CurrentModid);
             else
                 meta.Set(id, _buildingRegistry, RegistryManager.CurrentModid);
+
+            // 永久订阅场景加载事件：场景重载后重建 Machine 交互节点。
+            // 参考 FriendlyNpcUtils.HookSaveRestore() 模式——场景加载后自动恢复运行时对象。
+            HookSceneLoadEvent();
         }
 
         // ===== 注册 / 卸载 =====
@@ -248,18 +256,14 @@ namespace FeatherMod
         // ===== 放置建筑 =====
 
         /// <summary>
-        /// 放置建筑。通过反射调用 <see cref="BuildingManager.BuyAndPlace"/>（该方法是 internal）。
+        /// 放置建筑。直接调用 <see cref="BuildingManager.BuyAndPlace"/>（经 Publicizer 公开）。
         /// areaId 和 buildingId 均为 Identifier——FML 内部将其 Path 映射为游戏原生 string ID。
         /// </summary>
         public static BuildingBuyAndPlaceResults PlaceBuilding(
             Identifier areaId, Identifier buildingId,
             Vector2Int coord, BuildingRotation rotation)
         {
-            if (_buyAndPlaceMethod == null)
-                throw new InvalidOperationException("BuildingManager.BuyAndPlace not found via reflection.");
-
-            return (BuildingBuyAndPlaceResults)_buyAndPlaceMethod.Invoke(null,
-                new object[] { areaId.Path, buildingId.Path, coord, rotation });
+            return BuildingManager.BuyAndPlace(areaId.Path, buildingId.Path, coord, rotation);
         }
 
         /// <summary>
@@ -384,14 +388,26 @@ namespace FeatherMod
             // 查找 buildingInfo.id 匹配的建筑并立即执行回调。
             // 这解决了存档加载后的时序问题：建筑在 RepaintAll 时已实例化，
             // 但 OnBuildingBuiltComplex 不触发——回调在 mod OnAfterSetup 时才注册。
+            var found = false;
             var existing = UnityEngine.Object.FindObjectsOfType<Building>();
             foreach (var b in existing)
             {
                 if (b != null && b.data != null && b.data.Info.id == path)
                 {
+                    found = true;
+                    // 自动装配 Machine 交互节点
+                    SetupBuildingMachines(b);
                     try { callback?.Invoke(b); }
                     catch (Exception e) { Debug.LogError($"[BuildingUtils.OnBuildingBuilt] replay callback for '{buildingId}' threw: {e}"); }
                 }
+            }
+
+            // 如果当前场景中还没加载建筑（如 OnAfterSetup 时场景尚未切换），
+            // 标记 pending 并订阅 MainSceneLoadedEvent，在建筑实际加载后再重试。
+            if (!found && !_pendingSceneReplay.Contains(path))
+            {
+                _pendingSceneReplay.Add(path);
+                HookSceneLoadEvent();
             }
         }
 
@@ -429,31 +445,214 @@ namespace FeatherMod
             list.RemoveAll(e => e.buildingId.Equals(buildingId) && e.callback == callback);
         }
 
+        // 追踪哪些 buildingId 的路径 B 扫描未找到建筑，需要在场景加载后重试
+        private static readonly HashSet<string> _pendingSceneReplay = new HashSet<string>();
+        private static bool _sceneLoadEventHooked;
+
         private static void HookBuildingEvents()
         {
             if (_buildingEventsHooked) return;
             _buildingEventsHooked = true;
 
-            // Hook OnBuildingBuiltComplex
-            var builtEvt = typeof(BuildingManager).GetEvent("OnBuildingBuiltComplex",
-                BindingFlags.Public | BindingFlags.Static);
-            var builtHandler = typeof(BuildingUtils).GetMethod("OnBuildingBuiltHandler",
-                BindingFlags.NonPublic | BindingFlags.Static);
-            if (builtEvt != null && builtHandler != null)
+            // Publicizer 已公开：直接订阅，天然支持取消订阅
+            BuildingManager.OnBuildingBuiltComplex += OnBuildingBuiltHandler;
+            BuildingManager.OnBuildingDestroyedComplex += OnBuildingDemolishedHandler;
+        }
+
+        private static void HookSceneLoadEvent()
+        {
+            if (_sceneLoadEventHooked) return;
+            _sceneLoadEventHooked = true;
+
+            // 场景刚加载完时建筑可能尚未实例化（RepaintAll 在 LevelInit 期间执行），
+            // 因此订阅 MainSceneLoaded（主场景就绪）+ LevelInitialized（建筑已加载）两个事件。
+            // FriendlyNpcUtils 的做法也是订阅多个事件以确保时序覆盖。
+            EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoadedReplayBuildings);
+            EventBusManager.Instance.Sync.Register<LevelInitializedEvent>(OnLevelInitializedReplayBuildings);
+        }
+
+        private static void OnMainSceneLoadedReplayBuildings(MainSceneLoadedEvent evt)
+        {
+            ReplayPendingBuildingCallbacks();
+            RestoreBuildingMachines();
+        }
+
+        private static void OnLevelInitializedReplayBuildings(LevelInitializedEvent evt)
+        {
+            ReplayPendingBuildingCallbacks();
+            RestoreBuildingMachines();
+        }
+
+        private static void ReplayPendingBuildingCallbacks()
+        {
+            if (_pendingSceneReplay.Count == 0) return;
+
+            var existing = UnityEngine.Object.FindObjectsOfType<Building>();
+            var resolved = new List<string>();
+
+            foreach (var path in _pendingSceneReplay)
             {
-                var handler = Delegate.CreateDelegate(builtEvt.EventHandlerType!, (object?)null, builtHandler);
-                builtEvt.AddEventHandler(null, handler);
+                if (!_buildingCallbacks.TryGetValue(path, out var callbacks) || callbacks.Count == 0)
+                {
+                    resolved.Add(path);
+                    continue;
+                }
+
+                foreach (var b in existing)
+                {
+                    if (b != null && b.data != null && b.data.Info.id == path)
+                    {
+                        // 自动装配 Machine 交互节点
+                        SetupBuildingMachines(b);
+
+                        foreach (var (buildingId, callback) in callbacks)
+                        {
+                            try { callback?.Invoke(b); }
+                            catch (Exception e) { Debug.LogError($"[BuildingUtils] scene-load replay callback for '{buildingId}' threw: {e}"); }
+                        }
+                        resolved.Add(path);
+                        break;
+                    }
+                }
             }
 
-            // Hook OnBuildingDestroyedComplex（对称的回收/拆除事件）
-            var demolishEvt = typeof(BuildingManager).GetEvent("OnBuildingDestroyedComplex",
-                BindingFlags.Public | BindingFlags.Static);
-            var demolishHandler = typeof(BuildingUtils).GetMethod("OnBuildingDemolishedHandler",
-                BindingFlags.NonPublic | BindingFlags.Static);
-            if (demolishEvt != null && demolishHandler != null)
+            foreach (var r in resolved)
+                _pendingSceneReplay.Remove(r);
+        }
+
+        /// <summary>
+        /// 场景加载后重建所有已注册建筑的 Machine 交互节点。
+        /// 参考 <see cref="FriendlyNpcUtils.RestoreNpcSpawns"/> 设计模式：
+        /// 配置（_buildingMachines）是持久的，运行时对象（交互节点 GameObject）在场景重载后被销毁，
+        /// 此处从配置重建所有交互节点。
+        /// </summary>
+        private static void RestoreBuildingMachines()
+        {
+            if (_buildingMachines.Count == 0) return;
+
+            var existing = UnityEngine.Object.FindObjectsOfType<Building>();
+            if (existing.Length == 0) return;
+
+            int restored = 0;
+
+            foreach (var kvp in _buildingMachines)
             {
-                var handler = Delegate.CreateDelegate(demolishEvt.EventHandlerType!, (object?)null, demolishHandler);
-                demolishEvt.AddEventHandler(null, handler);
+                var path = kvp.Key;
+                foreach (var b in existing)
+                {
+                    if (b != null && b.data != null && b.data.Info.id == path)
+                    {
+                        SetupBuildingMachines(b);
+                        restored++;
+                        break;
+                    }
+                }
+            }
+
+            if (restored > 0)
+                Debug.Log($"[BuildingUtils] RestoreBuildingMachines: rebuilt machines on {restored} building(s).");
+        }
+
+        /// <summary>
+        /// <summary>
+        /// 取消订阅 BuildingManager 事件。RegistryManager.RemoveAllByOwner 卸载时调用。
+        /// </summary>
+        internal static void UnhookBuildingEvents()
+        {
+            if (!_buildingEventsHooked) return;
+            _buildingEventsHooked = false;
+            BuildingManager.OnBuildingBuiltComplex -= OnBuildingBuiltHandler;
+            BuildingManager.OnBuildingDestroyedComplex -= OnBuildingDemolishedHandler;
+
+            // 取消场景加载事件订阅
+            if (_sceneLoadEventHooked)
+            {
+                _sceneLoadEventHooked = false;
+                EventBusManager.Instance.Sync.Unregister<MainSceneLoadedEvent>(OnMainSceneLoadedReplayBuildings);
+                EventBusManager.Instance.Sync.Unregister<LevelInitializedEvent>(OnLevelInitializedReplayBuildings);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  Machine 运行时自动装配
+        // ═══════════════════════════════════════════════════
+
+        /// <summary>
+        /// 在建筑实例化到场景后自动装配 Machine 交互节点。
+        /// 读取 <see cref="ConfigureBuildingUI"/> 注册的 <see cref="MachineDef"/> 列表，
+        /// 为每个 Machine 在 functionContainer 上创建交互节点。
+        /// 由 <see cref="OnBuildingBuiltHandler"/> 和 <see cref="ReplayPendingBuildingCallbacks"/> 自动调用。
+        /// </summary>
+        /// <remarks>
+        /// 完整 Machine View（子库存面板 + 进度条）待后续 Phase 实现。
+        /// 当前交互节点指向 <see cref="FeatherMod.Interaction.GameViews.Machine"/>，
+        /// ViewDispatcher 中已注册 placeholder handler。
+        /// </remarks>
+        private static void SetupBuildingMachines(Building building)
+        {
+            if (building == null || building.data == null) return;
+            var path = building.data.Info.id;
+            if (string.IsNullOrEmpty(path)) return;
+
+            if (!_buildingMachines.TryGetValue(path, out var machines) || machines.Count == 0)
+                return;
+
+            var funcContainer = GetFunctionContainer(building);
+            if (funcContainer == null) return;
+
+            var handlers = new List<ViewInteractHandler>();
+
+            foreach (var machine in machines)
+            {
+                var childName = $"Machine_{machine.MachineKey}";
+                var existing = funcContainer.transform.Find(childName);
+                if (existing != null)
+                {
+                    var existingHandler = existing.GetComponent<ViewInteractHandler>();
+                    if (existingHandler != null) handlers.Add(existingHandler);
+                    continue; // 幂等：已初始化则跳过
+                }
+
+                try
+                {
+                    var child = new GameObject(childName);
+                    child.transform.SetParent(funcContainer.transform, false);
+                    child.layer = funcContainer.layer;
+
+                    // 碰撞体（交互检测）
+                    var collider = child.AddComponent<BoxCollider>();
+                    collider.isTrigger = true;
+                    collider.size = Vector3.one;
+
+                    // 交互处理器
+                    var interactId = new Identifier(FMLConstants.Domain, $"machine_{path}_{machine.MachineKey}");
+                    var handler = child.AddComponent<ViewInteractHandler>();
+                    handler.ViewType = GameViews.Machine;
+                    handler.ViewParam = $"{path}/{machine.MachineKey}";
+                    handler.InteractNameKey = machine.DisplayName;
+
+                    InteractionUtils.Registry.Set(interactId, new InteractionEntry
+                    {
+                        Target = child,
+                        Modid = interactId.Domain
+                    }, interactId.Domain);
+
+                    handlers.Add(handler);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BuildingUtils] Failed to setup machine '{machine.MachineKey}' on building '{path}': {e}");
+                }
+            }
+
+            // 编组：多台机器时，第一台为主交互，其余为组成员（碰撞体禁用，共用交互提示）
+            if (handlers.Count > 1)
+            {
+                var primary = handlers[0];
+                var members = new InteractableBase[handlers.Count - 1];
+                for (int i = 1; i < handlers.Count; i++)
+                    members[i - 1] = handlers[i];
+                InteractionUtils.SetupInteractionGroup(primary, members);
             }
         }
 
@@ -465,6 +664,11 @@ namespace FeatherMod
             var building = UnityEngine.Object.FindObjectsOfType<Building>()
                 .FirstOrDefault(b => b != null && b.GUID == guid);
             var arg = building ?? info.Prefab;  // 找到实例 → 传实例；未找到 → fallback prefab
+
+            // 自动装配 Machine 交互节点
+            if (building != null)
+                SetupBuildingMachines(building);
+
             foreach (var (buildingId, callback) in list)
             {
                 try
@@ -628,6 +832,31 @@ namespace FeatherMod
             return field?.GetValue(building) as T;
         }
 
+        // ══════════ Container Access ══════════
+
+        /// <summary>
+        /// 获取建筑的 Function 容器（功能层）。
+        /// <para>该容器承载 trigger collider，用于玩家交互检测、可点击区域等逻辑判定，
+        /// 不参与视觉渲染。模组应通过本方法访问而非硬编码 <c>building.transform.Find("Function")</c>，
+        /// 以避免子物体命名或层级变动导致的破坏性变更。</para>
+        /// </summary>
+        /// <param name="building">目标建筑实例。</param>
+        /// <returns>Function 容器 GameObject；若字段缺失或为空则返回 <c>null</c>。</returns>
+        public static GameObject? GetFunctionContainer(Building building)
+            => GetBuildingField<GameObject>(building, "functionContainer");
+
+        /// <summary>
+        /// 获取建筑的 Graphics 容器（视觉层）。
+        /// <para>该容器承载视觉模型以及用于阻挡玩家的非 trigger physics collider
+        /// （即玩家碰撞体积）。模组应通过本方法访问而非硬编码
+        /// <c>building.transform.Find("Graphics")</c>，以避免子物体命名或层级变动
+        /// 导致的破坏性变更。</para>
+        /// </summary>
+        /// <param name="building">目标建筑实例。</param>
+        /// <returns>Graphics 容器 GameObject；若字段缺失或为空则返回 <c>null</c>。</returns>
+        public static GameObject? GetGraphicsContainer(Building building)
+            => GetBuildingField<GameObject>(building, "graphicsContainer");
+
         /// <summary>
         /// 修复 BuildingInfo 中可能为 null 的数组字段，初始化为空数组。
         /// 游戏原生 <c>RequirementsSatisfied()</c> / <c>BuildingAreaData.Any()</c>
@@ -635,36 +864,181 @@ namespace FeatherMod
         /// </summary>
         private static void SanitizeBuildingInfo(ref BuildingInfo info)
         {
-            // requireBuildings: string[] — RequirementsSatisfied() 会 foreach 遍历
-            try
-            {
-                var field = typeof(BuildingInfo).GetField("requireBuildings",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null && field.GetValue(info) == null)
-                    field.SetValueDirect(__makeref(info), Array.Empty<string>());
-            }
-            catch { /* 字段不存在或类型不匹配时静默跳过 */ }
+            // Publicizer 已公开，直接赋值（struct 需要 ref）
+            info.requireBuildings ??= Array.Empty<string>();
+            info.requireQuests ??= Array.Empty<int>();
+            info.alternativeFor ??= Array.Empty<string>();
+        }
 
-            // requireQuests: int[] — 同上
-            try
-            {
-                var field = typeof(BuildingInfo).GetField("requireQuests",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null && field.GetValue(info) == null)
-                    field.SetValueDirect(__makeref(info), Array.Empty<int>());
-            }
-            catch { /* 字段不存在或类型不匹配时静默跳过 */ }
+        // ===== Machine 管理（新增） =====
 
-            // alternativeFor: string[] — BuildingAreaData.Any() 遍历时不检查 null，
-            // 建造 FML 建筑后触发 Contains(null) → ArgumentNullException 扩散全局
-            try
+        private static readonly Dictionary<string, List<MachineDef>> _buildingMachines
+            = new Dictionary<string, List<MachineDef>>();
+
+        /// <summary>
+        /// 为指定建筑注册自定义 UI 配置（含 Machine 定义）。
+        /// 当玩家交互该建筑打开 DetailsView 时，FML 自动注入 Machine UI 元素。
+        /// MachineDef.Recipe 非 null 时自动创建 BuildingSlotsWatcher。
+        /// </summary>
+        /// <param name="buildingId">已注册的建筑 Identifier。</param>
+        /// <param name="config">UI 配置（含 Machines 列表）。</param>
+        /// <param name="modid">归属 modid。</param>
+        public static void ConfigureBuildingUI(
+            Identifier buildingId,
+            BuildingUIConfig config,
+            string modid)
+        {
+            Init();
+
+            var path = buildingId.Path;
+            if (!_buildingMachines.ContainsKey(path))
+                _buildingMachines[path] = new List<MachineDef>();
+
+            if (config.Machines != null)
             {
-                var field = typeof(BuildingInfo).GetField("alternativeFor",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null && field.GetValue(info) == null)
-                    field.SetValueDirect(__makeref(info), Array.Empty<string>());
+                foreach (var machine in config.Machines)
+                {
+                    _buildingMachines[path].Add(machine);
+
+                    // 注册 Recipe（如果 MachineDef 包含）
+                    if (machine.Recipe != null)
+                    {
+                        if (string.IsNullOrEmpty(machine.Recipe.Id.Domain))
+                            machine.Recipe.Id = new Identifier(modid, $"{path}_{machine.MachineKey}");
+                        machine.Recipe.SaveKey = $"{path}/{machine.MachineKey}";
+                    }
+                }
             }
-            catch { /* 字段不存在或类型不匹配时静默跳过 */ }
+        }
+
+        /// <summary>
+        /// 为建筑上指定 Machine 动态注册 Recipe。
+        /// Recipe 的类型由子类确定（SimpleMachineRecipe 或自定义），Id 为合成表标识。
+        /// FML 内部自动创建 BuildingSlotsWatcher 并绑定子库存。
+        /// </summary>
+        /// <param name="buildingId">已注册的建筑 Identifier。</param>
+        /// <param name="machineKey">Machine 标识（与 MachineDef.MachineKey 对应）。</param>
+        /// <param name="recipe">MachineRecipe 子类实例。类型决定逻辑，Id 为合成表标识。</param>
+        /// <param name="modid">归属 modid。</param>
+        public static void RegisterMachineRecipe(
+            Identifier buildingId,
+            string machineKey,
+            MachineRecipe recipe,
+            string modid)
+        {
+            Init();
+
+            recipe.SaveKey = $"{buildingId.Path}/{machineKey}";
+
+            // 查找或创建 MachineDef
+            var path = buildingId.Path;
+            if (!_buildingMachines.TryGetValue(path, out var machines))
+            {
+                machines = new List<MachineDef>();
+                _buildingMachines[path] = machines;
+            }
+
+            var existing = machines.Find(m => m.MachineKey == machineKey);
+            if (existing != null)
+            {
+                existing.Recipe = recipe;
+            }
+            else
+            {
+                machines.Add(new MachineDef
+                {
+                    MachineKey = machineKey,
+                    Recipe = recipe,
+                    UnlockedByDefault = true
+                });
+            }
+        }
+
+        /// <summary>移除建筑上指定 Machine 的 Recipe。</summary>
+        public static bool UnregisterMachineRecipe(Identifier buildingId, string machineKey)
+        {
+            if (!_buildingMachines.TryGetValue(buildingId.Path, out var machines))
+                return false;
+
+            var machine = machines.Find(m => m.MachineKey == machineKey);
+            if (machine != null)
+            {
+                machine.Recipe = null;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 获取建筑的全部 Machine 定义（供内部 Patch 层和 UI 注入引擎使用）。
+        /// </summary>
+        internal static List<MachineDef>? GetBuildingMachines(Identifier buildingId)
+        {
+            _buildingMachines.TryGetValue(buildingId.Path, out var list);
+            return list;
+        }
+
+        /// <summary>检查 Machine 是否当前可用（Perk 门控）。</summary>
+        internal static bool IsMachineAvailable(MachineDef machine)
+        {
+            if (machine.UnlockedByDefault) return true;
+            if (machine.RequiredPerk == null) return true;
+            return PerkTreeUtils.IsPerkUnlocked(machine.RequiredPerk);
+        }
+
+        /// <summary>
+        /// 按 machineKey 检查 Machine 是否当前可用（Perk 门控）。
+        /// 遍历所有已注册建筑的 Machine 列表查找匹配 key。
+        /// </summary>
+        public static bool IsMachineAvailableByKey(string machineKey)
+        {
+            foreach (var kvp in _buildingMachines)
+            {
+                var machine = kvp.Value.Find(m => m.MachineKey == machineKey);
+                if (machine != null)
+                    return IsMachineAvailable(machine);
+            }
+            return true; // 未注册的 key，不阻止
+        }
+
+        /// <summary>
+        /// 为建筑实例挂载 BuildingBehaviour 子类。
+        /// </summary>
+        /// <typeparam name="T">BuildingBehaviour 子类。</typeparam>
+        /// <param name="buildingId">建筑 Identifier。</param>
+        /// <param name="behaviour">预配置的 Behaviour 实例（可选，null = 创建新实例）。</param>
+        public static void AttachBehaviour<T>(Identifier buildingId, T? behaviour = null) where T : BuildingBehaviour
+        {
+            if (!_buildingRegistry.TryGet(buildingId, out var info)) return;
+            var prefab = BuildingDataCollection.GetPrefab(info.prefabName);
+            if (prefab == null) return;
+
+            // 挂载到 prefab（所有实例继承）
+            var instance = behaviour ?? prefab.gameObject.AddComponent<T>();
+            var inventory = prefab.GetComponent<ItemStatsSystem.Inventory>();
+            instance.SetBuilding(prefab, inventory);
+        }
+
+        /// <summary>卸载指定 mod 的全部 Building Machine 配置。</summary>
+        internal static void RemoveAllMachinesForMod(string modid)
+        {
+            var keysToRemove = new List<string>();
+            foreach (var kvp in _buildingMachines)
+            {
+                kvp.Value.RemoveAll(m =>
+                {
+                    if (m.Recipe?.Id.Domain == modid)
+                    {
+                        m.Recipe = null;
+                        return true;
+                    }
+                    return false;
+                });
+                if (kvp.Value.Count == 0)
+                    keysToRemove.Add(kvp.Key);
+            }
+            foreach (var key in keysToRemove)
+                _buildingMachines.Remove(key);
         }
     }
 }
