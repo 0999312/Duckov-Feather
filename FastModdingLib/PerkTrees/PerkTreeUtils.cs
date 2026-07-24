@@ -147,14 +147,24 @@ namespace FeatherMod
             var loadedTrees = new HashSet<string>();
             foreach (var (entry, tree, graph, perk) in rebuildList)
             {
-                if (entry.config.RequiredPerks != null)
+                if (entry.config.RequiredPerks != null && entry.config.RequiredPerks.Length > 0)
                 {
+                    Debug.Log($"[PerkTreeUtils] Connecting '{perk.name}': {entry.config.RequiredPerks.Length} required perk(s)");
                     foreach (var reqId in entry.config.RequiredPerks)
                     {
                         var reqPerk = ResolvePerk(reqId);
                         if (reqPerk != null)
+                        {
                             ConnectPerksInternal(reqPerk, perk, entry.config.Position);
+                            Debug.Log($"[PerkTreeUtils]   -> connected to '{reqPerk.name}' (Master={reqPerk.Master?.ID})");
+                        }
+                        else
+                            Debug.LogWarning($"[PerkTreeUtils]   -> FAILED to resolve required perk: {reqId}");
                     }
+                }
+                else
+                {
+                    Debug.Log($"[PerkTreeUtils] No RequiredPerks for '{perk.name}' — standalone node.");
                 }
 
                 EnsureGraphNode(tree, perk, entry.config);
