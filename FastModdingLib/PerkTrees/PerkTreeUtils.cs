@@ -131,7 +131,13 @@ namespace FeatherMod
 
                 // ── 需要重建：首次注入 或 场景重载后 Perk 被销毁 ──
 
-                // 重新创建 Perk 子对象 + graph 节点（原 Perk 可能已被场景重载销毁）
+                // 销毁旧的同名子对象（AddPerk 创建的临时 Perk 或上次注入的残留），
+                // 避免 tree.Collect() 收集重复 Perk 导致链接混乱和状态丢失。
+                var oldChild = tree.transform.Find(entry.config.PerkId.Path);
+                if (oldChild != null)
+                    UnityEngine.Object.Destroy(oldChild);
+
+                // 重新创建 Perk 子对象 + graph 节点
                 var perkGo = new GameObject(entry.config.PerkId.Path);
                 perkGo.transform.SetParent(tree.transform, false);
                 var perk = perkGo.AddComponent<Perk>();

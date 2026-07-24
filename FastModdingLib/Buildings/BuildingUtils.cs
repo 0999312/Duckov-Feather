@@ -473,84 +473,71 @@ namespace FeatherMod
 
         private static void OnMainSceneLoadedReplayBuildings(MainSceneLoadedEvent evt)
         {
-            ReplayPendingBuildingCallbacks();
-            RestoreBuildingMachines();
+            RestoreBuildingInteractions();
         }
 
         private static void OnLevelInitializedReplayBuildings(LevelInitializedEvent evt)
         {
-            ReplayPendingBuildingCallbacks();
-            RestoreBuildingMachines();
-        }
-
-        private static void ReplayPendingBuildingCallbacks()
-        {
-            if (_pendingSceneReplay.Count == 0) return;
-
-            var existing = UnityEngine.Object.FindObjectsOfType<Building>();
-            var resolved = new List<string>();
-
-            foreach (var path in _pendingSceneReplay)
-            {
-                if (!_buildingCallbacks.TryGetValue(path, out var callbacks) || callbacks.Count == 0)
-                {
-                    resolved.Add(path);
-                    continue;
-                }
-
-                foreach (var b in existing)
-                {
-                    if (b != null && b.data != null && b.data.Info.id == path)
-                    {
-                        // 自动装配 Machine 交互节点
-                        SetupBuildingMachines(b);
-
-                        foreach (var (buildingId, callback) in callbacks)
-                        {
-                            try { callback?.Invoke(b); }
-                            catch (Exception e) { Debug.LogError($"[BuildingUtils] scene-load replay callback for '{buildingId}' threw: {e}"); }
-                        }
-                        resolved.Add(path);
-                        break;
-                    }
-                }
-            }
-
-            foreach (var r in resolved)
-                _pendingSceneReplay.Remove(r);
+            RestoreBuildingInteractions();
         }
 
         /// <summary>
-        /// 场景加载后重建所有已注册建筑的 Machine 交互节点。
+        /// 场景加载后重建所有已注册建筑的交互节点（Machine + 通过 OnBuildingBuilt 注册的回调）。
         /// 参考 <see cref="FriendlyNpcUtils.RestoreNpcSpawns"/> 设计模式：
-        /// 配置（_buildingMachines）是持久的，运行时对象（交互节点 GameObject）在场景重载后被销毁，
-        /// 此处从配置重建所有交互节点。
+        /// 配置（_buildingMachines + _buildingCallbacks）是持久的，场景重载后运行时对象被销毁，此处从配置重建。
+        ///
+        /// 同时消费 _pendingSceneReplay 中的条目（首次注册时建筑未加载的情况）。
         /// </summary>
-        private static void RestoreBuildingMachines()
+        private static void RestoreBuildingInteractions()
         {
-            if (_buildingMachines.Count == 0) return;
-
             var existing = UnityEngine.Object.FindObjectsOfType<Building>();
             if (existing.Length == 0) return;
 
-            int restored = 0;
+            int machinesRestored = 0;
+            int callbacksInvoked = 0;
+            int pendingResolved = 0;
 
-            foreach (var kvp in _buildingMachines)
+            foreach (var b in existing)
             {
-                var path = kvp.Key;
-                foreach (var b in existing)
+                if (b == null || b.data == null) continue;
+                var path = b.data.Info.id;
+                if (string.IsNullOrEmpty(path)) continue;
+
+                // 重建 Machine 交互节点
+                if (_buildingMachines.ContainsKey(path))
                 {
-                    if (b != null && b.data != null && b.data.Info.id == path)
-                    {
-                        SetupBuildingMachines(b);
-                        restored++;
-                        break;
-                    }
+                    SetupBuildingMachines(b);
+                    machinesRestored++;
                 }
+
+                // 重新触发 OnBuildingBuilt 回调（重建合成/PerkTree/NPC 等交互节点）
+                if (_buildingCallbacks.TryGetValue(path, out var callbacks))
+                {
+                    foreach (var (buildingId, callback) in callbacks)
+                    {
+                        try { callback?.Invoke(b); }
+                        catch (Exception e) { Debug.LogError($"[BuildingUtils] scene-load replay callback for '{buildingId}' threw: {e}"); }
+                    }
+                    callbacksInvoked++;
+                }
+
+                // 消费 _pendingSceneReplay（首次 OnAfterSetup 时建筑未加载的条目）
+                if (_pendingSceneReplay.Remove(path))
+                    pendingResolved++;
             }
 
-            if (restored > 0)
-                Debug.Log($"[BuildingUtils] RestoreBuildingMachines: rebuilt machines on {restored} building(s).");
+            // 清理 _pendingSceneReplay 中已不存在的回调（无对应 callbacks 的孤立条目）
+            var orphaned = new List<string>();
+            foreach (var p in _pendingSceneReplay)
+            {
+                if (!_buildingCallbacks.ContainsKey(p) || _buildingCallbacks[p].Count == 0)
+                    orphaned.Add(p);
+            }
+            foreach (var o in orphaned)
+                _pendingSceneReplay.Remove(o);
+
+            if (machinesRestored > 0 || callbacksInvoked > 0)
+                Debug.Log($"[BuildingUtils] RestoreBuildingInteractions: machines={machinesRestored}, callbacks={callbacksInvoked}, pending={pendingResolved}.");
         }
 
         /// <summary>
