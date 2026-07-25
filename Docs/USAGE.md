@@ -10,6 +10,7 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 2. [模组主类（ModBehaviour）](#2-模组主类)
 3. [Identifier 标识符系统](#3-identifier-标识符系统)
 4. [物品系统（ItemUtils）](#4-物品系统itemutils)
+    - 4.10 [标签系统（TagUtils）](#410-标签系统tagutils)
 5. [合成配方（CraftingUtils）](#5-合成配方craftingutils)
 6. [任务系统（QuestUtils）](#6-任务系统questutils)
 7. [商店系统（ShopUtils）](#7-商店系统shoputils)
@@ -19,6 +20,10 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 11. [经济系统（EconomyUtils）](#11-经济系统economyutils)
 12. [Buff 状态效果（BuffUtils）](#12-buff-状态效果buffutils)
 13. [建筑系统（BuildingUtils）](#13-建筑系统buildingutils)
+    - 13.8 [MachineRecipe — 建筑设备配方](#138-machinerecipe--建筑设备配方)
+    - 13.9 [ConfigureBuildingUI — 建筑 UI 自定义](#139-configurebuildingui--建筑-ui-自定义)
+    - 13.10 [BuildingBehaviour — 建筑行为组件](#1310-buildingbehaviour--建筑行为组件)
+    - 13.11 [TimeUtils — 游戏时间工具](#1311-timeutils--游戏时间工具)
 14. [Perk 技能树（PerkTreeUtils）](#14-perk-技能树perktreeutils)
 15. [天赋系统（EndowmentUtils）](#15-天赋系统endowmentutils)
 16. [敌人系统（EnemyUtils）](#16-敌人系统enemyutils)
@@ -39,7 +44,8 @@ _面向全新模组项目的完整使用指南。如果你是第一次使用 FML
 31. [注册表系统（Registry）](#31-注册表系统registry)
 32. [模组卸载生命周期](#32-模组卸载生命周期)
 33. [NPC 装备系统（EquipmentUtils）](#33-npc-装备系统equipmentutils)
-34. [附录：项目结构参考](#34-附录项目结构参考)
+34. [跨模组联动（ModUtils）](#34-跨模组联动modutils)
+35. [附录：项目结构参考](#35-附录项目结构参考)
 
 ---
 
@@ -367,11 +373,18 @@ var blueprintData = new BlueprintData
 {
     itemId = 200001,
     localizationKey = "bp_coffee",
-    formulaID = "coffee_recipe",
+    formulaID = new Identifier("mymod", "coffee_recipe"),  // FML 自动取 .Path 匹配游戏原生 CraftingFormula.id
+    FormulaTag = "Formula_Cook",  // 决定蓝图归属的研究台类别（默认 "Formula_Blueprint"）
     // 从 ItemData 继承的属性...
 };
 ItemUtils.CreateCustomBluePrint(new Identifier("mymod", "coffee_bp"), blueprintData);
 ```
+
+> **重要**：`formulaID` 为 `Identifier` 类型。FML 内部自动取 `.Path` 写入游戏原生的 `CraftingFormula.id`。请勿手动拼接 domain 前缀。
+>
+> **`FormulaTag` 说明**：决定蓝图物品属于哪个研究台类别。
+> `CreateCustomBluePrint` 自动调用 `TagUtils.RegisterTag` 注册该标签并注入物品 tags。
+> 可选值：`Formula_Normal`（基础工作台）/ `Formula_Blueprint`（高级工作台，默认）/ `Formula_Medic`（医疗台）/ `Formula_Cook`（厨房）/ `Formula_Printer`（打印台），或自定义标签。
 
 ### 4.6 创建子弹
 
@@ -464,6 +477,74 @@ foreach (var id in GameItemLookup.GetAllIdentifiers())
 
 ---
 
+### 4.10 标签系统（TagUtils）
+
+Tags 是 FML 中唯一不走 `Identifier` 的系统——所有 Tag 均视为 Common Tag，以纯字符串名称标识。Tag 是游戏原生的 `ScriptableObject`，需通过 `TagUtils.RegisterTag` **显式注册**后才能使用。
+
+#### 注册 Tag
+
+```csharp
+// 简单注册
+TagUtils.RegisterTag("DrinkStation");
+
+// 带配置注册（show、color、priority）
+TagUtils.RegisterTag("CoffeeBean", new TagConfig
+{
+    Show = true,
+    Color = new Color(0.6f, 0.3f, 0.1f),
+    Priority = 10,
+});
+```
+
+> **注册时机**：必须在 `ItemUtils.CreateCustomItem` **之前**完成，否则物品创建时会输出 warning 且 Tag 不会被添加到物品上。
+
+#### 查询 Tag
+
+```csharp
+// 查找 Tag（仅查询，不创建）
+Tag? tag = TagUtils.GetTag("CoffeeBean");
+
+// 检查是否存在
+if (TagUtils.TagExists("CoffeeBean"))
+{
+    // ...
+}
+```
+
+#### TagConfig 字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Show` | `bool?` | 是否在物品 Tooltip 中显示此 Tag。默认 `false` |
+| `ShowDescription` | `bool?` | 是否显示 Tag 的描述文本。默认 `false` |
+| `Color` | `Color?` | Tag 图标/文字颜色。默认 `Color.black` |
+| `Priority` | `int?` | Tag 显示优先级（数值越大越靠前）。默认 `0` |
+
+#### 完整流程示例
+
+```csharp
+protected override void OnAfterSetup()
+{
+    // 1. 先注册 Tag
+    TagUtils.RegisterTag("CoffeeBean", new TagConfig { Show = true });
+    TagUtils.RegisterTag("DrinkStation");
+
+    // 2. 再创建物品——此时 Tag 已可用
+    ItemUtils.CreateCustomItem(
+        Id("coffee_bean"),
+        new ItemData
+        {
+            itemId = 50001,
+            tags = new List<string> { "CoffeeBean", "Food" },  // Tag 字符串
+            // ...
+        });
+}
+```
+
+> **注意**：Crafting 配方的 `Tags` 字段（`string[]`）是纯字符串工作台过滤标签，**不经过** TagUtils 系统。配方标签直接通过 `string[].Contains()` 字符串匹配，无需注册。
+
+---
+
 ## 5. 合成配方（CraftingUtils）
 
 ### 5.1 数据模型
@@ -501,7 +582,7 @@ CraftingUtils.AddCraftingFormula(new CraftingFormulaData
     },
     Result = ItemEntry.Of("mymod:coffee", 10),
     Tags = new[] { "WorkBenchAdvanced" },
-    RequirePerk = "cooking"
+    RequirePerk = new Identifier("duckov", "hacker/cooking")
 });
 
 // Builder 方式
@@ -1525,55 +1606,410 @@ Building_XXX (GameObject)
 
 ---
 
-## 14. Perk 技能树（PerkTreeUtils）
+### 13.8 MachineRecipe — 建筑设备配方
+
+> **新增于 2026-07-22**。MachineRecipe 是建筑设备的"配方"——区别于 `CraftingFormula`（玩家手动合成），MachineRecipe 由建筑**自动执行**，从子库存读取物品，产出产物到子库存或主库存。
+
+#### 抽象基类
 
 ```csharp
-// ===== 注册 Perk（Identifier 优先） =====
+public abstract class MachineRecipe
+{
+    public Identifier Id;                                    // 合成表标识
 
-// 在技能树上注册新 Perk
-// id.Domain → 推导 treeId，id.Path → perk 名称
-Perk perk = PerkTreeUtils.AddPerk(
-    new Identifier("mymod", "ExtraHealth"),  // Identifier（domain=modid, path=perkName）
-    requirement,   // PerkRequirement
-    perkIcon       // Sprite
-    // 第三个参数 modid 可选，默认从 id.Domain 推导
+    // ── modder 覆写 ──
+    public abstract bool CanExecute();                       // 槽位满足条件？
+    public abstract void Execute();                          // 执行配方
+    public virtual float GetProgress() => 0f;                // 进度（0~1），用于 UI 进度条
+    public virtual bool IsRunning => false;                  // 是否正在生产
+
+    // ── 自动存档：modder 无需覆写任何序列化方法 ──
+    protected void SetState<T>(string key, T value);         // 存状态
+    protected T GetState<T>(string key, T defaultValue);     // 取状态
+
+    // ── 运行时引用（由 BuildingSlotsWatcher 注入） ──
+    protected Inventory MainInventory;
+    protected IReadOnlyDictionary<string, Inventory> SubInventories;
+}
+```
+
+**关键**：`SetState<T>` / `GetState<T>` 存取的所有值自动参与存档序列化。modder 无需手写 `SerializeState` / `DeserializeState`。
+
+#### 内置 SimpleMachineRecipe
+
+覆盖 80% 场景，声明式配置即可：
+
+```csharp
+public class SimpleMachineRecipe : MachineRecipe
+{
+    public MachineInput[] Inputs;               // 输入（从哪个子库存、要什么物品、数量）
+    public MachineOutput[] Outputs;             // 产物
+    public MachineOutput[]? Byproducts;         // 副产品（概率生成）
+    public float? DurationSeconds;              // 处理时间（null = 即时）
+    public DurabilityCost[]? DurabilityCosts;   // 耐久消耗
+}
+
+public class MachineInput
+{
+    public string FromSubKey;     // 来源子库存的 SubKey
+    public Identifier ItemId;     // 需要的物品
+    public int Amount;            // 数量
+    public bool Consume = true;   // 是否消耗（false = 仅检测，用于"发电机只需有电"场景）
+}
+
+public class MachineOutput
+{
+    public string? ToSubKey;      // 目标子库存（null = 主 Inventory）
+    public Identifier ItemId;     // 产物物品
+    public int Amount;            // 数量
+    public float Chance = 1.0f;   // 概率
+}
+
+public class DurabilityCost
+{
+    public string SubKey;               // 哪个子库存的物品损耗耐久
+    public float DurabilityPerCycle;    // 每周期消耗的耐久值
+}
+```
+
+#### 使用 SimpleMachineRecipe（声明式）
+
+```csharp
+var recipe = new SimpleMachineRecipe
+{
+    Id = new Identifier("mymod", "brew_coffee"),
+    Inputs = new[]
+    {
+        new MachineInput { FromSubKey = "water", ItemId = Identifier("duckov", "Water"), Amount = 1 },
+        new MachineInput { FromSubKey = "beans", ItemId = Identifier("duckov", "CoffeeBean"), Amount = 2 }
+    },
+    Outputs = new[]
+    {
+        new MachineOutput { ToSubKey = "output", ItemId = Identifier("mymod", "coffee_cup"), Amount = 1 }
+    },
+    DurationSeconds = 300f, // 5 游戏分钟
+};
+```
+
+#### 自定义 MachineRecipe（复杂逻辑）
+
+```csharp
+public class GpuMiningRecipe : MachineRecipe
+{
+    public override bool CanExecute()
+    {
+        // 至少有一个 GPU 槽有 GPU
+        return SubInventories["gpu_slots"].Content.Any(i => i != null && i.HasTag("GPU"));
+    }
+
+    public override void Execute()
+    {
+        float totalPower = 0f;
+        foreach (var gpu in SubInventories["gpu_slots"].Content)
+        {
+            if (gpu == null) continue;
+            totalPower += gpu.Modifiers.Find(m => m.Key == "ComputingPower")?.Value ?? 1f;
+        }
+
+        // 按算力生成 CatCoin
+        int coins = Mathf.FloorToInt(totalPower * 1.5f);
+        var coin = ItemAssetsCollection.InstantiateSync(20480509);
+        coin.StackCount = coins;
+        MainInventory.AddAndMerge(coin);
+
+        // 🔑 自动存档：modder 无需写任何序列化代码
+        SetState("accumulated", GetState<float>("accumulated") + totalPower);
+    }
+
+    public override float GetProgress()
+        => GetState<float>("accumulated") / 100f;
+}
+```
+
+---
+
+### 13.9 ConfigureBuildingUI — 建筑 UI 自定义
+
+> **新增于 2026-07-22**。声明式配置建筑的 DetailsView 布局，包括多 Machine、子库存、进度条和按钮。所有 UI 元素继承游戏原生风格。
+
+#### 核心 DTO
+
+```csharp
+public class BuildingUIConfig
+{
+    public string? DisplayName;        // 主面板标题
+    public MachineDef[]? Machines;     // 机器列表（每个 Machine 独立运行）
+}
+
+public class MachineDef
+{
+    public string MachineKey;                    // 标识（存档 key）
+    public string DisplayName;                   // UI 显示名
+    public bool UnlockedByDefault = true;        // 默认解锁？
+    public Identifier? RequiredPerk;             // Perk 门控（UnlockedByDefault=false 时生效）
+    public SubInventoryDef[]? SubInventories;    // 子库存定义
+    public MachineRecipe? Recipe;                // 绑定配方（null = 无自动生产）
+    public ProgressBarDef[]? ProgressBars;       // 进度条
+    public BuildingButtonDef[]? Buttons;          // 按钮
+}
+
+public class SubInventoryDef
+{
+    public string SubKey;           // 标识
+    public string DisplayName;      // UI 标题
+    public int SlotCount = 4;       // 槽位数
+    public string[]? SlotTags;      // 标签过滤（null = 无过滤）
+    public bool ReadOnly;           // 只读（不可放入）
+}
+
+public class ProgressBarDef
+{
+    public string Label;
+    public Func<float> GetProgress;  // 返回 0~1
+}
+
+public class BuildingButtonDef
+{
+    public string Label;
+    public Action<Inventory>? OnClick;
+}
+```
+
+#### 完整示例：多功能咖啡机
+
+一个建筑上挂两个 Machine——咖啡机（默认解锁）和烤面包机（需 Perk 解锁）：
+
+```csharp
+BuildingUtils.RegisterBuilding(new BuildingConfig
+{
+    Id = new Identifier("mymod", "kitchen_station"),
+    Dimensions = new Vector2Int(2, 2),
+    Money = 8000
+});
+
+BuildingUtils.ConfigureBuildingUI(
+    new Identifier("mymod", "kitchen_station"),
+    new BuildingUIConfig
+    {
+        DisplayName = "厨房工作站",
+        Machines = new[]
+        {
+            // Machine 1: 咖啡机（默认解锁）
+            new MachineDef
+            {
+                MachineKey = "coffee_maker",
+                DisplayName = "咖啡机",
+                UnlockedByDefault = true,
+                SubInventories = new[]
+                {
+                    new SubInventoryDef { SubKey = "water",  DisplayName = "水箱",   SlotCount = 1, SlotTags = new[] { "Water" } },
+                    new SubInventoryDef { SubKey = "beans",  DisplayName = "咖啡豆", SlotCount = 1, SlotTags = new[] { "CoffeeBean" } },
+                    new SubInventoryDef { SubKey = "output", DisplayName = "出品",   SlotCount = 3, ReadOnly = true },
+                },
+                Recipe = new SimpleMachineRecipe
+                {
+                    Id = new Identifier("mymod", "brew_coffee"),
+                    Inputs = new[]
+                    {
+                        new MachineInput { FromSubKey = "water", ItemId = Identifier("duckov", "Water"), Amount = 1 },
+                        new MachineInput { FromSubKey = "beans", ItemId = Identifier("duckov", "CoffeeBean"), Amount = 2 }
+                    },
+                    Outputs = new[]
+                    {
+                        new MachineOutput { ToSubKey = "output", ItemId = Identifier("mymod", "coffee_cup"), Amount = 1 }
+                    },
+                    DurationSeconds = 300f,
+                },
+            },
+
+            // Machine 2: 烤面包机（需解锁 "mymod:perk_toast_master" Perk）
+            new MachineDef
+            {
+                MachineKey = "toaster",
+                DisplayName = "烤面包机",
+                UnlockedByDefault = false,
+                RequiredPerk = new Identifier("mymod", "perk_toast_master"),
+                SubInventories = new[]
+                {
+                    new SubInventoryDef { SubKey = "bread",  DisplayName = "面包", SlotCount = 2, SlotTags = new[] { "Bread" } },
+                    new SubInventoryDef { SubKey = "output", DisplayName = "出品", SlotCount = 2, ReadOnly = true },
+                },
+                Recipe = new SimpleMachineRecipe
+                {
+                    Id = new Identifier("mymod", "toast_bread"),
+                    Inputs = new[] { new MachineInput { FromSubKey = "bread", ItemId = Identifier("duckov", "Bread"), Amount = 1 } },
+                    Outputs = new[] { new MachineOutput { ToSubKey = "output", ItemId = Identifier("duckov", "Toast"), Amount = 1 } },
+                    DurationSeconds = 120f,
+                },
+            }
+        }
+    },
+    "mymod"
+);
+```
+
+#### RegisterMachineRecipe — 运行时动态挂载
+
+```csharp
+// Perk 解锁后动态挂载 Machine
+BuildingUtils.RegisterMachineRecipe(
+    new Identifier("mymod", "kitchen_station"),   // buildingId
+    "juicer",                                      // machineKey
+    new SimpleMachineRecipe { /* ... */ },          // recipe（子类确定类型，Id 为合成表 ID）
+    "mymod"
 );
 
+// 移除
+BuildingUtils.UnregisterMachineRecipe(
+    new Identifier("mymod", "kitchen_station"),
+    "juicer"
+);
+```
+
+---
+
+### 13.10 BuildingBehaviour — 建筑行为组件
+
+> **新增于 2026-07-22**。与 `PerkBehaviour` 模式一致的 MonoBehaviour 抽象基类。modder 继承此基类实现自定义建筑运行时逻辑。
+
+```csharp
+public abstract class BuildingBehaviour : MonoBehaviour
+{
+    protected Building? Building { get; }         // 绑定建筑
+    protected Inventory? MainInventory { get; }   // 主库存
+
+    public virtual void OnBuildingPlaced() { }     // 建筑放置到场景
+    public virtual void OnBuildingDemolished() { } // 建筑拆除
+}
+
+// 挂载
+BuildingUtils.AttachBehaviour<MyBuildingLogic>(new Identifier("mymod", "forge"));
+```
+
+---
+
+### 13.11 TimeUtils — 游戏时间工具
+
+> **新增于 2026-07-22**。提供 GameClock 访问和时间差计算，用于建筑设备的离线进度计算。
+
+```csharp
+// 获取当前游戏内时间
+TimeSpan now = TimeUtils.Now;
+
+// 序列化/反序列化（用于 Item.SetString 持久化时间戳）
+string timestamp = TimeUtils.NowAsString();
+TimeUtils.TryStringToTimeSpan(timestamp, out var restored);
+
+// 计算时间差（正数，不受真实时间影响）
+float hoursPassed = TimeUtils.GetPositiveHoursSince(pastTime);
+float secondsPassed = TimeUtils.GetPositiveSecondsSince(pastTime);
+```
+
+---
+
+## 14. Perk 技能树（PerkTreeUtils）
+
+> **2026-07-20 更新**：`AddPerk` 签名重构为 `(Identifier treeId, PerkConfig config)`，彻底消除 Identifier 二义性。
+> 新增 `PerkConfig` DTO 桥接 `PerkRequirement`，新增原版 Perk 的 `"duckov:treeID/perkName"` 懒注册机制。
+> `RequiredPerks` 全走 Identifier，支持跨 mod 引用。
+
+```csharp
 // ===== 注册完整 PerkTree =====
 
-// 从零创建完整的自定义技能树
+// 注册一棵自定义技能树
 PerkTreeUtils.RegisterPerkTree(
-    new Identifier("mymod", "combat_perks"),  // Identifier（path 作为 treeId）
-    horizontal: false                          // 连线方向
+    new Identifier("mymod", "combat_perks"),  // Domain=modid, Path=treeID
+    horizontal: false
 );
-// 然后在该树上添加 Perk：
-PerkTreeUtils.AddPerk(new Identifier("mymod", "combat_perks/ExtraHealth"), req, icon);
-PerkTreeUtils.AddPerk(new Identifier("mymod", "combat_perks/IronWill"), req, icon);
+
+// ===== 添加 Perk（新 API：treeId + PerkConfig） =====
+
+// 往自定义树添加 Perk
+PerkTreeUtils.AddPerk(
+    new Identifier("mymod", "combat_perks"),     // treeId
+    new PerkConfig
+    {
+        PerkId          = new Identifier("mymod", "ExtraHealth"),
+        Icon            = myIcon,
+        DisplayNameKey  = "Perk_ExtraHealth",
+        RequiredLevel   = 5,
+        CostItems       = new[] { ItemEntry.Of("duckov:GoldCoin", 1000) },
+        Money           = 500,
+        RequireTimeTicks = TimeSpan.FromMinutes(30).Ticks,
+        RequiredPerks   = new[] { new Identifier("mymod", "BasicTraining") }
+    }
+);
+
+// 往原版树注入 Perk（treeId.Domain = "duckov"）
+PerkTreeUtils.AddPerk(
+    new Identifier("duckov", "CombatTree"),      // 原版树
+    new PerkConfig
+    {
+        PerkId         = new Identifier("mymod", "RapidFire"),
+        RequiredLevel  = 10,
+        CostItems      = new[] { ItemEntry.Of("duckov:Ammo_556", 200) },
+        RequireTimeTicks = TimeSpan.FromHours(1).Ticks,
+        // 原版 Perk 作为前置：Domain="duckov", Path="treeID/perkName"
+        RequiredPerks  = new[] { new Identifier("duckov", "CombatTree/Marksman") }
+    }
+);
 
 // ===== 建立前置关系 =====
 
-// 建立 Perk 前置关系（fromPerk → toPerk：from 是 to 的前置）
-// 使用 Identifier 而非 string treeId+name
+// 自定义 Perk 互连
 PerkTreeUtils.ConnectPerks(
-    new Identifier("mymod", "ExtraHealth"),  // 前置 Perk
-    new Identifier("mymod", "IronWill")      // 后置 Perk
+    new Identifier("mymod", "ExtraHealth"),
+    new Identifier("mymod", "IronWill")
+);
+
+// 跨 mod 连接
+PerkTreeUtils.ConnectPerks(
+    new Identifier("othermod", "SpecialTraining"),
+    new Identifier("mymod", "AdvancedCombat")
+);
+
+// 连接原版 Perk（Domain="duckov"，首次引用自动懒注册）
+PerkTreeUtils.ConnectPerks(
+    new Identifier("duckov", "CombatTree/Sharpshooter"),
+    new Identifier("mymod", "SuperShot")
 );
 
 // ===== 挂载 Behaviour =====
 
-// 在已有 Perk 上挂载自定义 PerkBehaviour
+// 方式 A：PerkConfig 声明式（推荐，7 种原版 Behaviour 有 FML 封装）
+PerkTreeUtils.AddPerk(
+    new Identifier("mymod", "combat_perks"),
+    new PerkConfig
+    {
+        PerkId = new Identifier("mymod", "StorageMaster"),
+        Behaviours = new PerkBehaviourConfig[]
+        {
+            new AddPlayerStorageConfig { Capacity = 100 },
+            new UnlockFormulaConfig(),    // 自动解锁 requirePerk 匹配的配方
+            new UnlockAchievementConfig { AchievementKey = "STORAGE_MASTER" },
+            new ModifyStatsConfig
+            {
+                Entries = new[]
+                {
+                    new StatModifierEntry { Key = "MaxHealth", Value = 25, Percentage = false },
+                    new StatModifierEntry { Key = "MoveSpeed", Value = 0.1f, Percentage = true }
+                }
+            }
+        }
+    });
+
+// 方式 B：自定义 PerkBehaviour 走泛型 API
 MyPerkBehaviour behaviour = PerkTreeUtils.AddPerkBehaviour<MyPerkBehaviour>(
     new Identifier("mymod", "ExtraHealth"));
 
 // ===== 解锁与移除 =====
 
-// 强制解锁（Identifier）
 PerkTreeUtils.ForceUnlock(new Identifier("mymod", "ExtraHealth"));
 
-// 移除 Perk
-PerkTreeUtils.RemovePerk(new Identifier("mymod", "ExtraHealth"));
+// 检查 Perk 是否已解锁（用于 Machine 门控等场景）
+bool unlocked = PerkTreeUtils.IsPerkUnlocked(new Identifier("mymod", "ExtraHealth"));
 
-// 批量卸载
+PerkTreeUtils.RemovePerk(new Identifier("mymod", "ExtraHealth"));
 PerkTreeUtils.RemoveAllPerks("mymod");
 ```
 
@@ -1965,16 +2401,66 @@ InteractionUtils.RemoveInteract(id);
 InteractionUtils.RemoveAllInteracts("mymod");
 ```
 
-### 19.5 内置 View 类型（GameViews）
+### 19.5 FeatherFormulasRegisterInteract — 蓝图研究台交互
+
+`FeatherFormulasRegisterInteract` 继承自 `InteractableBase`，挂载到建筑或自定义物件上，
+交互时打开游戏原生 `FormulasRegisterView`（配方注册/研究界面）。通过 `RegisterTag` 过滤
+可提交的蓝图物品（仅显示匹配标签的配方）。
+
+**直接挂载**：
+```csharp
+FeatherFormulasRegisterInteract.Attach(
+    new Identifier("mymod", "medic_research"),
+    functionContainer,
+    registerTag: "Formula_Medic",        // 仅接受带 Formula_Medic 标签的蓝图
+    interactNameKey: "UI_Research_Medic" // 可选交互提示文本
+);
+```
+
+**通过 InteractionGroupBuilder 组合**（多交互建筑）：
+```csharp
+var handler = new InteractionGroupBuilder()
+    .Add(new Identifier("mymod", "craft"), GameViews.Crafting, viewParam: "MedicStation")
+    .Add(new Identifier("mymod", "research"), GameViews.FormulasRegister, viewParam: "Formula_Medic")
+    .WithPrimary(0)
+    .BuildOn(functionContainer);
+```
+
+`FeatherFormulasRegisterInteract` 位于 `FeatherMod.Interaction.Components` 命名空间，
+通过 `InteractionRegistry` 管理生命周期，Mod 卸载时自动清理。
+
+### 19.6 InteractionGroupBuilder — 多交互组合构建器
+
+`InteractionGroupBuilder` 提供声明式链式 API，将多个 View 交互编组到同一 GameObject 上。
+多条目时自动创建子节点 + BoxCollider + `ViewInteractHandler` 并编组为 `interactableGroup`
+（主交互体可交互，成员碰撞体禁用）。
 
 ```csharp
-// 以下 6 个内置 View 类型已由 InteractionUtils.Init() 自动注册打开方法：
+new InteractionGroupBuilder()
+    .Add(new Identifier("mymod", "shop"),    GameViews.Shop,    viewParam: "merchant_01",
+         interactNameKey: "UI_Trade",         markerOffset: new Vector3(0, 1.5f, 0))
+    .Add(new Identifier("mymod", "research"), GameViews.FormulasRegister, viewParam: "Formula_Blueprint",
+         interactNameKey: "UI_Research")
+    .Add(new Identifier("mymod", "craft"),    GameViews.Crafting, viewParam: "WorkBenchAdvanced",
+         interactNameKey: "UI_Crafting")
+    .WithPrimary(0)  // 主交互（玩家靠近时优先显示）
+    .BuildOn(functionContainer);
+```
+
+> **注意**：单条目时直接挂载到目标（不创建子 GO、不编组）；`viewParam` 的语义由各 View handler 定义。
+
+### 19.7 内置 View 类型（GameViews）
+
+```csharp
+// 以下 8 个内置 View 类型已由 InteractionUtils.Init() 自动注册打开方法：
 GameViews.PerkTree   // Perk 技能树
 GameViews.Building   // 建造面板（BuilderView）
 GameViews.Endowment  // 天赋选择面板
 GameViews.Crafting   // 过滤式合成界面
 GameViews.Shop       // 商店（自动查找 NPC 的 StockShop 并调用 ShowUI()）
 GameViews.Quest      // 任务（打开 QuestView.Show()）
+GameViews.FormulasRegister  // 配方注册/研究界面（FormulasRegisterView，viewParam 为标签名过滤可提交物品）
+GameViews.Formulas          // 配方索引浏览（FormulasIndexView）
 
 // 自定义 View 注册打开方法：
 ViewDispatcher.Register(
@@ -2849,7 +3335,111 @@ EquipmentUtils.ClearNpcEquipment(id, EquipmentSlot.Backpack);
 
 ---
 
-## 34. 附录：项目结构参考
+## 34. 跨模组联动（ModUtils）
+
+`ModUtils` 提供跨模组状态查询 API，允许模组在运行时检查其他模组是否已安装/激活，实现条件内容注册。
+
+- **命名空间**：`FeatherMod.Modding`
+- **入口类**：`ModUtils`
+
+### API
+
+| 方法 | 说明 |
+|------|------|
+| `ModUtils.IsModLoaded(string modid)` | 检查指定 mod 是否已安装**且处于激活状态**——等价于 ModManager 中存在该名称且 `IsModActive` 返回 true |
+| `ModUtils.IsModInstalled(string modid)` | 检查指定 mod 是否已安装（**不论玩家是否手动启用**），仅检查 `modInfos` 中存在该名称 |
+
+`modid` 参数为目标模组的唯一标识符，与 `ModInfo.name`（即 info.ini 中的 name）一致。
+
+### 使用场景：条件内容注册
+
+当你的模组与另一个模组有**可选联动**（非硬依赖）时，在 `OnAfterSetup` 中用 `IsModLoaded` 做分支判断：
+
+```csharp
+using FeatherMod.Modding;
+
+public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
+{
+    public string GetModid() => "MyMod";
+
+    protected override void OnAfterSetup()
+    {
+        base.OnAfterSetup();
+
+        // 通用内容始终注册
+        ItemUtils.CreateCustomItem(
+            new Identifier("MyMod", "common_sword"), commonConfig);
+
+        // 条件联动：仅在 ExpansionMod 激活时注册联动内容
+        if (ModUtils.IsModLoaded("ExpansionMod"))
+        {
+            // 注册联动物品
+            ItemUtils.CreateCustomItem(
+                new Identifier("MyMod", "expansion_sword"), expansionConfig);
+
+            // 注册联动合成配方（引用 ExpansionMod 中的材料）
+            CraftingUtils.AddCraftingFormula(new CraftingFormulaData
+            {
+                Id = new Identifier("MyMod", "expansion_upgrade"),
+                CostItems = new[]
+                {
+                    ItemEntry.Of("MyMod:common_sword", 1),
+                    ItemEntry.Of("ExpansionMod:rare_material", 3),
+                },
+                Result = ItemEntry.Of("MyMod:expansion_sword", 1)
+            });
+
+            // 注册联动任务（在 ExpansionMod 的 QuestGiver 上）
+            var questData = new QuestData
+            {
+                Id = new Identifier("MyMod", "expansion_quest"),
+                QuestGiverIdentifier = new Identifier("ExpansionMod", "main_giver"),
+                // ...
+            };
+            QuestUtils.RegisterQuest(new Identifier("MyMod", "expansion_quest"), questData);
+        }
+    }
+}
+```
+
+### 使用场景：条件调试/诊断
+
+```csharp
+// 在模组的设置面板或日志中检测依赖环境
+if (!ModUtils.IsModLoaded("HarmonyLoadMod"))
+    Debug.LogWarning("[MyMod] HarmonyLoadMod 未激活，补丁可能无法生效");
+
+if (ModUtils.IsModInstalled("SomeMod"))
+    Debug.Log("[MyMod] 检测到 SomeMod 已安装（当前激活状态: " + ModUtils.IsModLoaded("SomeMod") + ")");
+```
+
+### 与 fml.json 的配合
+
+`IsModLoaded` 是**运行时**检查，适合可选的软联动。如果你需要的是**硬依赖**（目标mod缺失时你的mod不应激活），应使用 fml.json 的 `dependencies` 声明：
+
+```json
+{
+    "modid": "MyMod",
+    "dependencies": [{ "name": "RequiredMod" }]
+}
+```
+
+两者的关系：
+- **fml.json `dependencies`**：加载时硬阻断——依赖缺失时模组不会被激活
+- **fml.json `loadAfter`**：仅控制加载顺序，缺失静默跳过
+- **`ModUtils.IsModLoaded()`**：运行时软查询——在代码中按需做条件分支
+
+典型实践：在 fml.json 中声明 `loadAfter` 确保加载顺序，在代码中用 `ModUtils.IsModLoaded` 决定是否注册联动内容。
+
+### 注意事项
+
+1. **调用时机**：`IsModLoaded` 依赖 `ModManager.modInfos`，应在 `OnAfterSetup` 及之后调用。在 `Awake` 阶段调用可能返回 false（mod 列表尚未就绪）
+2. **不缓存结果**：每次调用实时查询 `modInfos` 列表，不缓存。如果需要在多个地方使用，建议将结果保存到局部变量
+3. **modid 匹配**：`modid` 参数区分大小写，必须与目标模组 `info.ini` 中的 `name` 字段完全一致
+
+---
+
+## 35. 附录：项目结构参考
 
 ### 推荐目录结构
 
@@ -2874,6 +3464,7 @@ MyMod/
 | 命名空间 | 包含 |
 |----------|------|
 | `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ModBehaviour`, `ContainerUtils`, `NoteUtils`, `FishingUtils`, `FriendlyNpcUtils`, `CustomFaceUtils`, `WeatherUtils`, `MultiSceneUtils`, `DialogueUtils` |
+| `FeatherMod.Modding` | `ModMetaCache`, `ModMeta`, `ModDependency`, `ModDependencyResolver`, `ModUtils` |
 | `FeatherMod.Utils` | `Identifier`, `Singleton<T>`, `ModPathResolver` |
 | `FeatherMod.Interaction` | `InteractionUtils`, `ViewDispatcher`, `GameViews`, `InteractionRegistry`, `InteractionEntry` |
 | `FeatherMod.Interaction.Components` | `ViewInteractHandler`, `DelegateInteractHandler` |
