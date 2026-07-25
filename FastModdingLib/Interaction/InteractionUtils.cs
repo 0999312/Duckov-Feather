@@ -1,13 +1,18 @@
+using System;
+using System.Collections.Generic;
+
 using Duckov;
 using Duckov.Buildings.UI;
 using Duckov.PerkTrees;
 using Duckov.UI;
+
 using FeatherMod.Interaction.Components;
 using FeatherMod.Register;
 using FeatherMod.UI;
 using FeatherMod.Utils;
-using System;
-using System.Collections.Generic;
+
+using Unity.VisualScripting;
+
 using UnityEngine;
 
 namespace FeatherMod.Interaction
@@ -111,6 +116,46 @@ namespace FeatherMod.Interaction
             {
                 global::Duckov.Quests.UI.QuestView.Show();
             }, FMLConstants.Domain);
+
+            // FormulasIndex：配方索引浏览
+            ViewDispatcher.Register(GameViews.Formulas, _ =>
+            {
+                FormulasIndexView.Show();
+            }, FMLConstants.Domain);
+
+            // FormulasRegister：配方注册（提交物品学习配方）
+            // 透传 viewParam 作为 registerTag，支持按标签过滤可注册配方。
+            ViewDispatcher.Register(GameViews.FormulasRegister, param =>
+            {
+                FormulasRegisterView.Show(param);
+            }, FMLConstants.Domain);
+
+            // Decompose：物品分解
+            ViewDispatcher.Register(GameViews.Decompose, _ =>
+            {
+                ItemDecomposeView.Show();
+            }, FMLConstants.Domain);
+
+            // Machine：建筑设备交互（完整 Machine View 待后续 Phase 实现）
+            // 当前仅做 Perk 门控检查；Machine 核心功能（子库存 + Recipe）由 BuildingSlotsWatcher 自动驱动。
+            ViewDispatcher.Register(GameViews.Machine, param =>
+            {
+                if (string.IsNullOrEmpty(param)) return;
+
+                // Perk 门控检查
+                var slashIdx = param.LastIndexOf('/');
+                if (slashIdx > 0 && slashIdx < param.Length - 1)
+                {
+                    var machineKey = param.Substring(slashIdx + 1);
+                    if (!BuildingUtils.IsMachineAvailableByKey(machineKey))
+                    {
+                        Debug.LogWarning($"[FML] Machine '{param}' is locked (Perk required).");
+                        return;
+                    }
+                }
+
+                Debug.Log($"[FML] Machine '{param}' opened. Full Machine View (sub-inventory panel + progress bar) is not yet implemented.");
+            }, FMLConstants.Domain);
         }
 
         // ═══════════════════════════════════════════════════
@@ -127,16 +172,25 @@ namespace FeatherMod.Interaction
         /// <param name="viewParam">可选参数，传递给 View 打开方法。</param>
         /// <param name="rotation">可选旋转。</param>
         /// <param name="colliderSize">可选碰撞体尺寸，默认 (1, 1, 1)。</param>
+        /// <param name="interactNameKey">可选交互名称本地化 key，覆盖默认交互提示文本。</param>
+        /// <param name="markerOffset">可选交互标记相对交互点的世界偏移。</param>
+        /// <param name="coolTime">可选交互冷却时间（秒），0 表示无冷却。</param>
         /// <returns>创建的交互点 GameObject。</returns>
         public static GameObject SpawnViewInteract(
             Identifier id, Vector3 position, Identifier viewType,
-            string? viewParam = null, Quaternion? rotation = null, Vector3? colliderSize = null)
+            string? viewParam = null, Quaternion? rotation = null, Vector3? colliderSize = null,
+            string? interactNameKey = null, Vector3? markerOffset = null, float coolTime = 0f)
         {
             var go = CreateInteractPoint(id, position, rotation ?? Quaternion.identity, colliderSize);
 
             var handler = go.AddComponent<ViewInteractHandler>();
             handler.ViewType = viewType;
             handler.ViewParam = viewParam;
+            handler.overrideInteractName = interactNameKey != null;
+            handler._overrideInteractNameKey = interactNameKey;
+            handler.InteractNameKey = interactNameKey;
+            handler.MarkerOffset = markerOffset;
+            handler.CoolTime = coolTime;
 
             _interactionRegistry.Set(id, new InteractionEntry
             {
@@ -179,16 +233,32 @@ namespace FeatherMod.Interaction
         //  Attach
         // ═══════════════════════════════════════════════════
 
-        /// <summary>给已有 GameObject 挂载 View 交互处理器。</summary>
+        /// <summary>
+        /// 给已有 GameObject 挂载 View 交互处理器。
+        /// </summary>
+        /// <param name="id">交互点唯一标识。</param>
+        /// <param name="target">目标 GameObject。</param>
+        /// <param name="viewType">目标 View 类型 Identifier。</param>
+        /// <param name="viewParam">可选参数，传递给 View 打开方法。</param>
+        /// <param name="addColliderIfMissing">目标缺少 Collider 时是否自动添加 BoxCollider(Trigger)。</param>
+        /// <param name="interactNameKey">可选交互名称本地化 key，覆盖默认交互提示文本。</param>
+        /// <param name="markerOffset">可选交互标记相对交互点的世界偏移。</param>
+        /// <param name="coolTime">可选交互冷却时间（秒），0 表示无冷却。</param>
         public static void AttachViewInteract(
             Identifier id, GameObject target, Identifier viewType,
-            string? viewParam = null, bool addColliderIfMissing = true)
+            string? viewParam = null, bool addColliderIfMissing = true,
+            string? interactNameKey = null, Vector3? markerOffset = null, float coolTime = 0f)
         {
             EnsureColliderAndLayer(target, addColliderIfMissing);
 
             var handler = target.AddComponent<ViewInteractHandler>();
             handler.ViewType = viewType;
             handler.ViewParam = viewParam;
+            handler.overrideInteractName = interactNameKey != null;
+            handler._overrideInteractNameKey = interactNameKey;
+            handler.InteractNameKey = interactNameKey;
+            handler.MarkerOffset = markerOffset;
+            handler.CoolTime = coolTime;
 
             _interactionRegistry.Set(id, new InteractionEntry
             {
@@ -246,6 +316,46 @@ namespace FeatherMod.Interaction
 
             AttachViewInteract(id, npc, viewType, viewParam, addColliderIfMissing: true);
             return true;
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  Interaction Group
+        // ═══════════════════════════════════════════════════
+
+        /// <summary>
+        /// 将多个交互点编组到同一个 primary 之下。primary 持有组标记与成员列表，
+        /// 其余成员的标记关闭、位置/旋转同步到 primary、碰撞体禁用，避免重复交互。
+        /// 调用方自行决定哪个是 primary（无优先级回退逻辑）。
+        /// </summary>
+        /// <param name="primary">组的主交互点，将作为唯一可交互入口。</param>
+        /// <param name="members">其余成员交互点；null 与 primary 自身会被自动过滤。</param>
+        public static void SetupInteractionGroup(InteractableBase primary, params InteractableBase[] members)
+        {
+            if (primary == null) return;
+
+            // 过滤 null 与 primary 自身
+            var validMembers = new List<InteractableBase>(members?.Length ?? 0);
+            if (members != null)
+            {
+                foreach (var member in members)
+                {
+                    if (member == null || ReferenceEquals(member, primary)) continue;
+                    validMembers.Add(member);
+                }
+            }
+            if (validMembers.Count == 0) return;
+
+            primary.interactableGroup = true;
+            primary.otherInterablesInGroup = validMembers;
+
+            foreach (var member in validMembers)
+            {
+                member.MarkerActive = false;
+                member.transform.SetPositionAndRotation(primary.transform.position, primary.transform.rotation);
+                member.interactMarkerOffset = primary.interactMarkerOffset;
+                if (member.interactCollider != null)
+                    member.interactCollider.enabled = false;
+            }
         }
 
         // ═══════════════════════════════════════════════════
