@@ -438,11 +438,25 @@ namespace FeatherMod
             }
         }
 
+        /// <summary>蓝图物品通用标签名。所有 BP 物品均携带此标签以供识别。</summary>
+        private const string DefaultBPTag = "Blueprint";
+
         /// <summary>
         /// 创建并注册自定义蓝图。modid 从 <see cref="Identifier.Domain"/> 推导。
         /// </summary>
         public static void CreateCustomBluePrint(Identifier id, BlueprintData config)
         {
+            // 确保标签已在游戏中注册（TagUtils.RegisterTag 会先查游戏原生 AllTags，
+            // 已存在则复用，不存在则创建 ScriptableObject 实例并注册到游戏原生数据库）。
+            TagUtils.RegisterTag(DefaultBPTag);
+            TagUtils.RegisterTag(config.FormulaTag);
+
+            // 将蓝图通用标签和 formulaTag 注入 tags 列表（避免重复）
+            if (!config.tags.Contains(DefaultBPTag))
+                config.tags.Insert(0, DefaultBPTag);
+            if (!config.tags.Contains(config.FormulaTag))
+                config.tags.Add(config.FormulaTag);
+
             Item component = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .Icon(ItemAssetsCollection.GetPrefab(285).icon)
@@ -450,7 +464,7 @@ namespace FeatherMod
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
             ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
-            formula.formulaID = config.formulaID;
+            formula.formulaID = config.formulaID.Path;  // 游戏原生用 Path，非完整 Identifier
             RegisterItem(id, component);
         }
 
@@ -480,9 +494,16 @@ namespace FeatherMod
             item.itemGraphic = graphic.GetComponent<ItemGraphicInfo>();
         }
 
+        /// <summary>
+        /// 查找指定名称的 Tag。先查游戏原生数据库，再查 <see cref="TagUtils"/> 缓存。
+        /// 不自动创建——Tag 需通过 <see cref="TagUtils.RegisterTag"/> 显式注册。
+        /// </summary>
         public static Tag GetTargetTag(string tagName)
         {
-            return GameplayDataSettings.Tags.Get(tagName);
+            var tag = TagUtils.GetTag(tagName);
+            if (tag == null)
+                Debug.LogWarning($"[FML] Tag '{tagName}' not found. Use TagUtils.RegisterTag(\"{tagName}\") to register it first.");
+            return tag!;
         }
 
         /// <summary>

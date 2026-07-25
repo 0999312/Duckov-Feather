@@ -1,6 +1,7 @@
 ﻿using Duckov.Buffs;
 using Duckov.ItemUsage;
 using Duckov.Utilities;
+using FeatherMod.Utils;
 using ItemStatsSystem;
 using ItemStatsSystem.Stats;
 using System.Collections.Generic;
@@ -53,7 +54,19 @@ namespace FeatherMod
         public new DisplayQuality displayQuality = DisplayQuality.None;
         public new string spritePath = string.Empty;
         public new UsageData? usages = null;
-        public string formulaID = string.Empty;
+
+        /// <summary>配方 Identifier。FML 自动取 <see cref="Identifier.Path"/> 匹配游戏原生 <c>CraftingFormula.id</c>。</summary>
+        public Identifier formulaID = new Identifier("fml", "unset");
+
+        /// <summary>
+        /// 配方标签。决定蓝图物品归属的研究台类别，<see cref="CreateCustomBluePrint"/> 自动注入到物品 tags。
+        /// 默认 <see cref="DefaultBlueprintTag"/>（匹配游戏原生 BP 物品行为）。
+        /// 可选: Formula_Normal / Formula_Medic / Formula_Cook / Formula_Printer，或自定义标签。
+        /// </summary>
+        public string FormulaTag = DefaultBlueprintTag;
+
+        /// <summary>默认蓝图配方标签（对应游戏 Formula_Blueprint Tag ScriptableObject）。</summary>
+        public const string DefaultBlueprintTag = "Formula_Blueprint";
     }
 
     public class UsageData

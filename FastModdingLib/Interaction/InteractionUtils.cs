@@ -5,6 +5,7 @@ using Duckov;
 using Duckov.Buildings.UI;
 using Duckov.PerkTrees;
 using Duckov.UI;
+using Duckov.Utilities;
 
 using FeatherMod.Interaction.Components;
 using FeatherMod.Register;
@@ -124,10 +125,17 @@ namespace FeatherMod.Interaction
             }, FMLConstants.Domain);
 
             // FormulasRegister：配方注册（提交物品学习配方）
-            // 透传 viewParam 作为 registerTag，支持按标签过滤可注册配方。
+            // viewParam 作为 registerTag 标签名，运行时通过 TagUtils.RegisterTag 解析为 Tag 对象，
+            // 传递给原生 Show(ICollection<Tag>) 以过滤提交槽可接受的物品。
             ViewDispatcher.Register(GameViews.FormulasRegister, param =>
             {
-                FormulasRegisterView.Show(param);
+                ICollection<Tag>? tags = null;
+                if (!string.IsNullOrEmpty(param))
+                {
+                    var tag = TagUtils.RegisterTag(param);
+                    if (tag != null) tags = new[] { tag };
+                }
+                FormulasRegisterView.Show(tags);
             }, FMLConstants.Domain);
 
             // Decompose：物品分解
