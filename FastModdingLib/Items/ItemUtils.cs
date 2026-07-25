@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading.Tasks;
 
 using Unity.VisualScripting;
 
@@ -438,18 +439,23 @@ namespace FeatherMod
             }
         }
 
-        /// <summary>蓝图物品通用标签名。所有 BP 物品均携带此标签以供识别。</summary>
-        private const string DefaultBPTag = "Blueprint";
+        /// <summary>蓝图物品通用标签名。所有 BP 物品均携带此标签以供识别。
+        /// 对应游戏原生 Tag ScriptableObject: Formula.asset (GUID c5f8d45583bcc1b48b05d71afc295c0e)，m_Name = "Formula"。</summary>
+        private const string DefaultBPTag = "Formula";
 
         /// <summary>
         /// 创建并注册自定义蓝图。modid 从 <see cref="Identifier.Domain"/> 推导。
         /// </summary>
-        public static void CreateCustomBluePrint(Identifier id, BlueprintData config)
+        public static async Task CreateCustomBluePrintAsync(Identifier id, BlueprintData config)
         {
             // 确保标签已在游戏中注册（TagUtils.RegisterTag 会先查游戏原生 AllTags，
             // 已存在则复用，不存在则创建 ScriptableObject 实例并注册到游戏原生数据库）。
             TagUtils.RegisterTag(DefaultBPTag);
-            TagUtils.RegisterTag(config.FormulaTag);
+            TagUtils.RegisterTag(config.FormulaTag, new TagConfig
+            {
+                Color = Color.blue,
+                Show = true,
+            });
 
             // 将蓝图通用标签和 formulaTag 注入 tags 列表（避免重复）
             if (!config.tags.Contains(DefaultBPTag))
@@ -457,9 +463,10 @@ namespace FeatherMod
             if (!config.tags.Contains(config.FormulaTag))
                 config.tags.Add(config.FormulaTag);
 
+            var modDir = ModPathResolver.ResolveDirectory(id.Domain);
             Item component = ItemBuilder.New()
                 .TypeID(config.itemId)
-                .Icon(ItemAssetsCollection.GetPrefab(285).icon)
+                .Icon(config.spritePath != null ? await LoadSpriteFromDirAsync(modDir, config.spritePath) :  ItemAssetsCollection.GetPrefab(285).icon)
                 .Instantiate();
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);

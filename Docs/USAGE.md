@@ -384,6 +384,7 @@ ItemUtils.CreateCustomBluePrint(new Identifier("mymod", "coffee_bp"), blueprintD
 >
 > **`FormulaTag` 说明**：决定蓝图物品属于哪个研究台类别。
 > `CreateCustomBluePrint` 自动调用 `TagUtils.RegisterTag` 注册该标签并注入物品 tags。
+> 同时自动注入通用标签 `"Formula"`（对应游戏原生 `Formula.asset` Tag，所有 BP 物品共有）。
 > 可选值：`Formula_Normal`（基础工作台）/ `Formula_Blueprint`（高级工作台，默认）/ `Formula_Medic`（医疗台）/ `Formula_Cook`（厨房）/ `Formula_Printer`（打印台），或自定义标签。
 
 ### 4.6 创建子弹
