@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/status-活跃开发中-brightgreen?style=flat-square" alt="Status">
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/Patch-22%20个-blueviolet?style=flat-square" alt="Patches">
-  <img src="https://img.shields.io/badge/module-28%20个-orange?style=flat-square" alt="Modules">
+  <img src="https://img.shields.io/badge/module-29%20个-orange?style=flat-square" alt="Modules">
 </p>
 
 ---
@@ -106,7 +106,7 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
 
 ## 模块速览
 
-FML 提供 **28 个功能模块**，覆盖 Mod 开发的大部分场景：
+FML 提供 **29 个功能模块**，覆盖 Mod 开发的大部分场景：
 
 | 模块 | 入口类 | 示例 API |
 |------|--------|---------|
@@ -117,6 +117,7 @@ FML 提供 **28 个功能模块**，覆盖 Mod 开发的大部分场景：
 | **音频** | `AudioUtil` | `RegisterAudio(id, data)` |
 | **本地化** | `I18n` | `InitI18n()` |
 | **事件总线** | `EventBusManager` | `Sync.Register<T>(handler)` |
+| **跨模组联动** | `ModUtils` | `IsModLoaded(modid)` / `IsModInstalled(modid)` |
 | **经济** | `EconomyUtils` | `UnlockItem(id)` |
 | **Buff** | `BuffUtils` | `RegisterBuff(id, prefab)` |
 | **建筑** | `BuildingUtils` | `RegisterBuilding(id, info, prefab)` |
@@ -187,7 +188,7 @@ FML 提供 **28 个功能模块**，覆盖 Mod 开发的大部分场景：
 
 - **22 个** Harmony 补丁点（全部独立 try/catch，失败不崩溃）
 - **15 个** 原生游戏事件桥接
-- **17 个** 功能模块
+- **29 个** 功能模块
 - **0 反射**（模组侧——Publicizer 使 FML 内部直接访问游戏私有成员，对模组透明）
 
 ---
@@ -269,7 +270,7 @@ FML 提供 **28 个功能模块**，覆盖 Mod 开发的大部分场景：
 }
 ```
 
-FML 会自动按拓扑排序确保依赖先加载。详见 `fml.json` 完整配置说明。
+FML 会自动按拓扑排序确保依赖先加载。如需**运行时条件注册**（可选联动），可使用 `ModUtils.IsModLoaded(modid)` 在代码中做分支判断。详见 `fml.json` 完整配置说明和 [USAGE.md §34 跨模组联动](Docs/USAGE.md#34-跨模组联动modutils)。
 </details>
 
 <details>

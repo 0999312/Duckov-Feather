@@ -1,6 +1,226 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-19
+> 最后更新：2026-07-22
+
+---
+
+## MachineRecipe 与 Building UI 系统 — ✅ 已完成
+
+**完成时间**: 2026-07-22
+**耗时**: 约 4 小时
+**类型**: 新功能（Building Machine 系统 + 反射清理）
+
+### 背景
+
+根据 ACB（ACBuildingExpanded）和 VAE（VanillaAttachmentsExpanded）两个远古 Mod 的逆向审计，发现 FML 缺失：
+1. Building 子库存和 DetailsView 自定义注入
+2. 建筑设备 Recipe（MachineRecipe）——区别于手动合成
+3. 时间模拟框架（GameClock 驱动离线进度计算）
+4. Building 行为组件模式，以及 Perk 门控建筑功能
+5. ~15 处遗留反射代码
+
+### 新增文件
+
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `Buildings/MachineRecipe.cs` | ~110 | 抽象基类：CanExecute/Execute/GetProgress + SetState/GetState 自动存档 |
+| `Buildings/SimpleMachineRecipe.cs` | ~210 | 内置声明式配方 Input→Output + ProductionTimer + MachineInput/MachineOutput/DurabilityCost DTO |
+| `Buildings/ProductionTimer.cs` | ~110 | UniTask + GameClock 异步计时器 + 离线追赶 + 序列化 |
+| `Buildings/BuildingSlotsWatcher.cs` | ~85 | 每 Machine 独立 Watcher：监听子库存 → CanExecute/Execute |
+| `Buildings/BuildingUIConfig.cs` | ~100 | DTO：BuildingUIConfig/MachineDef/SubInventoryDef/ProgressBarDef/BuildingButtonDef |
+| `Buildings/BuildingBehaviour.cs` | ~45 | BuildingBehaviour : MonoBehaviour 抽象基类 |
+| `Utils/TimeUtils.cs` | ~65 | GameClock 访问 + TimeSpan 序列化 + 时间差计算 |
+
+### 修改文件
+
+| 文件 | 改动摘要 |
+|------|---------|
+| `Buildings/BuildingUtils.cs` | 反射清理：HookBuildingEvents 从 GetEvent+AddEventHandler → 直接 `+=`（↘12 行）；PlaceBuilding 从 Invoke → 直接调用（↘6 行）；SanitizeBuildingInfo 从 FieldInfo+SetValueDirect → 直接赋值（↘32 行）；新增：ConfigureBuildingUI / RegisterMachineRecipe / UnregisterMachineRecipe / IsMachineAvailable / AttachBehaviour / RemoveAllMachinesForMod / UnhookBuildingEvents（+120 行） |
+| `Buildings/Patches/BuildingCollectionPatch.cs` | Sanitize 从 FieldInfo×3 → 直接赋值（↘12 行）；移除 `using System.Reflection` |
+| `PerkTrees/PerkTreeUtils.cs` | 新增 `IsPerkUnlocked(Identifier)` 公共方法（+10 行） |
+| `UI/SimpleViewBuilder.cs` | 补充 `using FeatherMod.UI` |
+
+### 新增 public API
+
+```csharp
+// Building Machine 管理
+BuildingUtils.ConfigureBuildingUI(buildingId, config, modid);
+BuildingUtils.RegisterMachineRecipe(buildingId, machineKey, recipe, modid);
+BuildingUtils.UnregisterMachineRecipe(buildingId, machineKey);
+BuildingUtils.AttachBehaviour<T>(buildingId, behaviour?);
+
+// Perk 门控
+PerkTreeUtils.IsPerkUnlocked(perkId);
+
+// MachineRecipe（modder 继承基类或使用内置 SimpleMachineRecipe）
+public abstract class MachineRecipe {
+    protected void SetState<T>(key, value);
+    protected T GetState<T>(key, defaultValue);
+    public abstract bool CanExecute();
+    public abstract void Execute();
+    public virtual float GetProgress();
+    public virtual bool IsRunning;
+}
+
+public class SimpleMachineRecipe : MachineRecipe {
+    public MachineInput[] Inputs;
+    public MachineOutput[] Outputs;
+    public MachineOutput[]? Byproducts;
+    public float? DurationSeconds;
+    public DurabilityCost[]? DurabilityCosts;
+}
+
+// BuildingBehaviour
+public abstract class BuildingBehaviour : MonoBehaviour {
+    public virtual void OnBuildingPlaced();
+    public virtual void OnBuildingDemolished();
+}
+```
+
+### 设计决策
+
+- **MachineRecipe 存档自动化**：modder 通过 `SetState<T>/GetState<T>` 存取运行时状态，框架自动 JSON 序列化/恢复。SimpleMachineRecipe 的进度和计时器状态均通过此机制持久化。
+- **一 Building 多 Machine**：每个 MachineDef 有独立的子库存、Recipe 和 BuildingSlotsWatcher，多 Machine 并行运行互不干扰。
+- **Perk 门控在 Machine 级别**：`MachineDef.UnlockedByDefault` + `RequiredPerk` 控制整个 Machine（UI + Recipe）的可见性。
+- **onContentChanged 反射隔离**：`Inventory.onContentChanged` 因 Publicizer 产生 CS0229 二义性，BuildingSlotsWatcher 使用 `EventInfo.AddEventHandler` 规避（标记为唯一合理反射处）。
+
+### 验证结果
+- [x] `dotnet build` 通过（0 错误，52 预存警告，无新增）
+- [ ] 功能测试（待游戏运行时验证）
+
+### 遗留问题
+- ProductionTimer 的离线追赶逻辑需在游戏中测试（GameClock.Now 的 TimeSpan 行为）
+
+---
+
+## Perk 系统 v2 重构 — ✅ 已完成
+
+**完成时间**: 2026-07-20
+**耗时**: 约 2 小时
+**类型**: 架构重构（Identifier 语义修正 + PerkRequirement 桥接 + 原版资源引用）
+
+### 背景
+
+Phase 4 的 PerkTree 系统存在三个设计缺陷：
+
+1. **Identifier 语义二义性**：`AddPerk(Identifier id, ...)` 中 `id.Domain` 被 `ResolveTreeId` 用于推导 treeId，违反 `Domain=modid` 约定。一个 mod 有多个 PerkTree 时无法区分。
+2. **PerkRequirement 未接入 Identifier 体系**：直接暴露游戏原生 `PerkRequirement` 类型，modder 需填写裸 `int typeID`。
+3. **无法引用原版 Perk**：原版 Perk 不在 `_perkRegistry` 中，`ConnectPerks` 无法建立与原版 Perk 的前置关系。
+
+### 修复方案
+
+#### 1. AddPerk 签名重构
+
+```csharp
+// 旧（已删除）
+AddPerk(Identifier id, PerkRequirement req, Sprite icon, ...)  // id.Domain → 推导 treeId ❌
+
+// 新
+AddPerk(Identifier treeId, PerkConfig config)                   // treeId + config 分离 ✅
+```
+
+`treeId.Domain="duckov"` → `PerkTreeManager.GetPerkTree(treeId.Path)` 获取原版树
+`treeId.Domain="mymod"` → 从 FML 已注册树或 PerkTreeManager 查找
+
+#### 2. PerkConfig DTO（桥接 PerkRequirement）
+
+新增 `PerkConfig.cs`，含全部 Perk 字段 + PerkRequirement 映射：
+
+```csharp
+public class PerkConfig
+{
+    public Identifier PerkId;
+    public Sprite Icon;
+    public string DisplayNameKey;
+    public int RequiredLevel;           // → PerkRequirement.level
+    public ItemEntry[] CostItems;       // → Cost.items（ItemEntry 桥接，Identifier → typeID）
+    public long Money;                  // → Cost.money
+    public long RequireTimeTicks;       // → PerkRequirement.requireTime
+    public Identifier[] RequiredPerks;  // 全走 Identifier，FML 内部懒注册 + ConnectPerks
+}
+```
+
+#### 3. 原版 Perk 懒注册（TryLazyRegister）
+
+- 原版 Perk Identifier 约定：`Identifier("duckov", "treeID/perkName")`
+- `ConnectPerks` / `ForceUnlock` / `AddPerkBehaviour` 中 registry miss 时自动触发
+- 内部解析 Path → 分离 treeId + perkName → `PerkTreeManager` 查找 → 写入 `_perkRegistry`（owner=`FMLConstants.VanillaOwner`）
+
+#### 4. 公共反射修复
+
+- `PerkTreeManager.perkTrees` 原为 `BindingFlags.Static | BindingFlags.NonPublic` 反射（bug——字段是 `public` 实例），改为 `PerkTreeManager.Instance.perkTrees` 直接访问
+- Perk 字段（icon, displayName, hasDescription, quality, defaultUnlocked, requirement）改用 Publicizer 直接赋值，消除无意义反射
+- `graph` 字段（NodeCanvas，第三方 DLL）保留反射
+
+### 删除
+
+| 方法 | 原因 |
+|---|---|
+| `ResolveTreeId(domain)` | 反向推导逻辑彻底消除 |
+| `FindPerkInTree(tree, perkName)` | 与旧 Obsolete API 绑定 |
+| `AddPerk(Identifier, PerkRequirement, Sprite, string?)` | 旧签名 |
+| `AddPerk(string, string, ...)` | `[Obsolete]` string 重载 |
+| `ConnectPerks(string, string, string)` | `[Obsolete]` string 重载 |
+| `ForceUnlock(string, string)` | `[Obsolete]` string 重载 |
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `PerkConfig.cs` | Perk 配置 DTO + `BuildPerkRequirement()` 内部转换 |
+| 修改 | `FMLConstants.cs` | +`VanillaOwner = "__vanilla__"` 常量 |
+| 重写 | `PerkTrees/PerkTreeUtils.cs` | ~140 行改动：新增 `AddPerk(Identifier, PerkConfig)`、`TryLazyRegister`、`ResolvePerk`、`ResolvePerkTree`；删除 `ResolveTreeId`/`FindPerkInTree` 及全部 Obsolete 重载；`ConnectPerks`/`ForceUnlock`/`AddPerkBehaviour` 接入懒注册回退；`RegisterPerkTree` 反射清理；`RemoveAllPerks` 反射修正 |
+| 更新 | `Docs/USAGE.md` | §14 Perk 技能树章节全文重写 |
+| 更新 | `Docs/MIGRATION.md` | PerkTreeUtils 迁移章节更新至 v2 API |
+| 删除 | `Docs/PLAN-Phase5-Goals.md` | Phase 5 已完成，计划文档陈旧 |
+| 删除 | `Docs/TODO/` (13 文件) | TODO/ISSUE/PLAN/DESIGN 全部陈旧，已清理 |
+
+### 验证结果
+- [x] 代码审查通过（Identifier 语义、ItemEntry 桥接、懒注册流程）
+- [ ] `dotnet build` 编译通过（需 Unity 引用，待构建环境验证）
+- [ ] 功能测试（待游戏运行时验证）
+
+---
+
+## PerkBehaviour 声明式配置封装 — ✅ 已完成
+
+**完成时间**: 2026-07-20
+**耗时**: 约 1 小时
+**类型**: 功能增强（PerkConfig 集成 PerkBehaviour 配置）
+
+### 背景
+
+`AddPerkBehaviour<T>` 对自定义 `T : PerkBehaviour` 子类完全够用，但 modder 想用原版 PerkBehaviour 子类时面临两个障碍：
+1. 原版子类的配置字段为 `[SerializeField] private`，即使 Publicizer 公开，modder 也不便访问
+2. `UnlockStockShopItem.itemTypeID` 使用裸 int，未接入 Identifier 体系
+
+### 实现
+
+新建 `PerkBehaviourConfigs.cs`，含 1 个抽象基类 + 7 个配置类：
+
+| # | Config 类 | 对应原版 Behaviour | 核心字段 |
+|---|---|---|---|
+| 1 | `UnlockFormulaConfig` | `UnlockFormula` | 无（自动匹配 `CraftingFormula.requirePerk`） |
+| 2 | `UnlockAchievementConfig` | `UnlockAchievement` | `AchievementKey` |
+| 3 | `ModifyStatsConfig` + `StatModifierEntry` | `ModifyCharacterStatsBase` | `Entries[]`（Key, Value, Percentage） |
+| 4 | `BlackMarketRefreshTimeConfig` | `ChangeBlackMarketRefreshTimeFactor` | `Amount` |
+| 6 | `BlackMarketRefreshChanceConfig` | `AddBlackMarketRefreshChance` | `AddAmount` |
+| 8 | `AddPlayerStorageConfig` | `AddPlayerStorage` | `Capacity` |
+| 10 | `UnlockShopItemConfig` | `UnlockStockShopItem` | `ItemId`（Identifier → typeID 自动解析） |
+
+`PerkConfig` 新增 `Behaviours: PerkBehaviourConfig[]?` 字段。`AddPerk` 末尾对每条配置调用 `ApplyTo(perkGo)`，内部 `AddComponent` + 字段赋值。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `PerkTrees/PerkBehaviourConfigs.cs` | 抽象基类 + 7 个 Config 包装（~220 行） |
+| 修改 | `PerkConfig.cs` | +`Behaviours` 字段 |
+| 修改 | `PerkTrees/PerkTreeUtils.cs` | +6 行 Behaviours 应用逻辑 |
+| 更新 | `Docs/USAGE.md` | §14 增加 Behaviours 声明式使用示例 |
+
+### 验证结果
+- [x] `dotnet build` 0 errors, 0 warnings
 
 ---
 
@@ -422,7 +642,7 @@ config.SightDistance = 8f;  // 默认值，AI 自然朝向
 - [x] **全局 `internal static Registry` 属性**：已修复（2026-07-03）——7 个模块的 Registry 从 `internal` 改为 `public`。
 - [x] **Endowment 系统内部反射清理**：已修复（2026-07-03）——EndowmentUtils、EndowmentManagerPatch、EndowmentRegistry 共 14 处反射替换为直接访问（利用 Publicizer 公开的游戏成员）。
 - [x] **Endowment UI 选择**：已修复（2026-07-03）——根因确认为时序竞争（`Awake` 早于 `PatchAll`）。修复方案：注册时主动注入 `entries`（`TryInjectToManager`），`AllocateIndex` 幂等化。Patch 层保留为安全网。
-- [ ] **PerkTree 系统 9 处游戏数据反射**：待后续修复——`PerkTreeUtils.cs` 中通过反射访问 `PerkTreeManager.perkTrees` 等字段，Publicizer 已覆盖但未清理。
+- [x] **PerkTree 系统 9 处游戏数据反射**：已修复（2026-07-20）——Perk 系统 v2 重构中，`PerkTreeManager.perkTrees` 改为直接访问（原反射 `BindingFlags.Static` 有 bug），Perk 字段（icon/displayName/hasDescription/quality/defaultUnlocked/requirement）改用 Publicizer 直接赋值。仅 `graph`（NodeCanvas 第三方 DLL）保留反射。
 
 ### 未实现的 PLAN-Phase4 设计项
 以下组件在 `PLAN-Phase4-Building-Perk-Endowment-UI.md` §14-17 中有详细设计但未在 Phase 4 中实现，
@@ -969,9 +1189,80 @@ Quest 模块 Identifier 化后，数字 ID 自增分配（从 1000 起）缺少�
 - **`ItemUtilities.SendToPlayer` 签名不匹配**：实际 API 为 `SendToPlayerCharacterInventory(Item)` / `SendToPlayerStorage(Item)`，`ContainerUtils.TakeItem` 改为调用前者
 - **`CraftingFormula` 为值类型（struct）**：`OpenCraftingView` 中 Predicate 的 null 检查改为 `formula.tags == null`（不能对 struct 用 `== null`）
 - **`PerkTreeView.Show` 方法待运行时确认**：`InteractionUtils.RegisterBuiltInViews` 中对 PerkTree 的注册保留调用，需在游戏运行时验证 API 可用性
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误）
+
+---
+
+## DuckovDrinks 集成 Bugfix — ⏳ 进行中
+
+**完成时间**: 2026-07-24
+**耗时**: 约 3 小时
+**类型**: Bugfix（4 项修复）
+
+### 背景
+
+DuckovDrinks 测试 Mod 在集成 FML 时发现四个问题：
+1. 建筑出现多个交互点而非单交互组，交互几乎无法使用
+2. Tags 系统缺少运行时显式注册 Tag 的 API
+3. 向原版 PerkTree 注入的 Perk 节点数据不持久化
+4. NPC 重复生成（建筑重建后出现两个 NPC 实例）
+
+### Bug #1：Building Machine 交互点未编组
+
+**根因**：`BuildingUtils.SetupBuildingMachines` 为每台 Machine 创建独立的子 GameObject（各有 BoxCollider + ViewInteractHandler），但从未调用 `InteractionUtils.SetupInteractionGroup` 编组。
+
+**修复**（`Buildings/BuildingUtils.cs`）：
+- 收集所有 Machine 的 `ViewInteractHandler`，多台时调用 `InteractionUtils.SetupInteractionGroup(primary, members)` 编组
+- 幂等：已初始化的 Machine 也纳入 handlers 列表
+- 新增 `using Duckov;` 以支持 `InteractableBase` 类型
+
+### Bug #2：Tags 系统缺少显式注册 API
+
+**根因**：`ItemUtils.GetTargetTag` 仅调用 `GameplayDataSettings.Tags.Get(tagName)` 查找已有 Tag。Tag 需要通过 `ScriptableObject.CreateInstance<Tag>()` 显式创建并注册。
+
+**修复**：
+- **新增** `Items/TagUtils.cs`：`RegisterTag(name, config?)`、`GetTag(name)`、`TagExists(name)`、`TagConfig` 结构体
+- **修改** `Items/ItemUtils.cs`：`GetTargetTag` 改为调用 `TagUtils.GetTag`，Tag 不存在时输出 warning
+
+### Bug #3：原版 PerkTree 注入节点不持久化
+
+**根因**：`PerkTreeUtils.AddPerk` 向原版树注入时，非延迟路径（graph 已就绪）没有调用 `tree.Load()`。FML 自定义树和延迟路径均有 Load，唯独此路径缺失。
+
+**修复**（`PerkTrees/PerkTreeUtils.cs`）：
+- 原版树非延迟路径（graph 非 null）的 `tree.Collect()` 之后添加 `tree.Load()`
+
+### Bug #4：NPC 重复生成
+
+**根因**：`FriendlyNpcUtils.SpawnFriendlyNpcAsync` 缺少去重检查。
+
+**修复**（`Entities/FriendlyNpcUtils.cs`）：
+- `SpawnFriendlyNpcAsync` 开头添加去重：若 registry 中已有实例，先移除再生成
+
+### Bug #5：Machine 交互不检查 Perk 门控
+
+**根因**：`IsMachineAvailable` 方法定义了但从未被调用（死代码）。Machine View 的 `ViewDispatcher` handler 直接打开 Crafting View，不检查 Perk 解锁状态。
+
+**修复**：
+- `Buildings/BuildingUtils.cs`：新增 `IsMachineAvailableByKey(string machineKey)` public 方法
+- `Interaction/InteractionUtils.cs`：Machine View handler 在打开前调用 `IsMachineAvailableByKey`，Perk 未解锁时拒绝打开并输出 warning
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `Items/TagUtils.cs` | `TagUtils` 类 + `TagConfig` 结构体 |
+| 修改 | `Buildings/BuildingUtils.cs` | `SetupBuildingMachines` 添加交互编组；新增 `using Duckov;` |
+| 修改 | `Items/ItemUtils.cs` | `GetTargetTag` 改为调用 `TagUtils.GetTag` |
+| 修改 | `PerkTrees/PerkTreeUtils.cs` | 原版树非延迟路径添加 `tree.Load()` |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | `SpawnFriendlyNpcAsync` 添加 NPC 去重 |
+| 修改 | `Docs/PROGRESS.md` | Bugfix 记录 |
 
 ### 验证结果
-- [x] `dotnet build` 通过（0 错误，0 警告）
+
+- [x] `dotnet build` 通过（0 错误，53 预先存在警告）
+- [ ] DuckovDrinks 功能测试（待验证）
 - [ ] 功能测试（待游戏运行时验证）
 - [ ] `GamePlayDataSettings.UIPrefabs` 克隆测试（待实际游戏环境）
 
@@ -1527,3 +1818,318 @@ SpecialAttachment_XiaoMing (Layer 8)
 - [ ] `dotnet build` 编译通过（需 Unity 引用，待构建环境验证）
 - [ ] LSP diagnostics（LSP 服务不可用）
 - [ ] 功能测试（待游戏运行时验证）
+
+---
+
+## Phase 6 增量：跨模组联动 API（ModUtils） — ✅ 已完成
+
+**完成时间**: 2026-07-22
+**耗时**: 约 0.5 小时
+**来源**: 梳理跨模组联动案例后发现的核心缺失——缺少运行时 mod 加载状态查询 API
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `FastModdingLib/Modding/ModUtils.cs` | 新增 `ModUtils` 静态工具类，提供 `IsModLoaded(modid)` / `IsModInstalled(modid)` 两个公开 API |
+| 修改 | `Docs/USAGE.md` | 新增 §34 跨模组联动章节（完整 API 文档 + 使用示例 + 与 fml.json 配合说明）；更新命名空间速查表 |
+| 修改 | `README.md` | 模块速览表新增 ModUtils 行；模块计数 28→29；关键指标更新；FAQ 补充 ModUtils 引用 |
+
+### 新增 API
+
+| API | 说明 |
+|-----|------|
+| `ModUtils.IsModLoaded(string modid)` | 检查指定 mod 是否已安装且处于激活状态 |
+| `ModUtils.IsModInstalled(string modid)` | 检查指定 mod 是否已安装（不论激活状态） |
+
+### 设计偏离
+- 无偏离。实现遵循现有 `ModManagerPatches.ShouldActivateMod_Postfix` 中已验证的模式：遍历 `ModManager.modInfos` + 调用游戏原生 `ModManager.IsModActive`
+
+### 验证结果
+- [x] `dotnet build` 编译通过（0 errors）
+- [x] LSP diagnostics（文件内容正确）
+- [ ] 功能测试（待游戏运行时验证）
+
+---
+
+## BugFix: PerkTree ע��� AddPerk �Ҳ����� �� ? ���޸�
+
+**���ʱ��**: 2026-07-22
+**��ʱ**: Լ 1 Сʱ
+**����**: Bug �޸���PerkTreeManager ��ʼ��ʱ�����⣩
+
+### ����
+
+DuckovDrinks mod �� OnAfterSetup �е��� RegisterPerkTree ������ AddPerk��������
+ArgumentException: PerkTree 'DuckovDrinks:laozheng_arts' not found.
+
+### ����
+
+PerkTreeManager �ǳ����е� MonoBehaviour �������� Instance �� Awake() �����á�
+��� mod �� OnAfterSetup �ڳ������� PerkTreeManager ֮ǰ�����ã�
+
+1. RegisterPerkTree ������ PerkTree ��**����**�� PerkTreeManager.perkTrees.Add()����Ϊ Instance == null��
+2. ResolvePerkTree ���� PerkTreeManager.Instance.perkTrees �� ʧ�� �� ���� GetPerkTree Ҳ���� null
+3. AddPerk �׳��쳣
+
+**����**��FML û�ж���ά�� PerkTree ���û��棬��ȫ������Ϸ PerkTreeManager �ĳ�ʼ��ʱ��
+
+### �޸�����
+
+���� _registeredTrees �ֵ���Ϊ FML �ڲ� PerkTree ���棬**������ PerkTreeManager.Instance �Ŀ�����**��
+
+### �ļ����
+
+| ���� | �ļ� | �Ķ�λ�� |
+|------|------|---------|
+| �޸� | PerkTrees/PerkTreeUtils.cs | L30-31������ _registeredTrees �ֶ� |
+| �޸� | PerkTrees/PerkTreeUtils.cs | L101��RegisterPerkTree �л��������� |
+| �޸� | PerkTrees/PerkTreeUtils.cs | L200-202��ResolvePerkTree ���ȴӻ������ |
+| �޸� | PerkTrees/PerkTreeUtils.cs | L311-318��RemoveAllPerks ͬ���������� |
+
+### �߼��仯
+
+**ResolvePerkTree �������ȼ�**���޸ĺ󣩣�
+1. ԭ������Domain == "duckov"���� PerkTreeManager.GetPerkTree
+2. **FML �ڲ�����** _registeredTrees �� ֱ�ӷ��أ������������� Instance��
+3. ���ˣ�PerkTreeManager.Instance.perkTrees ���� �� ������ע�����
+4. ���ף�PerkTreeManager.GetPerkTree
+
+### ��֤���
+- [x] dotnet build ����ͨ����0 errors, 0 warnings ������
+- [ ] ���ܲ��ԣ��� DuckovDrinks ���±��� FML DLL ����Ϸ����֤��
+
+---
+
+## BugFix: PerkTree Registration & UI Pipeline (2026-07-22)
+
+**Status**: Verified (build pass), pending runtime test
+**Type**: Bug fix chain (5 interdependent issues)
+
+### Root Cause Chain
+
+| # | Symptom | Root Cause | Fix |
+|---|---------|-----------|-----|
+| 1 | AddPerk throws "PerkTree not found" | PerkTreeManager.Instance null at mod init; no FML-side cache | Added _registeredTrees cache + ResolvePerkTree priority |
+| 2 | PerkTreeUIInvoker NRE (game code) | Game calls GetPerkTree directly, bypasses FML cache | Harmony postfix on PerkTreeManager.GetPerkTree (3-tier fallback) |
+| 3 | Perk.EnabledInCurrentLevel NRE | perk.Master never set (Collect blocked by PerkTreeCollectGuard) | Manual perk.Master = tree + tree.perks.Add in AddPerk |
+| 4 | PopulatePerks NRE | relationGraphOwner.graph was null - reflection GetField("graph") on PerkTreeRelationGraphOwner missed base class | Direct assignment: graphOwner.graph = graph (NodeCanvas.Framework publicized) |
+| 5 | All nodes at (0,0) + no connection lines | ConnectNodes called via reflection (silent fail); cachedPosition never set | Direct graph.ConnectNodes + BFS-centered layout engine |
+
+### File Changes
+
+| File | Change |
+|------|--------|
+| PerkTrees/PerkTreeUtils.cs | + _registeredTrees cache, + TryGetRegisteredTree, + TryLayoutGraph, + LayoutGraph (BFS), refactored RegisterPerkTree/ResolvePerkTree/AddPerk/RemoveAllPerks/ConnectPerksInternal/EnsureGraphNode |
+| PerkTrees/Patches/PerkTreeManagerGetPerkTreePatch.cs | **New** - Harmony postfix with 3-tier tree lookup + layout trigger |
+| PerkConfig.cs | + Position field (optional Vector2 for manual node placement) |
+
+### Layout Engine Design
+
+**Auto-layout** (BFS + per-depth centering):
+- Trigger: first game access to FML tree (via Harmony patch)
+- Depth assignment: BFS from roots, max depth for multi-prerequisite nodes
+- Sorting: by average parent X per depth layer
+- Centering: startX = -(count-1)*120/2 per layer
+- Spacing: X=120, Y=100 (constants LAYOUT_X/Y_SPACING)
+
+**Manual override**: PerkConfig.Position skips auto-layout for that node.
+
+**Vanilla tree injection**: Immediate position calc from prerequisite node in ConnectPerksInternal (no global layout for vanilla trees).
+
+### Layout Example (DuckovDrinks)
+
+`
+                    survival_instinct (0, 0)
+             +----------+-----------+
+    water_efficiency     gun_affinity
+    (-60, 100)           (60, 100)
+     +----+----+        +----+----+
+load_bearing nutrition recoil_tuning marksmanship
+(-180,200) (-60,200) (60,200) (180,200)
+                      |
+               storm_survivor (0, 300)
+                      |
+                true_teaching (0, 400)
+`
+
+### Verification
+- [x] dotnet build (0 errors)
+- [ ] Runtime test: DuckovDrinks perk tree nodes visible, connected, centered
+
+---
+
+## 交互系统 API 重新设计（FEATHER_API_GAPS 修复） — ✅ 已完成
+
+**完成时间**: 2026-07-22
+**耗时**: 约 2 小时
+**类型**: API 重新设计（5 个缺口修复 + 原版通道封装）
+**来源**: `Docs/TODO/FEATHER_API_GAPS.md` — DockovDrinks 测试 Mod 的 API 交叉核验报告
+
+### 背景
+
+DockovDrinks v0.5.0 饮品制作台开发中，对 Feather 交互系统进行了全面的 API 交叉核验，发现 5 个缺口。经审计确认全部属实，实施了分 6 层的重新设计。
+
+### 缺口与修复对照
+
+| # | 缺口 | 修复方案 |
+|---|------|---------|
+| **1** | InteractTemplates 缺少 Crafting 交互模板 | 新建 `CraftingInteractTemplate`，对标 `PerkTreeInteractTemplate` |
+| **2** | 缺少公开的通用多交互组装 API | `SetupInteractionGroup` 从 `FriendlyNpcUtils` 提取为 `InteractionUtils` 公开方法 + 新建 `InteractionGroupBuilder` Builder 模式 API |
+| **3** | ViewInteractHandler 不设置交互名 | 新增 `InteractNameKey`/`MarkerOffset`/`CoolTime`/`FinishWhenTimeOut` 字段 + `Awake()` 自动应用 |
+| **4** | Building.functionContainer 访问路径不透明 | `BuildingUtils` 新增公开 `GetFunctionContainer()`/`GetGraphicsContainer()` 方法 |
+| **5-A** | Duckov 原版通道与 Feather 通道分裂（增强 Feather 侧） | `ViewInteractHandler` + `InteractionUtils` 全面增强（对标原版组件能力）；`InteractTemplates` Identifier 合规化 |
+| **5-B** | 原版组件缺少 Feather 封装 | 新建 `FeatherShopInteract`/`FeatherQuestGiverInteract`/`FeatherPerkTreeInteract` 三个封装类 |
+
+### 设计决策
+
+- **通道统一方向**：A+B 双管齐下。增强 Feather 通道（ViewInteractHandler）使其具备原版组件的完整能力（交互名、标记偏移、多交互分组），同时为原版组件提供 Feather 封装（生命周期管理 + Identifier 体系）。
+- **NPC 迁移**：方案 A 保守路线 — NPC 保持使用原版组件，但多交互组装改用公开的 `InteractionUtils.SetupInteractionGroup`。
+- **Identifier 序列化**：`InteractTemplates` 字段保持 `string?`（Unity SerializeField），通过 `Identifier.Parse()` 在运行时验证和规范化，默认 domain 为 `duckov`。
+- **Building 容器访问**：公开封装方法，对内沿用已有反射逻辑（`Building` 为游戏原生类，Publicizer 可能未覆盖）。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `Interaction/Components/ViewInteractHandler.cs` | 新增 4 个 public 字段（InteractNameKey/MarkerOffset/CoolTime/FinishWhenTimeOut）+ Awake() 覆盖 |
+| 修改 | `Interaction/InteractionUtils.cs` | AttachViewInteract/SpawnViewInteract 新增 3 个可选参数（interactNameKey/markerOffset/coolTime）；新增 public SetupInteractionGroup(primary, params members[]) |
+| 新建 | `Interaction/InteractionGroupBuilder.cs` | 声明式多交互组 Builder（Add/WithPrimary/BuildOn 链式 API），对标 DialogueSequence.Build 风格 |
+| 修改 | `UI/InteractTemplates.cs` | 新增 CraftingInteractTemplate；Building/PerkTree/Endowment 模板新增 InteractNameKey + Awake；PerkTreeID→PerkTreeId 命名修正；buildingIdentifier/PerkTreeId 经 Identifier.Parse 规范化后传递 |
+| 修改 | `Buildings/BuildingUtils.cs` | 新增 public GetFunctionContainer(building)/GetGraphicsContainer(building)，封装已有反射逻辑 |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | SetupInteractionGroup 私有方法改为委托 InteractionUtils.SetupInteractionGroup，保留 NPC 优先级逻辑（shop>quest>perk） |
+| 新建 | `Interaction/Components/FeatherShopInteract.cs` | 原版 NpcShopInteract+StockShop 的 Feather 封装（InteractableBase 子类，Identifier 识别，Registry 追踪） |
+| 新建 | `Interaction/Components/FeatherQuestGiverInteract.cs` | 原版 QuestGiver 的 Feather 封装 |
+| 新建 | `Interaction/Components/FeatherPerkTreeInteract.cs` | 原版 PerkTreeUIInvoker 的 Feather 封装 |
+
+### 新增 public API
+
+```csharp
+// ── ViewInteractHandler 增强 ──
+// AttachViewInteract/SpawnViewInteract 新增可选参数：
+InteractionUtils.AttachViewInteract(id, target, viewType, viewParam,
+    interactNameKey: "UI_Craft_Drinks",    // ← 交互提示文本本地化键
+    markerOffset: new Vector3(0, 1.5f, 0), // ← 标记偏移
+    coolTime: 0.2f);                        // ← 冷却时间
+
+// ── 多交互组装 ──
+// 底层 API（手动指定 primary）：
+InteractionUtils.SetupInteractionGroup(primaryInteract, memberA, memberB);
+
+// Builder 模式（声明式）：
+var primary = new InteractionGroupBuilder()
+    .Add(craftId, GameViews.Crafting, "drink", interactNameKey: "UI_Craft")
+    .Add(perkId, GameViews.PerkTree, "brewmaster", interactNameKey: "UI_Perk")
+    .WithPrimary(0)
+    .BuildOn(functionContainer);
+
+// ── Building 容器访问 ──
+GameObject func = BuildingUtils.GetFunctionContainer(building);
+GameObject graphics = BuildingUtils.GetGraphicsContainer(building);
+
+// ── Feather 封装（非 NPC 场景使用） ──
+FeatherShopInteract.Attach(id, target, "myMerchantId");
+FeatherPerkTreeInteract.Attach(id, target, "brewmaster");
+```
+
+### 设计偏离
+
+- **Feather 封装类同一 GO 双 InteractableBase**：三个 Feather 封装类（FeatherShopInteract 等）在创建时将原生组件（NpcShopInteract/QuestGiver/PerkTreeUIInvoker）添加到同一 GameObject，导致同一 GO 上存在两个 InteractableBase。`FriendlyNpcUtils` 的做法是将交互组件放在独立子 GO 上再编组。当前方案下 wrapper 的 `OnInteractFinished` 被优先命中，不导致功能故障。后续如需迁移到子 GO 模式成本较小。
+- **NpcShopInteract 实际为 FML 内部类**：任务规格假设 NpcShopInteract 在 `Duckov` 或 `Duckov.Economy` 命名空间，实际是 `FriendlyNpcUtils.cs` 中定义的 `internal class`（`FeatherMod` 命名空间）。由于封装类在同一程序集中，C# 父命名空间查找自动解析，无需额外 using。
+
+### 已知边界
+
+- **FeatherShopInteract.refreshAfterTimeSpan**：任务规格原始值 `720`（ticks=72μs）修正为 `6000000000L`（10 分钟，对齐原版 `DefaultShopRefreshTicks`）。
+- **FeatherQuestGiverInteract 的 questGiverID 绑定**：`Util.SetGiverId` 方法不存在，改为内联解析（int.TryParse → 自定义 ID ≥50；回退 Enum.Parse）。
+- **PerkTreeUIInvoker 命名空间**：实际在 `Duckov.PerkTrees.Interactable`，非 `Duckov.PerkTrees`。
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误，0 警告）
+- [ ] 功能测试（待 DockovDrinks 测试 Mod 验证——Crafting 交互 + 多交互组装 + 交互名显示 + functionContainer 访问）
+
+---
+
+## CraftingFormulaData.RequirePerk Identifier 迁移 — ✅ 已完成
+
+**完成时间**: 2026-07-22
+**类型**: API 修正（Identifier 合规）
+
+### 背景
+
+`CraftingFormulaData.RequirePerk` 为裸 `string`，违反 Identifier 优先原则。
+
+### 变更
+
+| 文件 | 改动 |
+|------|------|
+| `CraftingData.cs` | `RequirePerk`: `string` → `Identifier?`；Builder 新增 `RequirePerk(Identifier?)` 重载；文档示例更新 |
+| `CraftingUtils.cs` | `data.RequirePerk?.Path ?? ""` 转换；5 个内部兼容重载的 `requirePerk` 赋值统一改为 `string.IsNullOrEmpty → null : Identifier.Parse` |
+
+### API 对比
+
+```csharp
+// ❌ 旧：裸 string
+new CraftingFormulaData { RequirePerk = "hacker/cooking" }
+// ✅ 新：Identifier
+new CraftingFormulaData { RequirePerk = new Identifier("duckov", "hacker/cooking") }
+```
+
+### 验证
+- [x] `dotnet build` 0e 52w（全预存）
+
+---
+
+## FormulasRegisterView 集成补充 — ✅ 已完成
+
+**完成时间**: 2026-07-22
+**类型**: API 补充（ViewDispatcher + InteractionUtils + InteractTemplates + GameUIUtils）
+**来源**: 调查发现游戏中 3 个合成相关视图（FormulasRegisterView / FormulasIndexView / ItemDecomposeView）未被 FML 集成
+
+### 背景
+
+游戏中有 4 个合成相关视图，FML 原本只集成了 1 个（CraftView）：
+
+| 游戏原生视图 | 用途 | FML 集成 |
+|------------|------|---------|
+| `CraftView` | 合成执行 | ✅ 已集成 |
+| `FormulasRegisterView` | 配方注册/解锁（提交物品学配方） | ❌→✅ 本轮补充 |
+| `FormulasIndexView` | 配方索引浏览（全量配方） | ❌→✅ 本轮补充 |
+| `ItemDecomposeView` | 物品分解 | ❌→✅ 本轮补充 |
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|------|---------|---------|
+| 修改 | `Interaction/ViewDispatcher.cs` | `GameViews` 新增 3 个常量：`Formulas`/`FormulasRegister`/`Decompose` |
+| 修改 | `Interaction/InteractionUtils.cs` | `RegisterBuiltInViews()` 注册 3 个新 handler |
+| 修改 | `UI/InteractTemplates.cs` | 新增 3 个模板类：`FormulasIndexInteractTemplate`/`FormulasRegisterInteractTemplate`/`DecomposeInteractTemplate` |
+| 修改 | `UI/GameUIUtils.cs` | 新增 `OpenFormulasIndexView()`/`OpenFormulasRegisterView()`/`OpenDecomposeView()` 快捷方法 |
+
+### 新增 API
+
+```csharp
+// ── ViewDispatcher ──
+ViewDispatcher.Open(GameViews.Formulas);          // → FormulasIndexView.Show()
+ViewDispatcher.Open(GameViews.FormulasRegister);  // → FormulasRegisterView.Show(null)
+ViewDispatcher.Open(GameViews.Decompose);         // → ItemDecomposeView.Show()
+
+// ── GameUIUtils 快捷方法 ──
+GameUIUtils.OpenFormulasIndexView();     // 配方索引浏览
+GameUIUtils.OpenFormulasRegisterView();  // 配方注册（显示全部可注册配方）
+GameUIUtils.OpenDecomposeView();         // 物品分解
+
+// ── 交互模板（挂载到建筑 functionContainer） ──
+go.AddComponent<FormulasIndexInteractTemplate>().InteractNameKey = "UI_Formulas";
+go.AddComponent<FormulasRegisterInteractTemplate>();
+go.AddComponent<DecomposeInteractTemplate>().InteractNameKey = "UI_Decompose";
+```
+
+### 设计偏离
+
+- **Tag 字符串查找不可用**：`Tag` 为 `ScriptableObject`，无 `GetTag(string)` 静态方法。`FormulasRegisterView.Show(ICollection<Tag>)` 的 tag 过滤参数在 handler 中传 `null`（显示全部可注册配方）。若后续需要 tag 过滤，可加载 Resources 中的 Tag 资源做匹配。
+
+### 验证结果
+
+- [x] `dotnet build` 通过（0 错误，0 警告）
+

@@ -1,4 +1,5 @@
 using Cysharp.Threading.Tasks;
+using Duckov.UI;
 using Duckov.UI.DialogueBubbles;
 using FeatherMod.Utils;
 using NodeCanvas.DialogueTrees;
@@ -27,6 +28,11 @@ namespace FeatherMod
 
         private static PropertyInfo? s_blackboardProp;
 
+        // ── 镜头序列器（面板模式专用）──
+
+        /// <summary>当前正在运行的镜头序列器。同一时间只有一个对话在运行。</summary>
+        private static CameraShotSequencer? s_activeSequencer;
+
         /// <summary>初始化（幂等）。</summary>
         public static void Init()
         {
@@ -47,6 +53,10 @@ namespace FeatherMod
         public static async UniTask PlayDialogue(string actorId, DialogueLine[] lines)
         {
             if (string.IsNullOrEmpty(actorId) || lines == null || lines.Length == 0) return;
+
+            // 对话开始前关闭当前 UI（对齐原版 PlayDialogueGraphOnQuestActive）
+            if (View.ActiveView != null)
+                View.ActiveView.Close();
 
             var actor = DuckovDialogueActor.Get(actorId);
             if (actor == null)
@@ -149,11 +159,14 @@ namespace FeatherMod
 
             try
             {
+                // ── Step 0: 提取镜头序列 ──
+                var cameraShots = ExtractCameraShots(lines);
+
                 // ── Step 1: 构建 JSON 并反序列化为 DialogueTree 实例 ──
                 var json = BuildDialogueJson(actorId, lines);
                 var dt = ScriptableObject.CreateInstance<DialogueTree>();
                 var result = dt.Deserialize(json, new List<UnityEngine.Object>(), true);
-                if (result == null)
+                if (!result)
                 {
                     Debug.LogWarning("[FML Dialogue] Graph deserialization returned null.");
                     return false;
@@ -166,6 +179,14 @@ namespace FeatherMod
                 var controller = controllerGo.AddComponent<DialogueTreeController>();
                 SetBlackboard(controller, blackboard);
 
+                // ── Step 2.5: 挂载镜头序列器（如有镜头指令）──
+                if (cameraShots != null)
+                {
+                    var sequencer = controllerGo.AddComponent<CameraShotSequencer>();
+                    sequencer.Shots = cameraShots;
+                    s_activeSequencer = sequencer;
+                }
+
                 // ── Step 3: 通过 StartBehaviour(Graph) 注入图实例（官方推荐方式）──
                 controller.StartBehaviour(dt);
 
@@ -177,6 +198,13 @@ namespace FeatherMod
 
                 // ── Step 6: 等待对话结束 ──
                 await UniTask.WaitWhile(() => controller != null && controller.isRunning);
+
+                // ── Step 7: 对话结束，恢复镜头 ──
+                if (s_activeSequencer != null)
+                {
+                    await CameraUtils.RestoreGameplayCamera(0.8f);
+                }
+
                 return true;
             }
             catch (Exception e)
@@ -186,9 +214,26 @@ namespace FeatherMod
             }
             finally
             {
+                s_activeSequencer = null;
                 if (controllerGo != null)
                     UnityEngine.Object.Destroy(controllerGo);
             }
+        }
+
+        /// <summary>
+        /// 从对话行中提取镜头指令数组。每行一个元素，
+        /// 对应此行播放前需应用的镜头。全为 null 时返回 null。
+        /// </summary>
+        private static DialogueCameraShot?[]? ExtractCameraShots(DialogueLine[] lines)
+        {
+            bool hasAny = false;
+            var shots = new DialogueCameraShot?[lines.Length];
+            for (int i = 0; i < lines.Length; i++)
+            {
+                shots[i] = lines[i].CameraBefore;
+                if (shots[i] != null) hasAny = true;
+            }
+            return hasAny ? shots : null;
         }
 
         // ═══════════════════════════════════════════════════════
@@ -230,25 +275,11 @@ namespace FeatherMod
         private static int s_jsonSeq;
 
         /// <summary>
-        /// 解析对话行在 JSON 中使用的本地化键。
-        /// TextKey 优先；否则为纯文本生成唯一 key 并通过 I18n 注册。
-        /// 这样游戏端的 ToPlainText() 总是能找到翻译，避免 *text* 包裹。
+        /// 获取对话行在 JSON 中使用的本地化键。直接返回 <see cref="DialogueLine.TextKey"/>。
         /// </summary>
         private static string ResolveDialogueKey(DialogueLine line)
         {
-            // 有 TextKey → 直接用作本地化键
-            if (!string.IsNullOrEmpty(line.TextKey))
-                return line.TextKey;
-
-            // 只有纯文本 → 生成唯一 key 并注册到游戏本地化系统
-            if (!string.IsNullOrEmpty(line.Text))
-            {
-                var key = $"FML_DialogueLine_{s_jsonSeq}_{Guid.NewGuid():N}";
-                LocalizationManager.SetOverrideText(key, line.Text);
-                return key;
-            }
-
-            return "";
+            return line.TextKey ?? "";
         }
 
         /// <summary>
@@ -315,6 +346,52 @@ namespace FeatherMod
         {
             if (string.IsNullOrEmpty(s)) return s;
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        // ═══════════════════════════════════════════════════════
+        //  镜头序列器（面板模式专用 MonoBehaviour）
+        // ═══════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 挂载在 DialogueTreeController 所在 GameObject 上，
+        /// 通过监听静态 <see cref="DialogueTree"/> 事件，在每行对话播放前应用镜头切换。
+        /// 同一时间只有一个对话在运行，因此使用静态计数器是安全的。
+        /// </summary>
+        private class CameraShotSequencer : MonoBehaviour
+        {
+            /// <summary>镜头指令数组，按行索引。</summary>
+            public DialogueCameraShot?[] Shots = Array.Empty<DialogueCameraShot?>();
+
+            private int _lineIndex;
+
+            private void Awake()
+            {
+                DialogueTree.OnSubtitlesRequest += OnSubtitlesRequest;
+                DialogueTree.OnDialogueFinished += OnDialogueFinished;
+            }
+
+            private void OnDestroy()
+            {
+                DialogueTree.OnSubtitlesRequest -= OnSubtitlesRequest;
+                DialogueTree.OnDialogueFinished -= OnDialogueFinished;
+            }
+
+            private void OnSubtitlesRequest(SubtitlesRequestInfo info)
+            {
+                // 在当前行播放前应用镜头
+                if (_lineIndex < Shots.Length)
+                {
+                    var shot = Shots[_lineIndex];
+                    if (shot != null)
+                        CameraUtils.ApplyCameraShot(shot).Forget();
+                }
+                _lineIndex++;
+            }
+
+            private void OnDialogueFinished(DialogueTree tree)
+            {
+                // 对话结束，由 TryPlayPanelDialogue 的 finally 统一清理
+            }
         }
     }
 }

@@ -190,6 +190,25 @@ namespace FeatherMod.UI
                 display.Setup(inventory);
             }
         }
+
+        /// <summary>打开配方索引视图（浏览全部配方）。</summary>
+        public static void OpenFormulasIndexView()
+        {
+            FormulasIndexView.Show();
+        }
+
+        /// <summary>打开配方注册视图（提交物品学习配方）。显示全部可注册配方。</summary>
+        /// <remarks>Tag 为 ScriptableObject，运行时无法通过字符串查找，故显示全部。</remarks>
+        public static void OpenFormulasRegisterView()
+        {
+            FormulasRegisterView.Show(null);
+        }
+
+        /// <summary>打开物品分解视图。</summary>
+        public static void OpenDecomposeView()
+        {
+            ItemDecomposeView.Show();
+        }
     }
 
     /// <summary>

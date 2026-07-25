@@ -1,4 +1,4 @@
-﻿using Duckov;
+using Duckov;
 using Duckov.Buildings;
 using Duckov.Economy;
 using Duckov.Utilities;
@@ -616,8 +616,9 @@ namespace FeatherMod
                     var handler = child.AddComponent<ViewInteractHandler>();
                     handler.ViewType = GameViews.Machine;
                     handler.ViewParam = $"{path}/{machine.MachineKey}";
+                    handler.overrideInteractName = machine.DisplayName != null;
+                    handler._overrideInteractNameKey = machine.DisplayName;
                     handler.InteractNameKey = machine.DisplayName;
-
                     InteractionUtils.Registry.Set(interactId, new InteractionEntry
                     {
                         Target = child,

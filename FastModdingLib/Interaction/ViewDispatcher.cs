@@ -89,5 +89,9 @@ namespace FeatherMod.Interaction
         public static readonly Identifier Shop      = new Identifier("fml", "shop");
         public static readonly Identifier Crafting  = new Identifier("fml", "crafting");
         public static readonly Identifier Quest     = new Identifier("fml", "quest");
+        public static readonly Identifier Formulas         = new Identifier("fml", "formulas");
+        public static readonly Identifier FormulasRegister = new Identifier("fml", "formulas_register");
+        public static readonly Identifier Decompose        = new Identifier("fml", "decompose");
+        public static readonly Identifier Machine          = new Identifier("fml", "machine");
     }
 }

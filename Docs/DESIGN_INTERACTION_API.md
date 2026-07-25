@@ -1,6 +1,6 @@
 # 交互系统 API 设计文档
 
-> **状态**: 设计提案 | **版本**: v1.0 | **日期**: 2026-07-11
+> **状态**: ✅ 已实施（v2.0 增强） | **版本**: v2.0 | **日期**: 2026-07-22
 
 ---
 
@@ -113,16 +113,20 @@ namespace FeatherMod
 /// <param name="viewType">要打开的视图类型（如 GameViews.PerkTree）。</param>
 /// <param name="viewParam">视图参数（如 PerkTree 的 treeId）。null 表示无参数。</param>
 /// <param name="rotation">朝向。默认 Quaternion.identity。</param>
-/// <param name="colliderSize">碰撞体尺寸。默认 (2, 3, 2)（约一人高）。</param>
+/// <param name="colliderSize">碰撞体尺寸。默认 (1, 1, 1)。</param>
+/// <param name="interactNameKey">[v2.0] 交互提示文本本地化键（如 "UI_Craft_Drinks"）。非空时自动设置 overrideInteractName=true。</param>
+/// <param name="markerOffset">[v2.0] 标记世界空间偏移（如头顶指示器位置）。null 使用默认值。</param>
+/// <param name="coolTime">[v2.0] 交互冷却时间（秒）。0=无冷却。</param>
 /// <returns>生成的交互点 GameObject（已挂载 ViewInteractHandler）。</returns>
 /// <exception cref="ArgumentException">id 格式无效。</exception>
 /// <example>
-/// // 生成一个打开 PerkTree 的交互点
+/// // 生成一个打开 PerkTree 的交互点（v2.0 含交互名）
 /// InteractionUtils.SpawnViewInteract(
 ///     new Identifier("mymod", "combat_terminal"),
 ///     new Vector3(100f, 0f, 50f),
 ///     GameViews.PerkTree,
-///     viewParam: "combat_tactics"
+///     viewParam: "combat_tactics",
+///     interactNameKey: "UI_Perk_Combat"
 /// );
 /// </example>
 public static GameObject SpawnViewInteract(
@@ -131,7 +135,10 @@ public static GameObject SpawnViewInteract(
     Identifier viewType,
     string? viewParam = null,
     Quaternion? rotation = null,
-    Vector3? colliderSize = null
+    Vector3? colliderSize = null,
+    string? interactNameKey = null,
+    Vector3? markerOffset = null,
+    float coolTime = 0f
 );
 ```
 
@@ -224,13 +231,17 @@ public static GameObject SpawnPrefabInteract(
 /// 如果 target 上无任何 Collider，是否自动添加 BoxCollider(Trigger)。
 /// 默认 true。
 /// </param>
+/// <param name="interactNameKey">[v2.0] 交互提示文本本地化键。</param>
+/// <param name="markerOffset">[v2.0] 标记世界空间偏移。</param>
+/// <param name="coolTime">[v2.0] 交互冷却时间（秒）。</param>
 /// <example>
-/// // 给场景中的终端机挂载 PerkTree 交互
+/// // 给建筑 functionContainer 挂载带交互名的 Crafting 交互
 /// InteractionUtils.AttachViewInteract(
-///     new Identifier("mymod", "terminal_01"),
-///     GameObject.Find("Scene_Terminal"),
-///     GameViews.PerkTree,
-///     viewParam: "combat_tactics"
+///     new Identifier("mymod", "craft_01"),
+///     BuildingUtils.GetFunctionContainer(building),
+///     GameViews.Crafting,
+///     viewParam: "Drink",
+///     interactNameKey: "UI_Craft_Drinks"
 /// );
 /// </example>
 public static void AttachViewInteract(
@@ -238,6 +249,9 @@ public static void AttachViewInteract(
     GameObject target,
     Identifier viewType,
     string? viewParam = null,
+    string? interactNameKey = null,
+    Vector3? markerOffset = null,
+    float coolTime = 0f,
     bool addColliderIfMissing = true
 );
 ```
@@ -842,3 +856,151 @@ enum 不可扩展——modder 无法注册自定义 View。`Identifier` 允许�
 | Quest | 无独立交互模板 | `SpawnViewInteract(id, pos, GameViews.Quest)` |
 | NPC | 无 | `AttachToNPC(id, npcName, viewType, param)` |
 | 自定义 View | 不支持 | `ViewDispatcher.Register(viewType, action, modid)` |
+
+---
+
+## 11. v2.0 新增 API（FEATHER_API_GAPS 修复）
+
+> 以下为 2026-07-22 交互系统重新设计中新增的 API，解决 `Docs/TODO/FEATHER_API_GAPS.md` 中报告的 5 个缺口。
+
+### 11.1 `InteractionUtils.SetupInteractionGroup` — 多交互组装
+
+从 `FriendlyNpcUtils` 提取并公开化的多交互组装 API，支持任意 `InteractableBase` 组合。
+
+```csharp
+/// <summary>
+/// 组装多交互组。指定 primary 为主交互体，其余 member 加入其交互组。
+/// 自动禁用 member 的独立碰撞体和标记，同步坐标到 primary。
+/// </summary>
+/// <param name="primary">主交互体——玩家按 E 键直接触发。</param>
+/// <param name="members">其他交互体，加入 primary.otherInterablesInGroup。</param>
+public static void SetupInteractionGroup(
+    InteractableBase primary, params InteractableBase[] members
+);
+
+// 用法示例：
+var primary = func.GetComponent<ViewInteractHandler>(); // 第一个交互
+var member = ...; // 第二个交互
+InteractionUtils.SetupInteractionGroup(primary, member);
+```
+
+### 11.2 `InteractionGroupBuilder` — 声明式多交互组 Builder
+
+对标 `DialogueSequence.Build` 的 Builder 模式，支持链式声明。
+
+```csharp
+/// <summary>声明式多交互组构建器。</summary>
+public class InteractionGroupBuilder
+{
+    public InteractionGroupBuilder Add(
+        Identifier id, Identifier viewType,
+        string? viewParam = null, string? interactNameKey = null,
+        Vector3? markerOffset = null);
+    public InteractionGroupBuilder WithPrimary(int index);
+    public ViewInteractHandler BuildOn(GameObject target);
+}
+
+// 用法示例：
+new InteractionGroupBuilder()
+    .Add(id1, GameViews.Crafting, "drink", interactNameKey: "UI_Craft")
+    .Add(id2, GameViews.PerkTree, "brewmaster", interactNameKey: "UI_Perk")
+    .WithPrimary(0)
+    .BuildOn(functionContainer);
+```
+
+### 11.3 `CraftingInteractTemplate` — 合成交互模板
+
+```csharp
+public class CraftingInteractTemplate : InteractableBase
+{
+    public string? CraftingTag;      // 配方标签过滤（对应 Recipe.Tags）
+    public string? InteractNameKey;  // 交互提示本地化键
+    // OnInteractFinished → ViewDispatcher.Open(GameViews.Crafting, CraftingTag)
+}
+```
+
+### 11.4 `BuildingUtils` 容器访问公开
+
+```csharp
+/// <summary>获取建筑的 functionContainer（交互碰撞体所在）。</summary>
+public static GameObject? GetFunctionContainer(Building building);
+
+/// <summary>获取建筑的 graphicsContainer（模型和物理碰撞体所在）。</summary>
+public static GameObject? GetGraphicsContainer(Building building);
+```
+
+### 11.5 Feather 原版组件封装（`Interaction/Components/`）
+
+| 类 | 封装对象 | 用途 |
+|---|---------|------|
+| `FeatherShopInteract` | `NpcShopInteract` + `StockShop` | 非 NPC 场景的商店交互，自动管理 `StockShop` 生命周期 |
+| `FeatherQuestGiverInteract` | `QuestGiver` | 非 NPC 场景的任务交互入口 |
+| `FeatherPerkTreeInteract` | `PerkTreeUIInvoker` | 非 NPC 场景的技能树交互入口 |
+
+每个封装类：
+- 继承 `InteractableBase`
+- 提供 `InteractNameKey` / `InteractId` 字段
+- 提供 `Attach` 静态工厂方法（deactivate→AddComponent→set fields→reactivate 模式）
+- 自动注册到 `InteractionRegistry`，mod 卸载时自动清理
+
+```csharp
+// 用法示例：
+FeatherShopInteract.Attach(
+    new Identifier("mymod", "shop"), target, merchantId: "myMerchant");
+```
+
+### 11.6 对照：v2.0 增强前后对比
+
+| 场景 | v1.0（旧） | v2.0（新） |
+|------|----------|----------|
+| 单交互+交互名 | 无法设置交互名 | `AttachViewInteract(..., interactNameKey: "UI_XXX")` |
+| 建筑多交互 | 手动创建子 GO + 管理碰撞体 | `InteractionGroupBuilder.Add().Add().BuildOn()` |
+| 获取建筑容器 | `transform.Find("Function")` 硬编码 | `BuildingUtils.GetFunctionContainer(building)` |
+| NPC 多交互 | 私有方法，不可复用 | `InteractionUtils.SetupInteractionGroup()` 公开 |
+| 非 NPC 商店交互 | 不支持 | `FeatherShopInteract.Attach()` |
+
+---
+
+## 12. v2.1 新增：Formulas 系列视图集成
+
+> 以下为 2026-07-22 补充，将游戏原生的 3 个合成相关视图接入 Feather 交互系统。
+
+### 12.1 背景
+
+游戏中存在 4 个合成相关视图，v2.0 仅集成了 `CraftView`（合成执行）。v2.1 补全其余 3 个。
+
+### 12.2 新增 `GameViews` 常量
+
+```csharp
+public static readonly Identifier Formulas         = new Identifier("fml", "formulas");
+public static readonly Identifier FormulasRegister = new Identifier("fml", "formulas_register");
+public static readonly Identifier Decompose        = new Identifier("fml", "decompose");
+```
+
+### 12.3 View↔Handler 映射
+
+| GameViews 常量 | Handler 行为 | 游戏原生 API |
+|---------------|-------------|-------------|
+| `Formulas` | 打开配方索引，浏览全部配方 | `FormulasIndexView.Show()` |
+| `FormulasRegister` | 打开配方注册，提交物品学配方（显示全部） | `FormulasRegisterView.Show(null)` |
+| `Decompose` | 打开物品分解，拆解物品为材料 | `ItemDecomposeView.Show()` |
+
+### 12.4 GameUIUtils 快捷方法
+
+```csharp
+GameUIUtils.OpenFormulasIndexView();     // 配方索引浏览
+GameUIUtils.OpenFormulasRegisterView();  // 配方注册
+GameUIUtils.OpenDecomposeView();         // 物品分解
+```
+
+### 12.5 新增交互模板
+
+| 模板类 | 对应 GameViews | 特殊字段 |
+|-------|---------------|---------|
+| `FormulasIndexInteractTemplate` | `GameViews.Formulas` | `InteractNameKey` |
+| `FormulasRegisterInteractTemplate` | `GameViews.FormulasRegister` | `RegisterTag`, `InteractNameKey` |
+| `DecomposeInteractTemplate` | `GameViews.Decompose` | `InteractNameKey` |
+
+### 12.6 已知限制
+
+- **Tag 过滤不可用**：`FormulasRegisterView.Show(ICollection<Tag>)` 的 tag 过滤参数在 handler 中传 `null`。`Tag` 是 `ScriptableObject`，游戏无 `Tag.GetTag(string)` 静态查找方法，运行时无法通过字符串解析 Tag 引用。

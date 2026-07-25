@@ -4,6 +4,7 @@ using FeatherMod.Utils;
 using System;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace FeatherMod
 {

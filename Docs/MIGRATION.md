@@ -272,7 +272,7 @@ CraftingUtils.AddCraftingFormula(new CraftingFormulaData
     CostItems = new[] { ItemEntry.Of("duckov:Gunpowder", 5), ItemEntry.Of("duckov:Iron", 2) },
     Result = ItemEntry.Of("MyMod:ammo_pack", 10),
     Tags = new[] { "WorkBenchAdvanced" },
-    RequirePerk = "reloading_expert",
+    RequirePerk = new Identifier("duckov", "hacker/reloading_expert"),
     UnlockByDefault = false
 });
 
@@ -579,21 +579,55 @@ ModOptionsRegistry.RegisterPanel("mymod", "My Mod", builder =>
 });
 ```
 
-### PerkTreeUtils（全新）
-```csharp
-Perk perk = PerkTreeUtils.AddPerk(
-    new Identifier("mymod", "ExtraHealth"), req, icon);
+### PerkTreeUtils（v2 — 2026-07-20 重构）
 
+```csharp
+// ===== 注册完整 PerkTree =====
+PerkTreeUtils.RegisterPerkTree(
+    new Identifier("mymod", "combat_perks"),
+    horizontal: false);
+
+// ===== 添加 Perk（新 API） =====
+PerkTreeUtils.AddPerk(
+    new Identifier("mymod", "combat_perks"),   // treeId
+    new PerkConfig
+    {
+        PerkId          = new Identifier("mymod", "ExtraHealth"),
+        Icon            = myIcon,
+        DisplayNameKey  = "Perk_ExtraHealth",
+        RequiredLevel   = 5,
+        CostItems       = new[] { ItemEntry.Of("duckov:GoldCoin", 1000) },
+        RequireTimeTicks = TimeSpan.FromMinutes(30).Ticks
+    });
+
+// 往原版树注入 Perk
+PerkTreeUtils.AddPerk(
+    new Identifier("duckov", "CombatTree"),
+    new PerkConfig
+    {
+        PerkId        = new Identifier("mymod", "RapidFire"),
+        RequiredPerks = new[] { new Identifier("duckov", "CombatTree/Marksman") }
+    });
+
+// ===== 连接 Perk =====
 PerkTreeUtils.ConnectPerks(
     new Identifier("mymod", "ExtraHealth"),
     new Identifier("mymod", "IronWill"));
 
+// 引用原版 Perk（"duckov:treeID/perkName"，自动懒注册）
+PerkTreeUtils.ConnectPerks(
+    new Identifier("duckov", "CombatTree/Sharpshooter"),
+    new Identifier("mymod", "SuperShot"));
+
+// ===== 解锁与卸载 =====
 PerkTreeUtils.ForceUnlock(new Identifier("mymod", "ExtraHealth"));
 PerkTreeUtils.RemoveAllPerks("mymod");
 ```
 
-> **注意**：`AddPerk(string treeId, string perkName, ...)`、`ConnectPerks(string, string, string)`、
-> `ForceUnlock(string, string)` 等旧版 string 参数重载已标记 `[Obsolete]`，新项目请统一使用 `Identifier` 版本。
+> **v2 重大变更**：`AddPerk(Identifier, PerkRequirement, Sprite)` 旧签名已删除。
+> 新签名为 `AddPerk(Identifier treeId, PerkConfig config)`，tree 和 perk 各为独立 Identifier，
+> 消除了旧版 Domain 二义性问题。`PerkRequirement` 不再直接暴露给 modder，
+> 由 `PerkConfig.CostItems`（`ItemEntry[]`）桥接。详见 [USAGE.md §14](USAGE.md#14-perk-技能树perktreeutils)。
 
 ### BuildingUtils（全新）
 ```csharp

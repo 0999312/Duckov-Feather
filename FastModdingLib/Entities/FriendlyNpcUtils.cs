@@ -223,6 +223,14 @@ namespace FeatherMod
         public static async UniTask<GameObject?> SpawnFriendlyNpcAsync(
             Identifier id, Vector3? position = null, Quaternion? rotation = null)
         {
+            // 去重：若已有实例，先移除旧实例再生成新的
+            if (_registry != null && _registry.TryGet(id, out var existingGo) && existingGo != null)
+            {
+                Debug.Log($"[FML FriendlyNpc] SpawnFriendlyNpcAsync: removing existing instance of '{id}' before re-spawn.");
+                UnityEngine.Object.Destroy(existingGo);
+                _registry.Remove(id);
+            }
+
             // 优先从游戏全局 preset 列表查找（Domain Reload 后仍存在）
             var preset = FindPresetInGlobalList(id.Path);
             if (preset == null && _configCache.TryGetValue(id, out var cachedCfg))
@@ -550,31 +558,27 @@ namespace FeatherMod
         {
             try
             {
-                // 直接调用 Load<T> 而非 KeyExisits + Load——SavesSystem 的文件缓存
-                // 可能在 CurrentSlot 确定之前就被锁定到错误的 save 文件，
-                // KeyExisits 返回 false 但实际 save 文件中数据完好。
+                // 主路径：SavesSystem 缓存
                 var result = SavesSystem.Load<List<NpcSpawnEntry>>(NpcSaveKey);
                 if (result != null && result.Count > 0)
-                {
-                    Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries via SavesSystem: count={result.Count}");
                     return result;
-                }
-                // 回退：直接通过 ES3 读取当前 save 文件
-                var path = System.IO.Path.Combine(SavesSystem.SavesFolder, SavesSystem.GetSaveFileName(SavesSystem.CurrentSlot));
-                if (ES3.FileExists(path))
+
+                // 回退：绕过 SavesSystem 缓存，绝对路径 + 显式 ES3Settings + CacheFile
+                string fullPath = Path.Combine(Application.persistentDataPath, "Saves",
+                    SavesSystem.GetSaveFileName(SavesSystem.CurrentSlot));
+                var settings = new ES3Settings(fullPath) { location = ES3.Location.File };
+
+                if (ES3.FileExists(fullPath, settings))
                 {
-                    result = ES3.Load<List<NpcSpawnEntry>>(NpcSaveKey, path);
+                    ES3.CacheFile(fullPath, settings);
+                    result = ES3.Load<List<NpcSpawnEntry>>(NpcSaveKey, fullPath, settings);
                     if (result != null && result.Count > 0)
-                    {
-                        Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries via ES3 direct: path={path}, count={result.Count}");
                         return result;
-                    }
                 }
-                Debug.Log($"[FML FriendlyNpc] LoadNpcSpawnEntries: no entries found (SavesSystem returned null, ES3 path={path}, exists={ES3.FileExists(path)})");
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[FML FriendlyNpc] LoadNpcSpawnEntries failed: {ex.GetType().Name}: {ex.Message}");
+                Debug.LogWarning($"[FML FriendlyNpc] LoadNpcSpawnEntries failed: {ex.Message}");
             }
             return new List<NpcSpawnEntry>();
         }
@@ -1087,9 +1091,9 @@ namespace FeatherMod
         }
 
         /// <summary>
-        /// 复合交互组装：指定唯一主交互体（商店 &gt; 任务 &gt; 技能树优先级），
-        /// 其余经 otherInterablesInGroup 挂入交互组并禁用其独立碰撞体。
-        /// 单一交互时保持独立碰撞体，直接检测。
+        /// 复合交互组装：按商店 &gt; 任务 &gt; 技能树优先级选定唯一主交互体，
+        /// 其余成员委托 <see cref="InteractionUtils.SetupInteractionGroup(InteractableBase, InteractableBase[])"/>
+        /// 挂入交互组并禁用其独立碰撞体。单一交互时无组操作。
         /// </summary>
         private static void SetupInteractionGroup(InteractableBase? shop, QuestGiver? quest, PerkTreeUIInvoker? perk)
         {
@@ -1102,18 +1106,7 @@ namespace FeatherMod
             if (primary != perk && perk != null) members.Add(perk);
             if (members.Count == 0) return; // 单交互——无需组
 
-            primary.interactableGroup = true;
-            primary.otherInterablesInGroup = members;
-
-            // 复刻 InteractableBase.Awake 的组同步（运行时挂载晚于 Awake，需手动执行）：
-            foreach (var member in members)
-            {
-                member.MarkerActive = false;
-                member.transform.SetPositionAndRotation(primary.transform.position, primary.transform.rotation);
-                member.interactMarkerOffset = primary.interactMarkerOffset;
-                if (member.interactCollider != null)
-                    member.interactCollider.enabled = false;
-            }
+            InteractionUtils.SetupInteractionGroup(primary, members.ToArray());
         }
 
         /// <summary>解析商店显示名本地化键：DisplayNameKey → ActorId → 原版 MerchantName_{merchantID} 惯例。</summary>

@@ -95,7 +95,7 @@ namespace FeatherMod
     ///     CostItems = new[] { ItemEntry.Of(1001, 5), ItemEntry.Of("mymod:beans", 2) },
     ///     Result = ItemEntry.Of("mymod:coffee", 10),
     ///     Tags = new[] { "WorkBenchAdvanced" },
-    ///     RequirePerk = "cooking"
+    ///     RequirePerk = new Identifier("duckov", "hacker/cooking")
     /// });
     ///
     /// // Builder 方式
@@ -127,8 +127,8 @@ namespace FeatherMod
         /// <summary>工作台标签。默认 ["WorkBenchAdvanced"]。</summary>
         public string[] Tags;
 
-        /// <summary>前置技能（空字符串 = 无）。</summary>
-        public string RequirePerk;
+        /// <summary>前置技能（Identifier。null/空 = 无前置技能）。</summary>
+        public Identifier? RequirePerk;
 
         /// <summary>是否默认解锁。默认 true。</summary>
         public bool UnlockByDefault;
@@ -208,7 +208,9 @@ namespace FeatherMod
             public CraftingFormulaBuilder Result(string idString, int amount) { _data.Result = ItemEntry.Of(idString, amount); return this; }
 
             public CraftingFormulaBuilder Tags(params string[] tags) { _data.Tags = tags; return this; }
-            public CraftingFormulaBuilder RequirePerk(string perk) { _data.RequirePerk = perk; return this; }
+            public CraftingFormulaBuilder RequirePerk(Identifier? perk) { _data.RequirePerk = perk; return this; }
+            /// <inheritdoc cref="RequirePerk(Identifier?)"/>
+            public CraftingFormulaBuilder RequirePerk(string perk) { _data.RequirePerk = Identifier.Parse(perk); return this; }
             public CraftingFormulaBuilder UnlockByDefault(bool value) { _data.UnlockByDefault = value; return this; }
             public CraftingFormulaBuilder HideInIndex(bool value) { _data.HideInIndex = value; return this; }
             public CraftingFormulaBuilder LockInDemo(bool value) { _data.LockInDemo = value; return this; }

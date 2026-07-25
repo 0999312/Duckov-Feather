@@ -14,7 +14,7 @@ namespace FeatherMod.Tests
                 localizationKey = "Example Blueprint",
                 localizationDesc = "An example blueprint for demonstration purposes.",
                 tags = { "Formula", "Formula_Blueprint" },
-                formulaID = "example_formula"
+                formulaID = new Identifier("feather", "example_formula")
             };
             ItemUtils.CreateCustomBluePrint(new Identifier("feather", "test_blueprint"), blueprint);
             QuestData exampleQuestData = new QuestData

@@ -77,7 +77,7 @@ namespace FeatherMod
                 resultItemId: data.Result.ResolveTypeId(),
                 resultItemAmount: data.Result.Amount,
                 tags: tags,
-                requirePerk: data.RequirePerk ?? "",
+                requirePerk: data.RequirePerk?.Path ?? "",
                 unlockByDefault: data.UnlockByDefault,
                 hideInIndex: data.HideInIndex,
                 lockInDemo: data.LockInDemo,
@@ -232,7 +232,7 @@ namespace FeatherMod
                 CostItems = ConvertTupleItems(costItems),
                 Result = ItemEntry.Of(resultItemId, resultItemAmount),
                 Tags = tags,
-                RequirePerk = requirePerk,
+                RequirePerk = string.IsNullOrEmpty(requirePerk) ? null : Identifier.Parse(requirePerk),
                 UnlockByDefault = unlockByDefault,
                 HideInIndex = hideInIndex,
                 LockInDemo = lockInDemo
@@ -258,7 +258,7 @@ namespace FeatherMod
                 CostItems = ConvertTupleItems(costItems),
                 Result = ItemEntry.Of(resultItemId, resultItemAmount),
                 Tags = tags,
-                RequirePerk = requirePerk,
+                RequirePerk = string.IsNullOrEmpty(requirePerk) ? null : Identifier.Parse(requirePerk),
                 UnlockByDefault = unlockByDefault,
                 HideInIndex = hideInIndex,
                 LockInDemo = lockInDemo
@@ -283,7 +283,7 @@ namespace FeatherMod
                 CostItems = ConvertTupleItems(costItems),
                 Result = ItemEntry.Of(resultItemId, resultItemAmount),
                 Tags = tags,
-                RequirePerk = requirePerk,
+                RequirePerk = string.IsNullOrEmpty(requirePerk) ? null : Identifier.Parse(requirePerk),
                 UnlockByDefault = unlockByDefault,
                 HideInIndex = hideInIndex,
                 LockInDemo = lockInDemo
@@ -308,7 +308,7 @@ namespace FeatherMod
                 CostItems = ConvertTupleItems(costItems),
                 Result = ItemEntry.Of(resultItemId, resultItemAmount),
                 Tags = tags,
-                RequirePerk = requirePerk,
+                RequirePerk = string.IsNullOrEmpty(requirePerk) ? null : Identifier.Parse(requirePerk),
                 UnlockByDefault = unlockByDefault,
                 HideInIndex = hideInIndex,
                 LockInDemo = lockInDemo
@@ -333,7 +333,7 @@ namespace FeatherMod
                 CostItems = ConvertTupleItems(costItems),
                 Result = ItemEntry.Of(resultItemId, resultItemAmount),
                 Tags = tags,
-                RequirePerk = requirePerk,
+                RequirePerk = string.IsNullOrEmpty(requirePerk) ? null : Identifier.Parse(requirePerk),
                 UnlockByDefault = unlockByDefault,
                 HideInIndex = hideInIndex,
                 LockInDemo = lockInDemo

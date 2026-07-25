@@ -8,6 +8,7 @@ using Duckov.UI;
 using Duckov.Utilities;
 
 using FeatherMod.Interaction.Components;
+using FeatherMod.Items;
 using FeatherMod.Register;
 using FeatherMod.UI;
 using FeatherMod.Utils;

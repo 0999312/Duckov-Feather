@@ -4,7 +4,6 @@ using Duckov.Utilities;
 using HarmonyLib;
 using System;
 using System.Linq;
-using System.Reflection;
 
 using UnityEngine;
 
@@ -18,34 +17,16 @@ namespace FeatherMod.Buildings.Patches
     [HarmonyPatch]
     public static class BuildingCollectionPatch
     {
-        /// <summary>缓存 requireBuildings 字段反射信息（一次性）。</summary>
-        private static readonly FieldInfo? _requireBuildingsField;
-        private static readonly FieldInfo? _requireQuestsField;
-        private static readonly FieldInfo? _alternativeForField;
-
-        static BuildingCollectionPatch()
-        {
-            var infoType = typeof(BuildingInfo);
-            _requireBuildingsField = infoType.GetField("requireBuildings",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            _requireQuestsField = infoType.GetField("requireQuests",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            _alternativeForField = infoType.GetField("alternativeFor",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        }
-
         /// <summary>
         /// 修复 BuildingInfo 中可能为 null 的数组字段为 Empty，
         /// 防止 RequirementsSatisfied() / BuildingAreaData.Any() 遍历时 NRE。
+        /// Publicizer 已公开所有字段，无需反射。
         /// </summary>
         private static void Sanitize(ref BuildingInfo info)
         {
-            if (_requireBuildingsField != null && _requireBuildingsField.GetValue(info) == null)
-                _requireBuildingsField.SetValueDirect(__makeref(info), Array.Empty<string>());
-            if (_requireQuestsField != null && _requireQuestsField.GetValue(info) == null)
-                _requireQuestsField.SetValueDirect(__makeref(info), Array.Empty<int>());
-            if (_alternativeForField != null && _alternativeForField.GetValue(info) == null)
-                _alternativeForField.SetValueDirect(__makeref(info), Array.Empty<string>());
+            info.requireBuildings ??= Array.Empty<string>();
+            info.requireQuests ??= Array.Empty<int>();
+            info.alternativeFor ??= Array.Empty<string>();
         }
 
         [HarmonyPatch(typeof(BuildingDataCollection), "GetInfo")]

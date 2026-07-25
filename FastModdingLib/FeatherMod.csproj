@@ -61,6 +61,9 @@
     <Reference Include="$(DuckovPath)$(SubPath)NodeCanvas.dll">
       <Private>False</Private>
     </Reference>
+		<Reference Include="$(DuckovPath)$(SubPath)Cinemachine.dll">
+			<Private>False</Private>
+		</Reference>
       
 		<Reference Include="0Harmony">
 			<HintPath>0Harmony.dll</HintPath>
@@ -73,7 +76,7 @@
 		<Publicize Include="TeamSoda.Duckov.Utilities" IncludeVirtualMembers="false" />
     <Publicize Include="NodeCanvas.DialogueTrees" IncludeVirtualMembers="false" />
     <Publicize Include="NodeCanvas.Framework" IncludeVirtualMembers="false" />
-		<Publicize Include="ItemStatsSystem" IncludeVirtualMembers="false" />
+		<Publicize Include="ItemStatsSystem" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false"/>
 	</ItemGroup>
 	<ItemGroup>
 		<Compile Remove="Resources\**" />

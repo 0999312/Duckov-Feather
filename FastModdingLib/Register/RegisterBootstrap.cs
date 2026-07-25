@@ -61,6 +61,7 @@ QuestGiverUtils.Init();
         public static void TearDown(string modid)
         {
             RegistryManager.Instance.RemoveAllByOwner(modid);
+            BuildingUtils.RemoveAllMachinesForMod(modid);
         }
     }
 }

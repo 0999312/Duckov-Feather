@@ -16,6 +16,15 @@ namespace FeatherMod.Interaction.Components
         /// <summary>自定义交互回调（可选）。</summary>
         public Action? OnInteract;
 
+        protected override void Awake()
+        {
+            // InteractableBase.Awake 会 foreach otherInterablesInGroup，
+            // AddComponent 创建的实例该字段为 null，必须先初始化为空列表。
+            otherInterablesInGroup = new System.Collections.Generic.List<InteractableBase>();
+
+            base.Awake();
+        }
+
         protected override void OnInteractFinished()
         {
             OnInteract?.Invoke();
