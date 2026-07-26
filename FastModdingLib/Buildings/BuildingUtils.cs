@@ -1,3 +1,4 @@
+using Cysharp.Threading.Tasks;
 using Duckov;
 using Duckov.Buildings;
 using Duckov.Economy;
@@ -8,6 +9,7 @@ using FeatherMod.Interaction;
 using FeatherMod.Interaction.Components;
 using FeatherMod.Register;
 using FeatherMod.Utils;
+using Saves;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -384,6 +386,9 @@ namespace FeatherMod
 
             _buildingCallbacks[path].Add((buildingId, callback));
 
+            // 持久化：新注册的回调需写入存档，Domain Reload 后可自包含恢复
+            PersistBuildingRestoreData();
+
             // 🆕 立即检查场景中是否已存在匹配建筑：遍历所有场景中的 Building 实例，
             // 查找 buildingInfo.id 匹配的建筑并立即执行回调。
             // 这解决了存档加载后的时序问题：建筑在 RepaintAll 时已实例化，
@@ -449,6 +454,48 @@ namespace FeatherMod
         private static readonly HashSet<string> _pendingSceneReplay = new HashSet<string>();
         private static bool _sceneLoadEventHooked;
 
+        // ═══════════════════════════════════════════════════
+        //  存档持久化（参照 FriendlyNpcUtils 自包含模式）
+        // ═══════════════════════════════════════════════════
+
+        [Serializable]
+        private struct BuildingRestoreData
+        {
+            public List<string> callbackPaths;
+            public List<string> machinePaths;
+        }
+
+        private const string BuildingRestoreKey = "fml_building_interactions";
+
+        /// <summary>持久化当前已注册的建筑交互配置到存档（Domain Reload 后自包含恢复）。</summary>
+        private static void PersistBuildingRestoreData()
+        {
+            var data = new BuildingRestoreData
+            {
+                callbackPaths = _buildingCallbacks.Keys.ToList(),
+                machinePaths = _buildingMachines.Keys.ToList()
+            };
+            SavesSystem.Save(BuildingRestoreKey, data);
+        }
+
+        /// <summary>从存档恢复建筑交互配置（Domain Reload 后补注册，实际回调由 mod OnAfterSetup 重新注册）。</summary>
+        private static bool TryLoadBuildingRestoreData(out List<string> callbackPaths, out List<string> machinePaths)
+        {
+            callbackPaths = new List<string>();
+            machinePaths = new List<string>();
+            try
+            {
+                var data = SavesSystem.Load<BuildingRestoreData>(BuildingRestoreKey);
+                if (data.callbackPaths != null) callbackPaths.AddRange(data.callbackPaths);
+                if (data.machinePaths != null) machinePaths.AddRange(data.machinePaths);
+                return callbackPaths.Count > 0 || machinePaths.Count > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static void HookBuildingEvents()
         {
             if (_buildingEventsHooked) return;
@@ -464,21 +511,38 @@ namespace FeatherMod
             if (_sceneLoadEventHooked) return;
             _sceneLoadEventHooked = true;
 
-            // 场景刚加载完时建筑可能尚未实例化（RepaintAll 在 LevelInit 期间执行），
-            // 因此订阅 MainSceneLoaded（主场景就绪）+ LevelInitialized（建筑已加载）两个事件。
-            // FriendlyNpcUtils 的做法也是订阅多个事件以确保时序覆盖。
-            EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoadedReplayBuildings);
-            EventBusManager.Instance.Sync.Register<LevelInitializedEvent>(OnLevelInitializedReplayBuildings);
+            // 参照 FriendlyNpcUtils.HookSaveRestore()：订阅全部 4 个事件确保时序覆盖。
+            //  - MainSceneLoaded：主场景加载完成（读档回基地）
+            //  - LevelInitialized：仅新游戏触发（建筑在 LevelInit 期间由 RepaintAll 实例化）
+            //  - SceneLoadFinished：子场景切换（撤离回基地 / 进出建筑）
+            //  - CollectSaveData：存档时持久化已注册的建筑交互配置
+            EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoadedDeferred);
+            EventBusManager.Instance.Sync.Register<LevelInitializedEvent>(OnLevelInitDeferred);
+            EventBusManager.Instance.Sync.Register<SceneLoadFinishedEvent>(OnSceneLoadFinishDeferred);
+            EventBusManager.Instance.Sync.Register<CollectSaveDataEvent>(OnCollectBuildingSaveData);
         }
 
-        private static void OnMainSceneLoadedReplayBuildings(MainSceneLoadedEvent evt)
+        private static async void OnMainSceneLoadedDeferred(MainSceneLoadedEvent evt)
         {
+            await UniTask.DelayFrame(2); // 等待 BuildingArea.Start() → RepaintAll()
             RestoreBuildingInteractions();
         }
 
-        private static void OnLevelInitializedReplayBuildings(LevelInitializedEvent evt)
+        private static async void OnLevelInitDeferred(LevelInitializedEvent evt)
         {
+            await UniTask.DelayFrame(2);
             RestoreBuildingInteractions();
+        }
+
+        private static async void OnSceneLoadFinishDeferred(SceneLoadFinishedEvent evt)
+        {
+            await UniTask.DelayFrame(2);
+            RestoreBuildingInteractions();
+        }
+
+        private static void OnCollectBuildingSaveData(CollectSaveDataEvent evt)
+        {
+            PersistBuildingRestoreData();
         }
 
         /// <summary>
@@ -555,8 +619,10 @@ namespace FeatherMod
             if (_sceneLoadEventHooked)
             {
                 _sceneLoadEventHooked = false;
-                EventBusManager.Instance.Sync.Unregister<MainSceneLoadedEvent>(OnMainSceneLoadedReplayBuildings);
-                EventBusManager.Instance.Sync.Unregister<LevelInitializedEvent>(OnLevelInitializedReplayBuildings);
+                EventBusManager.Instance.Sync.Unregister<MainSceneLoadedEvent>(OnMainSceneLoadedDeferred);
+                EventBusManager.Instance.Sync.Unregister<LevelInitializedEvent>(OnLevelInitDeferred);
+                EventBusManager.Instance.Sync.Unregister<SceneLoadFinishedEvent>(OnSceneLoadFinishDeferred);
+                EventBusManager.Instance.Sync.Unregister<CollectSaveDataEvent>(OnCollectBuildingSaveData);
             }
         }
 
@@ -896,6 +962,9 @@ namespace FeatherMod
                         machine.Recipe.SaveKey = $"{path}/{machine.MachineKey}";
                     }
                 }
+
+                // 持久化：新注册的 Machine 配置写入存档
+                PersistBuildingRestoreData();
             }
         }
 
@@ -940,6 +1009,9 @@ namespace FeatherMod
                     UnlockedByDefault = true
                 });
             }
+
+            // 持久化：Machine Recipe 注册写入存档
+            PersistBuildingRestoreData();
         }
 
         /// <summary>移除建筑上指定 Machine 的 Recipe。</summary>
