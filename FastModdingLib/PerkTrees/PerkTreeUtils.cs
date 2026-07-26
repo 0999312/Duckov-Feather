@@ -4,6 +4,7 @@ using FeatherMod.Events.GameEvents;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using NodeCanvas.Framework;
+using Saves;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,6 +35,7 @@ namespace FeatherMod
         private static readonly Dictionary<string, PerkTree> _registeredTrees = new Dictionary<string, PerkTree>();
         private static bool _initialized;
         private static bool _vanillaRetryHooked;
+        private static bool _onSetFileHooked;
         private static bool _dumped; // 一次性 dump 标记
 
         /// <summary>原版树注入延迟队列：graph 在 OnAfterSetup 时未反序列化，待 MainSceneLoaded 后重试。</summary>
@@ -72,6 +74,7 @@ namespace FeatherMod
                 meta.Set(id, _perkRegistry, RegistryManager.CurrentModid);
 
             HookVanillaRetry();
+            HookOnSetFileCleanup();
         }
 
         /// <summary>订阅 MainSceneLoaded，重试 graph 加载期间暂缓的原版树注入。</summary>
@@ -80,6 +83,30 @@ namespace FeatherMod
             if (_vanillaRetryHooked) return;
             _vanillaRetryHooked = true;
             EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoadedRetryInjects);
+        }
+
+        /// <summary>
+        /// 订阅 SavesSystem.OnSetFile，在存档槽位切换时清理场景上下文相关的缓存。
+        /// _deferredVanillaInjects：旧场景的延迟注入队列已无效（场景已切换）。
+        /// _completedPerkInjects：场景重建后 Perk 子对象被销毁，旧追踪集失效。
+        /// </summary>
+        private static void HookOnSetFileCleanup()
+        {
+            if (_onSetFileHooked) return;
+            _onSetFileHooked = true;
+            SavesSystem.OnSetFile += OnSetFileCleanup;
+        }
+
+        private static void OnSetFileCleanup()
+        {
+            int deferredCount = _deferredVanillaInjects.Count;
+            int completedCount = _completedPerkInjects.Count;
+
+            _deferredVanillaInjects.Clear();
+            _completedPerkInjects.Clear();
+
+            if (deferredCount > 0 || completedCount > 0)
+                Debug.Log($"[PerkTreeUtils] OnSetFile: cleared {deferredCount} deferred inject(s) + {completedCount} completed inject(s).");
         }
 
         private static void OnMainSceneLoadedRetryInjects(MainSceneLoadedEvent evt)
