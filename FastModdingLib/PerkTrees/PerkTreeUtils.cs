@@ -95,8 +95,9 @@ namespace FeatherMod
 
         /// <summary>
         /// 订阅 SavesSystem.OnSetFile，在存档槽位切换时清理场景上下文相关的缓存。
-        /// _deferredVanillaInjects：旧场景的延迟注入队列已无效（场景已切换）。
-        /// _completedPerkInjects：场景重建后 Perk 子对象被销毁，旧追踪集失效。
+        /// _completedPerkInjects：场景重建后 Perk 子对象被销毁，旧追踪集失效，强制下次 MainSceneLoaded 重建。
+        /// _deferredVanillaInjects 不清理——它是 AddPerk 时写入的注入配置，跨场景/槽位有效，
+        /// 清理后会导致场景重载时原版树注入的 Perk 丢失。
         /// </summary>
         private static void HookOnSetFileCleanup()
         {
@@ -107,14 +108,11 @@ namespace FeatherMod
 
         private static void OnSetFileCleanup()
         {
-            int deferredCount = _deferredVanillaInjects.Count;
             int completedCount = _completedPerkInjects.Count;
-
-            _deferredVanillaInjects.Clear();
             _completedPerkInjects.Clear();
 
-            if (deferredCount > 0 || completedCount > 0)
-                Debug.Log($"[PerkTreeUtils] OnSetFile: cleared {deferredCount} deferred inject(s) + {completedCount} completed inject(s).");
+            if (completedCount > 0)
+                Debug.Log($"[PerkTreeUtils] OnSetFile: cleared {completedCount} completed inject(s).");
         }
 
         private static void OnMainSceneLoadedRetryInjects(MainSceneLoadedEvent evt)
