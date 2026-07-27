@@ -38,6 +38,14 @@ namespace FeatherMod
         private static bool _onSetFileHooked;
         private static bool _dumped; // 一次性 dump 标记
 
+        /// <summary>
+        /// Perk.Unlocked setter 事件抑制标志。PerkTree.SetupSaveData 批量操作期间设为 true，
+        /// 阻止每个 perk 的 onUnlockStateChanged 触发 PerkDetails.Refresh() 导致 NRE
+        /// （存档槽位选择时 UI 组件未就绪）。
+        /// 由 PerkSetupSaveDataSuppressPatch 控制生命周期。
+        /// </summary>
+        internal static bool SuppressPerkEvents;
+
         /// <summary>原版树注入延迟队列：graph 在 OnAfterSetup 时未反序列化，待 MainSceneLoaded 后重试。</summary>
         private static readonly List<DeferredVanillaInject> _deferredVanillaInjects = new();
 
