@@ -104,6 +104,7 @@ namespace FeatherMod
             if (_onSetFileHooked) return;
             _onSetFileHooked = true;
             SavesSystem.OnSetFile += OnSetFileCleanup;
+            EventBusManager.Instance.Sync.Register<SaveDeletedEvent>(OnSaveDeletedCleanup);
         }
 
         private static void OnSetFileCleanup()
@@ -113,6 +114,14 @@ namespace FeatherMod
 
             if (completedCount > 0)
                 Debug.Log($"[PerkTreeUtils] OnSetFile: cleared {completedCount} completed inject(s).");
+        }
+
+        private static void OnSaveDeletedCleanup(SaveDeletedEvent evt)
+        {
+            int completedCount = _completedPerkInjects.Count;
+            _completedPerkInjects.Clear();
+            if (completedCount > 0)
+                Debug.Log($"[PerkTreeUtils] OnSaveDeleted: cleared {completedCount} completed inject(s) after save deletion.");
         }
 
         private static void OnMainSceneLoadedRetryInjects(MainSceneLoadedEvent evt)

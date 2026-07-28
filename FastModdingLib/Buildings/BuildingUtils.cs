@@ -8,6 +8,7 @@ using FeatherMod.Events.GameEvents;
 using FeatherMod.Interaction;
 using FeatherMod.Interaction.Components;
 using FeatherMod.Register;
+using FeatherMod.Saves;
 using FeatherMod.Utils;
 using Saves;
 using System;
@@ -465,7 +466,7 @@ namespace FeatherMod
             public List<string> machinePaths;
         }
 
-        private const string BuildingRestoreKey = "fml_building_interactions";
+        private static readonly Identifier BuildingRestoreId = new Identifier(FMLConstants.Domain, "building_interactions");
 
         /// <summary>持久化当前已注册的建筑交互配置到存档（Domain Reload 后自包含恢复）。</summary>
         private static void PersistBuildingRestoreData()
@@ -475,7 +476,7 @@ namespace FeatherMod
                 callbackPaths = _buildingCallbacks.Keys.ToList(),
                 machinePaths = _buildingMachines.Keys.ToList()
             };
-            SavesSystem.Save(BuildingRestoreKey, data);
+            SaveUtils.Save(BuildingRestoreId, data);
         }
 
         /// <summary>从存档恢复建筑交互配置（Domain Reload 后补注册，实际回调由 mod OnAfterSetup 重新注册）。</summary>
@@ -485,7 +486,8 @@ namespace FeatherMod
             machinePaths = new List<string>();
             try
             {
-                var data = SavesSystem.Load<BuildingRestoreData>(BuildingRestoreKey);
+                // 优先使用带 defaultValue 的重载：存档缺失时返回默认值而非 null，避免 NRE。
+                var data = SaveUtils.Load<BuildingRestoreData>(BuildingRestoreId, default);
                 if (data.callbackPaths != null) callbackPaths.AddRange(data.callbackPaths);
                 if (data.machinePaths != null) machinePaths.AddRange(data.machinePaths);
                 return callbackPaths.Count > 0 || machinePaths.Count > 0;
@@ -520,6 +522,17 @@ namespace FeatherMod
             EventBusManager.Instance.Sync.Register<LevelInitializedEvent>(OnLevelInitDeferred);
             EventBusManager.Instance.Sync.Register<SceneLoadFinishedEvent>(OnSceneLoadFinishDeferred);
             EventBusManager.Instance.Sync.Register<CollectSaveDataEvent>(OnCollectBuildingSaveData);
+            // 存档删除时清理建筑交互的内存注册表，避免新存档继承旧档的回调/Machine 配置
+            EventBusManager.Instance.Sync.Register<SaveDeletedEvent>(OnSaveDeleted);
+        }
+
+        private static void OnSaveDeleted(SaveDeletedEvent evt)
+        {
+            // 清理建筑交互的内存注册表，避免新存档继承旧档的回调/Machine 配置
+            _buildingCallbacks.Clear();
+            _buildingDemolishCallbacks.Clear();
+            _buildingMachines.Clear();
+            _pendingSceneReplay.Clear();
         }
 
         private static async void OnMainSceneLoadedDeferred(MainSceneLoadedEvent evt)
@@ -623,6 +636,7 @@ namespace FeatherMod
                 EventBusManager.Instance.Sync.Unregister<LevelInitializedEvent>(OnLevelInitDeferred);
                 EventBusManager.Instance.Sync.Unregister<SceneLoadFinishedEvent>(OnSceneLoadFinishDeferred);
                 EventBusManager.Instance.Sync.Unregister<CollectSaveDataEvent>(OnCollectBuildingSaveData);
+                EventBusManager.Instance.Sync.Unregister<SaveDeletedEvent>(OnSaveDeleted);
             }
         }
 

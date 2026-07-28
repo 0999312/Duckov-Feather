@@ -8,6 +8,7 @@ using FeatherMod.Events;
 using FeatherMod.Events.GameEvents;
 using FeatherMod.Interaction;
 using FeatherMod.Register;
+using FeatherMod.Saves;
 using FeatherMod.Utils;
 using FmlEvent = FeatherMod.Events.Event;
 using Saves;
@@ -42,7 +43,7 @@ namespace FeatherMod
         private const long DefaultShopRefreshTicks = 6000000000L; // 原版小明：库存刷新间隔 10 分钟
 
         // NPC save/restore persistence
-        private const string NpcSaveKey = "fml_friendly_npc_spawns";
+        private static readonly Identifier NpcSaveId = new Identifier(FMLConstants.Domain, "friendly_npc_spawns");
         private static bool _saveRestoreHooked;
 
         [Serializable]
@@ -106,7 +107,8 @@ namespace FeatherMod
                 // 对齐原版 XiaoMing——进入存档时自动在建筑确定的原生成点位重新出现。
                 EventBusManager.Instance.Sync.Register<MainSceneLoadedEvent>(OnMainSceneLoaded);
                 EventBusManager.Instance.Sync.Register<SceneLoadFinishedEvent>(OnSubSceneLoaded);
-                Debug.Log("[FML FriendlyNpc] HookSaveRestore: registered CollectSaveData + LevelInit + MainSceneLoaded + SubSceneLoaded handlers.");
+                EventBusManager.Instance.Sync.Register<SaveDeletedEvent>(OnSaveDeleted);
+                Debug.Log("[FML FriendlyNpc] HookSaveRestore: registered CollectSaveData + LevelInit + MainSceneLoaded + SubSceneLoaded + SaveDeleted handlers.");
             }
             catch (Exception ex)
             {
@@ -117,6 +119,7 @@ namespace FeatherMod
         private static void OnLevelInitialized(LevelInitializedEvent evt) { Debug.Log("[FML FriendlyNpc] OnLevelInitialized -> RestoreNpcSpawns"); RestoreNpcSpawns(); }
         private static void OnMainSceneLoaded(MainSceneLoadedEvent evt) { Debug.Log("[FML FriendlyNpc] OnMainSceneLoaded -> RestoreNpcSpawns"); RestoreNpcSpawns(); }
         private static void OnSubSceneLoaded(SceneLoadFinishedEvent evt) { Debug.Log($"[FML FriendlyNpc] OnSubSceneLoaded({evt.SceneId}) -> RestoreNpcSpawns"); RestoreNpcSpawns(); }
+        private static void OnSaveDeleted(SaveDeletedEvent evt) { _registry?.Clear(); }
         private static void OnCollectSaveData(CollectSaveDataEvent evt)
         {
             try
@@ -138,13 +141,15 @@ namespace FeatherMod
                 }
                 if (entries.Count > 0)
                 {
-                    SavesSystem.Save(NpcSaveKey, entries);
+                    SaveUtils.Save(NpcSaveId, entries);
                     Debug.Log($"[FML FriendlyNpc] OnCollectSaveData: saved {entries.Count} NPC(s).");
                 }
                 else
                 {
-                    Debug.Log($"[FML FriendlyNpc] OnCollectSaveData: no entries to save (empty after merge).");
+                    // 空列表主动删键，避免下次加载触发 "Key not found" 警告循环。
+                    SaveUtils.Save(NpcSaveId, (List<NpcSpawnEntry>?)null);
                 }
+                return;
             }
             catch (Exception ex)
             {
@@ -519,7 +524,7 @@ namespace FeatherMod
                 var entries = LoadNpcSpawnEntries();
                 entries.RemoveAll(e => e.domain == id.Domain && e.path == id.Path);
                 entries.Add(BuildNpcSpawnEntry(id, pos, rot));
-                SavesSystem.Save(NpcSaveKey, entries);
+                SaveUtils.Save(NpcSaveId, entries);
                 Debug.Log($"[FML FriendlyNpc] PersistNpcSpawn: '{id}' at ({pos.x:F1},{pos.y:F1},{pos.z:F1}), total entries={entries.Count}");
             }
             catch (Exception ex)
@@ -546,7 +551,7 @@ namespace FeatherMod
             {
                 var entries = LoadNpcSpawnEntries();
                 entries.RemoveAll(e => e.domain == id.Domain && e.path == id.Path);
-                SavesSystem.Save(NpcSaveKey, entries);
+                SaveUtils.Save(NpcSaveId, entries);
             }
             catch (Exception ex)
             {
@@ -558,23 +563,8 @@ namespace FeatherMod
         {
             try
             {
-                // 主路径：SavesSystem 缓存
-                var result = SavesSystem.Load<List<NpcSpawnEntry>>(NpcSaveKey);
-                if (result != null && result.Count > 0)
-                    return result;
-
-                // 回退：绕过 SavesSystem 缓存，绝对路径 + 显式 ES3Settings + CacheFile
-                string fullPath = Path.Combine(Application.persistentDataPath, "Saves",
-                    SavesSystem.GetSaveFileName(SavesSystem.CurrentSlot));
-                var settings = new ES3Settings(fullPath) { location = ES3.Location.File };
-
-                if (ES3.FileExists(fullPath, settings))
-                {
-                    ES3.CacheFile(fullPath, settings);
-                    result = ES3.Load<List<NpcSpawnEntry>>(NpcSaveKey, fullPath, settings);
-                    if (result != null && result.Count > 0)
-                        return result;
-                }
+                // SaveUtils.Load 内置 KeyExists 预检查，不会触发 ES3 "Key not found" 警告。
+                return SaveUtils.Load<List<NpcSpawnEntry>>(NpcSaveId) ?? new List<NpcSpawnEntry>();
             }
             catch (Exception ex)
             {

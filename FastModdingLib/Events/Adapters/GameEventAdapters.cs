@@ -1,4 +1,5 @@
 ﻿using FeatherMod.Events.GameEvents;
+using Saves;
 using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
@@ -62,6 +63,10 @@ namespace FeatherMod.Events.Adapters
             // SavesSystem.OnCollectSaveData → CollectSaveDataEvent
             //   原生: Action（无参 event）
             WireDynamicEvent("Saves.SavesSystem", "OnCollectSaveData", nameof(OnCollectSaveDataBridge));
+            // SavesSystem.OnSaveDeleted → SaveDeletedEvent
+            //   原生: Action（无参 event），存档槽位删除完成后触发。
+            //   各 FML 模块通过本事件清理内存注册表与跨槽位持久化状态。
+            WireDynamicEvent("Saves.SavesSystem", "OnSaveDeleted", nameof(OnSaveDeletedBridge));
             // SavesCounter.OnKillCountChanged → KillCountChangedEvent
             //   原生: Action<string, int>（委托字段）—— 反编译确认，2 参。
             WireDynamicEvent("SavesCounter", "OnKillCountChanged", nameof(OnKillCountChangedBridge));
@@ -269,6 +274,12 @@ namespace FeatherMod.Events.Adapters
         // 原生: Action（无参 event）
         private static void OnCollectSaveDataBridge()
             => EventBusManager.Instance.Sync.Post(new CollectSaveDataEvent(null));
+
+        // 原生: Action（无参 event）——存档槽位删除完成。
+        // 桥接时取出 SavesSystem.CurrentSlot 作为快照（删除流程在触发前不会修改 CurrentSlot；
+        // 若未来版本行为变化，桥接仍按删除前槽位号语义发布）。
+        private static void OnSaveDeletedBridge()
+            => EventBusManager.Instance.Sync.Post(new SaveDeletedEvent(SavesSystem.CurrentSlot));
 
         // 原生: Action<string, int>（2 参：key, count）
         private static void OnKillCountChangedBridge(object key, object count)

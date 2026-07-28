@@ -466,7 +466,7 @@ namespace FeatherMod
             var modDir = ModPathResolver.ResolveDirectory(id.Domain);
             Item component = ItemBuilder.New()
                 .TypeID(config.itemId)
-                .Icon(config.spritePath != null ? await LoadSpriteFromDirAsync(modDir, config.spritePath) :  ItemAssetsCollection.GetPrefab(285).icon)
+                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
                 .Instantiate();
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);

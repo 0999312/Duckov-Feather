@@ -1,6 +1,62 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-22
+> 最后更新：2026-07-28
+
+---
+
+## Save 系统统一化与跨槽位清理加固 — ✅ 已完成
+
+**完成时间**: 2026-07-28
+**耗时**: 约 3 小时
+**类型**: 存档系统架构整理 + 跨槽位泄漏修复 + Quest 链断裂防范
+
+### 背景
+
+玩家在使用测试 mod 时报告 4 个相关问题：
+1. FriendlyNpc 存档异常（log 中 `LoadNpcSpawnEntries failed: Key "fml_friendly_npc_spawns" was not found`）
+2. PerkTree 等新 API 模块的存档内容不跟随存档删除（全局问题）
+3. 新 API 未对接项目原 `SaveUtils` 工具类
+4. 部分原版 Quest 任务链随机断裂，疑似安装 FML 后出现
+
+经 5 个 explore 子代理并行调研反编译游戏源码 + FML 自身 + DuckovDOOM 参考项目确认根因：
+- `SaveUtils` 在 FML 内部**零引用**；所有新模块直接调 `SavesSystem.Save/Load` 用裸字符串键，与原生键命名空间无隔离
+- `OnSaveDeleted` 事件无任何 FML 模块订阅，删除存档时内存注册表与跨槽位持久化状态不清理
+- `FriendlyNpc.LoadNpcSpawnEntries` 走直接 `ES3.Load` 回退路径，绕过 `SavesSystem.Load` 的 `KeyExists` 预检查 → 触发 ES3 "Key not found" warning；空 entries 不写键导致下次加载循环警告
+- `QuestGiverRegistry` 用 `persistentDataPath/FML/questgiver_id_map.json` 跨槽位共享 → 删档泄漏到新档
+- `QuestManagerSlotCleanupPatch` 反射 `Clear()` 私有列表无快照无回滚，违反反射最小化原则
+- `QuestGiverIDPatch` 4 个 catch 块 `return true` 静默 fallback 到原生方法，掩盖 mod 异常
+- `SaveUtils` 缺乏显式删除 API 与原生保留键冲突警告
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 修改 | `FastModdingLib/Saves/SaveUtils.cs` | 扩展：`MakeKey/KeyExists/Delete<T>` 显式删除、`Load<T>(Identifier, T defaultValue)` 重载、`WarnIfReserved` 保留键警告（QuestData/SaveTime/IsOldGame/Created/EconomyData/GameClock/ActiveModList/Item//Inventory//Count/） |
+| 新建 | `FastModdingLib/Events/GameEvents/SaveDeletedEvent.cs` | 桥接 `SavesSystem.OnSaveDeleted` → EventBus；构造 `SaveDeletedEvent(int slot)` |
+| 修改 | `FastModdingLib/Events/Adapters/GameEventAdapters.cs` | 新增 `OnSaveDeletedBridge` 桥接方法 + `using Saves;` |
+| 修改 | `FastModdingLib/Entities/FriendlyNpcUtils.cs` | `NpcSaveKey` 字符串 → `NpcSaveId` Identifier；`LoadNpcSpawnEntries` 删除 ES3 直接文件回退（统一走 `SaveUtils.Load`）；`OnCollectSaveData` 空 entries 主动调 `SaveUtils.Save(id, null)` 删键（不再循环警告）；订阅 `SaveDeletedEvent` 清空 `_registry` |
+| 修改 | `FastModdingLib/Buildings/BuildingUtils.cs` | `BuildingRestoreKey` 字符串 → `BuildingRestoreId` Identifier；`TryLoadBuildingRestoreData` 改用带 defaultValue 重载；订阅 `SaveDeletedEvent` 清空 `_buildingCallbacks/_buildingDemolishCallbacks/_buildingMachines/_pendingSceneReplay` |
+| 修改 | `FastModdingLib/Dialogues/NpcProximityTrigger.cs` | `SaveKey()` 字符串 → `SaveId()` Identifier；`Start/Update` 改用 `SaveUtils.Load<bool>/Save`；移除 `using Saves;`，加入 `using FeatherMod.Saves;` |
+| 修改 | `FastModdingLib/PerkTrees/PerkTreeUtils.cs` | `HookOnSetFileCleanup` 末尾追加订阅 `SaveDeletedEvent`；新增 `OnSaveDeletedCleanup` 清空 `_completedPerkInjects`（保留 OnSetFile 订阅并行，未改 PerkTree.Save/Load） |
+| 修改 | `FastModdingLib/QuestGivers/QuestGiverRegistry.cs` | **彻底移除**全局 JSON 持久化（`PersistFilePath`/`File.WriteAllText`/`JsonUtility`）；改为按槽位持久化到 `.sav`（走 `SaveUtils.Save/Load<PersistData>(PersistSaveId)`）；新增 `SaveDeletedEvent` 清空 `_questGiverIdIndex/_reverseIdIndex/_displayNameKeyCache` 并重置 `_nextQuestGiverId`；`PersistData/PersistEntry` 改 public 以便 ES3 字段序列化；公共 Register/TryGet/OnRemoved 等 API 签名零变更 |
+| 修改 | `FastModdingLib/QuestGivers/Patches/QuestGiverIDPatch.cs` | 4 个 Prefix catch 块从 `return true; // 放行原生` 改为显式赋空 `__result` 后 `return false;`（暴露 mod 异常而非静默 fallback，保留 Debug.LogError） |
+| 删除 | `FastModdingLib/Quests/Patches/QuestManagerSlotCleanupPatch.cs` | 移除反射 `Clear()` 私有 `activeQuests/historyQuests` 的 patch（违反反射最小化、无快照无回滚）；改由原版 `SavesSystem.OnSetFile → QuestManager.Load()` 处理槽位切换 |
+
+### 验证结果
+
+- [x] `dotnet build FastModdingLib/FeatherMod.csproj` 输出：**1 error 54 warnings**
+  - 1 error 为**预存**：`Tests/QuestTest.cs(19) ItemUtils.CreateCustomBluePrint` 调用已删除 API，与本次任务无关；最近 commit `97c6b73 update` 已含此问题
+  - 本次新增改动 0 引入新 error
+- [x] Grep 验证 `SavesSystem.Save(NpcSaveKey` / `SavesSystem.Save(BuildingRestoreKey` / `SavesSystem.Save(SaveKey()` / `File.WriteAllText` / `QuestManagerSlotCleanupPatch` / `return true; // 放行原生` 均为 0 匹配
+
+### 遗留问题
+
+- [ ] `Tests/QuestTest.cs` 仍调用已废弃 `ItemUtils.CreateCustomBluePrint`；属 Phase 6 测试质量工作范畴，与本次任务正交，未触碰
+- [ ] 跨槽位持久化迁移期间未做"双读兼容"——本次按用户决策放宽双读要求直接迁移；旧 `questgiver_id_map.json` 文件将自动失效（ FML 不再读取该全局 JSON）
+
+### 设计偏离
+
+- `NpcProximityTrigger` 的 Identifier Path 拼接 `npc_trigger_{NpcId.Domain}_{NpcId.Path}` 内含下划线分隔；最终 ES3 键形如 `FeatherModfeather:npc_trigger_..._...`——这是 SaveUtils 前缀（"FeatherMod"）+ FML 内部 Domain（"feather"）拼接导致的双前缀现象，已在内部使用层面接受（不影响隔离效果）。若未来想优化可在 SaveUtils 中针对 FMLConstants.Domain 用例跳过框架前缀
 
 ---
 

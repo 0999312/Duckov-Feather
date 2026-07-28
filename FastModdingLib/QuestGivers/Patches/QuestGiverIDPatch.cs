@@ -55,7 +55,8 @@ namespace FeatherMod.QuestGivers.Patches
             catch (Exception e)
             {
                 Debug.LogError($"[QuestGiverIDPatch] GetAllQuestsByQuestGiverID failed: {e.Message}");
-                return true; // 放行原生
+                __result = Enumerable.Empty<Quest>();
+                return false;
             }
         }
 
@@ -96,7 +97,8 @@ namespace FeatherMod.QuestGivers.Patches
             catch (Exception e)
             {
                 Debug.LogError($"[QuestGiverIDPatch] GetActiveQuestsFromGiver failed: {e.Message}");
-                return true;
+                __result = new List<Quest>();
+                return false;
             }
         }
 
@@ -137,7 +139,8 @@ namespace FeatherMod.QuestGivers.Patches
             catch (Exception e)
             {
                 Debug.LogError($"[QuestGiverIDPatch] GetHistoryQuestsFromGiver failed: {e.Message}");
-                return true;
+                __result = new List<Quest>();
+                return false;
             }
         }
 
@@ -177,7 +180,8 @@ namespace FeatherMod.QuestGivers.Patches
             catch (Exception e)
             {
                 Debug.LogError($"[QuestGiverIDPatch] AnyActiveQuestNeedsInspection failed: {e.Message}");
-                return true;
+                __result = false;
+                return false;
             }
         }
     }

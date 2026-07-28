@@ -1,11 +1,13 @@
 using Duckov.Quests;
 using Duckov.Utilities;
+using FeatherMod.Events;
+using FeatherMod.Events.GameEvents;
 using FeatherMod.Register;
+using FeatherMod.Saves;
 using FeatherMod.Utils;
 using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 
 namespace FeatherMod
@@ -15,6 +17,15 @@ namespace FeatherMod
     /// 自定义 questGiverID 从 <see cref="MinCustomQuestGiverId"/> (50) 起分配
     /// （游戏原生 QuestGiverID 枚举值为 0~11，避免冲突）。
     /// </summary>
+    /// <remarks>
+    /// <para><b>ID 持久化</b>：Identifier → int 映射通过 <see cref="SaveUtils"/>
+    /// 持久化到当前存档槽位的 <c>.sav</c> 文件（键 <c>feather:questgiver_id_map</c>），
+    /// 而非全局 JSON。同一 Identifier 在同一槽位始终获得相同 int ID，
+    /// 使 <c>Character_{int}</c> 本地化键跨会话稳定；删除存档时映射随槽位
+    /// <c>.sav</c> 一起被擦除，不会泄漏到其他槽位。</para>
+    /// <para><b>存档删除</b>：订阅 <see cref="SaveDeletedEvent"/>，删除槽位时
+    /// 清空内存索引与持久化缓存，避免新存档继承旧档 ID 映射导致 Quest 链断裂。</para>
+    /// </remarks>
     public sealed class QuestGiverRegistry : SimpleRegistry<GameObject>
     {
         public const int MinCustomQuestGiverId = 50;
@@ -24,26 +35,28 @@ namespace FeatherMod
         private readonly Dictionary<int, string> _displayNameKeyCache = new Dictionary<int, string>();
         private int _nextQuestGiverId = MinCustomQuestGiverId;
 
-        // ── ID 持久化 ──
+        // ── ID 持久化（按存档槽位）──
         // 游戏对 QuestGiver 显示名使用本地化键 Character_{questGiverID}。
         // questGiverID 由框架动态分配（50 起递增），若每次会话都变化，modder
-        // 无法为该键编写稳定翻译。此处把 Identifier → int 映射持久化到全局文件
-        // （跨存档槽共享），保证同一 Identifier 永远分配到相同 int ID，
-        // 使 Character_{int} 键跨会话稳定。
-        private static string PersistFilePath =>
-            System.IO.Path.Combine(Application.persistentDataPath, "FML", "questgiver_id_map.json");
-        private Dictionary<string, int>? _persisted;
+        // 无法为该键编写稳定翻译。此处把 Identifier → int 映射通过 SaveUtils
+        // 持久化到当前存档槽位的 .sav 文件，保证同一 Identifier 在同一槽位
+        // 始终分配相同 int ID，使 Character_{int} 键跨会话稳定。
+        // 删除存档时映射随槽位 .sav 一起被擦除，不会泄漏到其他槽位。
+        private static readonly Identifier PersistSaveId = new Identifier(FMLConstants.Domain, "questgiver_id_map");
+
+        private PersistData? _persisted;
         private bool _persistLoaded;
+        private bool _saveDeletedHooked;
 
         [Serializable]
-        private class PersistData
+        public class PersistData
         {
             public int nextId = MinCustomQuestGiverId;
             public List<PersistEntry> entries = new List<PersistEntry>();
         }
 
         [Serializable]
-        private struct PersistEntry
+        public struct PersistEntry
         {
             public string id;
             public int intId;
@@ -71,19 +84,27 @@ namespace FeatherMod
         internal int Register(Identifier id, string modid)
         {
             EnsurePersistLoaded();
+            EnsureSaveDeletedHooked();
 
             // 重复注册同一 Identifier：直接复用已有 ID（避免本地化键跳变）
             if (_questGiverIdIndex.TryGetValue(id, out int existing))
                 return existing;
 
-            // 持久化恢复：同一 Identifier 跨会话保持相同 int ID
             string key = id.ToString();
-            if (_persisted!.TryGetValue(key, out int persistedId) && !_reverseIdIndex.ContainsKey(persistedId))
+
+            // 持久化恢复：同一 Identifier 在同一存档槽位跨会话保持相同 int ID
+            if (_persisted != null)
             {
-                _questGiverIdIndex[id] = persistedId;
-                _reverseIdIndex[persistedId] = id;
-                if (persistedId >= _nextQuestGiverId) _nextQuestGiverId = persistedId + 1;
-                return persistedId;
+                foreach (var e in _persisted.entries)
+                {
+                    if (e.id == key && !_reverseIdIndex.ContainsKey(e.intId))
+                    {
+                        _questGiverIdIndex[id] = e.intId;
+                        _reverseIdIndex[e.intId] = id;
+                        if (e.intId >= _nextQuestGiverId) _nextQuestGiverId = e.intId + 1;
+                        return e.intId;
+                    }
+                }
             }
 
             int questGiverId = _nextQuestGiverId++;
@@ -92,33 +113,26 @@ namespace FeatherMod
 
             _questGiverIdIndex[id] = questGiverId;
             _reverseIdIndex[questGiverId] = id;
-            _persisted[key] = questGiverId;
+            _persisted ??= new PersistData();
+            _persisted.entries.Add(new PersistEntry { id = key, intId = questGiverId });
             SavePersisted();
 
             return questGiverId;
         }
 
         // ═══════════════════════════════════════════════════
-        //  ID 持久化读写
+        //  ID 持久化读写（按存档槽位，走 SaveUtils / ES3）
         // ═══════════════════════════════════════════════════
 
         private void EnsurePersistLoaded()
         {
             if (_persistLoaded) return;
             _persistLoaded = true;
-            _persisted = new Dictionary<string, int>();
             try
             {
-                if (File.Exists(PersistFilePath))
-                {
-                    var data = JsonUtility.FromJson<PersistData>(File.ReadAllText(PersistFilePath));
-                    if (data != null)
-                    {
-                        if (data.nextId > _nextQuestGiverId) _nextQuestGiverId = data.nextId;
-                        foreach (var e in data.entries)
-                            _persisted[e.id] = e.intId;
-                    }
-                }
+                _persisted = SaveUtils.Load<PersistData>(PersistSaveId);
+                if (_persisted != null && _persisted.nextId > _nextQuestGiverId)
+                    _nextQuestGiverId = _persisted.nextId;
             }
             catch (Exception ex)
             {
@@ -131,17 +145,43 @@ namespace FeatherMod
             if (!_persistLoaded || _persisted == null) return;
             try
             {
-                var data = new PersistData { nextId = _nextQuestGiverId };
-                foreach (var kvp in _persisted)
-                    data.entries.Add(new PersistEntry { id = kvp.Key, intId = kvp.Value });
-                var dir = Path.GetDirectoryName(PersistFilePath);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllText(PersistFilePath, JsonUtility.ToJson(data, true));
+                _persisted.nextId = _nextQuestGiverId;
+                SaveUtils.Save(PersistSaveId, _persisted);
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[FML QuestGiver] Failed to persist ID map: {ex.Message}");
             }
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  存档删除清理
+        // ═══════════════════════════════════════════════════
+
+        /// <summary>
+        /// 首次注册时订阅 <see cref="SaveDeletedEvent"/>（幂等 EnsureHook 模式，
+        /// 参照 PerkTreeUtils.HookOnSetFileCleanup / BuildingUtils.HookSceneLoadEvent）。
+        /// </summary>
+        private void EnsureSaveDeletedHooked()
+        {
+            if (_saveDeletedHooked) return;
+            _saveDeletedHooked = true;
+            EventBusManager.Instance.Sync.Register<SaveDeletedEvent>(OnSaveDeleted);
+        }
+
+        /// <summary>
+        /// 存档槽位被删除时清空内存索引与持久化缓存，避免新存档继承旧档 ID 映射
+        /// 导致 Quest 链断裂。磁盘上的 <c>.sav</c> 已由 SavesSystem 删除，
+        /// 此处仅清理内存状态。
+        /// </summary>
+        private void OnSaveDeleted(SaveDeletedEvent evt)
+        {
+            _questGiverIdIndex.Clear();
+            _reverseIdIndex.Clear();
+            _displayNameKeyCache.Clear();
+            _nextQuestGiverId = MinCustomQuestGiverId;
+            _persisted = null;
+            _persistLoaded = false;
         }
 
         /// <summary>

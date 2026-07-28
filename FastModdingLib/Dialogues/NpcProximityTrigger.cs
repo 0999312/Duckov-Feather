@@ -1,6 +1,6 @@
 using Cysharp.Threading.Tasks;
+using FeatherMod.Saves;
 using FeatherMod.Utils;
-using Saves;
 using UnityEngine;
 
 namespace FeatherMod
@@ -50,11 +50,10 @@ namespace FeatherMod
         {
             FindPlayer();
 
-            // SavesSystem 跨会话持久化：Once 模式下，从游戏存档恢复已触发状态
+            // SaveUtils 跨会话持久化：Once 模式下，从游戏存档恢复已触发状态
             if (Mode == DialogueTriggerMode.Once && !_triggered)
             {
-                var saveKey = SaveKey();
-                if (SavesSystem.KeyExisits(saveKey) && SavesSystem.Load<bool>(saveKey))
+                if (SaveUtils.Load<bool>(SaveId()) == true)
                 {
                     _triggered = true;
                 }
@@ -77,16 +76,16 @@ namespace FeatherMod
             if (Vector3.Distance(transform.position, _playerTransform.position) <= Distance)
             {
                 AlreadyTriggered = true;
-                // SavesSystem 跨会话持久化：触发后写入游戏存档
+                // SaveUtils 跨会话持久化：触发后写入游戏存档
                 if (Mode == DialogueTriggerMode.Once)
                 {
-                    SavesSystem.Save(SaveKey(), true);
+                    SaveUtils.Save(SaveId(), true);
                 }
                 PlayDialogue().Forget();
             }
         }
 
-        private string SaveKey() => $"fml_npc_trigger_{NpcId.Domain}_{NpcId.Path}";
+        private Identifier SaveId() => new Identifier(FMLConstants.Domain, $"npc_trigger_{NpcId.Domain}_{NpcId.Path}");
 
         private void FindPlayer()
         {
