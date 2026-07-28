@@ -67,6 +67,12 @@ namespace FeatherMod
             // 永久订阅场景加载事件：场景重载后重建 Machine 交互节点。
             // 参考 FriendlyNpcUtils.HookSaveRestore() 模式——场景加载后自动恢复运行时对象。
             HookSceneLoadEvent();
+            // 订阅 BuildingManager.OnBuildingBuiltComplex / OnBuildingDestroyedComplex。
+            // 必须在 Init 时就订阅，而非仅在 OnBuildingBuilt/OnBuildingDemolished 被显式调用时才订阅——
+            // 否则仅使用 RegisterMachineRecipe / ConfigureBuildingUI 注册"建筑节点"的 mod 不会触发回调和
+            // Machine 装配（进而建筑关联的 NPC 生成 / 子库存等运行时挂载全部失效）。
+            // HookBuildingEvents 内部有 _buildingEventsHooked 幂等守卫，重复调用安全。
+            HookBuildingEvents();
         }
 
         // ===== 注册 / 卸载 =====
