@@ -475,6 +475,39 @@ namespace FeatherMod
             RegisterItem(id, component);
         }
 
+        /// <summary>
+        /// 创建并注册自定义蓝图。modid 从 <see cref="Identifier.Domain"/> 推导。
+        /// </summary>
+        public static void CreateCustomBluePrint(Identifier id, BlueprintData config)
+        {
+            // 确保标签已在游戏中注册（TagUtils.RegisterTag 会先查游戏原生 AllTags，
+            // 已存在则复用，不存在则创建 ScriptableObject 实例并注册到游戏原生数据库）。
+            TagUtils.RegisterTag(DefaultBPTag);
+            TagUtils.RegisterTag(config.FormulaTag, new TagConfig
+            {
+                Color = Color.blue,
+                Show = true,
+            });
+
+            // 将蓝图通用标签和 formulaTag 注入 tags 列表（避免重复）
+            if (!config.tags.Contains(DefaultBPTag))
+                config.tags.Insert(0, DefaultBPTag);
+            if (!config.tags.Contains(config.FormulaTag))
+                config.tags.Add(config.FormulaTag);
+
+            var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+            Item component = ItemBuilder.New()
+                .TypeID(config.itemId)
+                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? LoadSpriteFromDir(modDir, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
+                .Instantiate();
+            UnityEngine.Object.DontDestroyOnLoad(component);
+            SetItemProperties(component, config);
+            ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
+            formula.formulaID = config.formulaID.Path;  // 游戏原生用 Path，非完整 Identifier
+            RegisterItem(id, component);
+        }
+
+
         public static void SetItemProperties(Item item, ItemData config)
         {
             item.weight = config.weight;
