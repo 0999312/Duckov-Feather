@@ -38,7 +38,7 @@ namespace FeatherMod
         private static readonly Type ItemTypeIdType =
             typeof(Duckov.LotteryBox).GetNestedType("ItemTypeID", BindingFlags.NonPublic);
 
-        private static readonly FieldInfo ItemTypeId_IdField = ItemTypeIdType?.GetField("id");
+        private static readonly FieldInfo? ItemTypeId_IdField = ItemTypeIdType?.GetField("id");
 
         private static readonly FieldInfo CandidatesField =
             typeof(Duckov.LotteryBox).GetField("candidates", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -140,7 +140,7 @@ namespace FeatherMod
                 var valueField = entryType.GetField("value");
                 var weightField = entryType.GetField("weight");
                 var value = valueField.GetValue(entry);
-                var id = (int)ItemTypeId_IdField.GetValue(value);
+                var id = (int)ItemTypeId_IdField!.GetValue(value);
                 var w = (float)weightField.GetValue(entry);
                 snapshots[i] = new LotteryBoxData.CandidateSnapshot { ItemTypeID = id, Weight = w };
                 originalTotalWeight += w;
@@ -152,7 +152,7 @@ namespace FeatherMod
 
             // ── 创建 ItemTypeID 实例并注入（只追加，不缩放原生） ──
             var newItemTypeId = Activator.CreateInstance(ItemTypeIdType);
-            ItemTypeId_IdField.SetValue(newItemTypeId, weaponTypeId);
+            ItemTypeId_IdField!.SetValue(newItemTypeId, weaponTypeId);
             addEntryMethod.Invoke(container, new[] { newItemTypeId, injectWeight });
 
             // ── 记录备份 ──
@@ -187,7 +187,7 @@ namespace FeatherMod
             foreach (var snap in backup.OriginalEntries)
             {
                 var newItemTypeId = Activator.CreateInstance(ItemTypeIdType);
-                ItemTypeId_IdField.SetValue(newItemTypeId, snap.ItemTypeID);
+                ItemTypeId_IdField!.SetValue(newItemTypeId, snap.ItemTypeID);
                 addEntryMethod.Invoke(container, new[] { newItemTypeId, snap.Weight });
             }
         }
@@ -210,8 +210,7 @@ namespace FeatherMod
                 var entryType = entry.GetType();
                 var valueField = entryType.GetField("value");
                 var value = valueField.GetValue(entry);
-                var id = (int)ItemTypeId_IdField.GetValue(value);
-
+                var id = (int)ItemTypeId_IdField!.GetValue(value);
                 var kind = WeaponClassifier.Classify(id);
                 if (kind == WeaponClassifier.Kind.Gun) return WeaponClassifier.Kind.Gun;
                 if (kind == WeaponClassifier.Kind.Melee) result = WeaponClassifier.Kind.Melee;

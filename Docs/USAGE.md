@@ -161,7 +161,7 @@ public class MyMod : Duckov.Modding.ModBehaviour, IHasModid
 
 ## 2.1 fml.json — 声明式模组配置
 
-每个模组可在其根目录放置 `fml.json` 文件，声明优先级、依赖关系和自激活策略。
+每个模组可在其根目录放置 `fml.json` 文件，声明优先级与依赖关系。
 FML 在游戏 Rescan 模组列表时自动加载并应用。
 
 ### 文件格式
@@ -176,8 +176,7 @@ FML 在游戏 Rescan 模组列表时自动加载并应用。
     ],
     "loadAfter": [              // 可选：软依赖，仅排在目标之后加载（不要求目标存在或激活）
         "OptionalMod"
-    ],
-    "autoActivate": true        // 可选：若玩家未手动开启但依赖全部就绪，自动激活本 mod
+    ]
 }
 ```
 
@@ -187,16 +186,14 @@ FML 在游戏 Rescan 模组列表时自动加载并应用。
 |------|------|------|--------|------|
 | `modid` | string | **是** | — | 必须与 `info.ini` 的 `name` 完全一致，否则 fml.json 被忽略 |
 | `priority` | int | 否 | `int.MaxValue` | 越小越优先加载。FML 自身固定为最高优先级 |
-| `dependencies` | string[] | 否 | `[]` | **硬依赖**：目标必须存在且已激活，否则本 mod 不会被自动激活 |
+| `dependencies` | string[] | 否 | `[]` | **硬依赖**：目标必须存在，排序时强制排在目标之后 |
 | `loadAfter` | string[] | 否 | `[]` | **软依赖**：仅保证排在目标之后，目标不存在或未激活时不报错 |
-| `autoActivate` | bool | 否 | `false` | 设为 `true` 后，即使玩家未手动勾选，只要全部依赖就绪即自动激活 |
 
 ### 加载机制
 
 1. 游戏 `Rescan` 模组列表时，FML 遍历所有 mod 目录读取 `fml.json`
 2. **排序**：先按 `priority` 升序排列，再拓扑排序满足 `dependencies` + `loadAfter` 约束
 3. **循环依赖检测**：存在环时输出具体参与 mod 名称，回退为仅按 priority 排序
-4. **自激活**：`autoActivate: true` 的 mod 在全部 `dependencies` 激活后自动启用
 
 ### 示例
 
@@ -210,8 +207,7 @@ FML 在游戏 Rescan 模组列表时自动加载并应用。
 {
     "modid": "MyWeaponPack",
     "priority": 50,
-    "dependencies": ["FeatherMod"],
-    "autoActivate": true
+    "dependencies": ["FeatherMod"]
 }
 ```
 
@@ -221,8 +217,7 @@ FML 在游戏 Rescan 模组列表时自动加载并应用。
     "modid": "MyOverhaul",
     "priority": 200,
     "dependencies": ["FeatherMod"],
-    "loadAfter": ["MyWeaponPack", "MyQuestPack"],
-    "autoActivate": false
+    "loadAfter": ["MyWeaponPack", "MyQuestPack"]
 }
 ```
 

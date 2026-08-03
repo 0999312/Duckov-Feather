@@ -29,7 +29,7 @@ namespace FeatherMod.Entities.Patches
         /// <summary>
         /// 动态确定目标方法：优先 <c>Graph.OnEnable</c>，回退 <c>Graph.Deserialize</c>。
         /// </summary>
-        public static MethodBase TargetMethod()
+        public static MethodBase? TargetMethod()
         {
             var type = typeof(Graph);
             var method = type.GetMethod("OnEnable",

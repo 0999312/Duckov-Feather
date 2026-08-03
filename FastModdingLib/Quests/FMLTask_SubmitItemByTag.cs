@@ -2,7 +2,6 @@
 using ItemStatsSystem;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod.Quests
@@ -68,24 +67,18 @@ namespace FeatherMod.Quests
             if (!useDurability) return item.StackCount;
             try
             {
-                var m = typeof(Item).GetMethod("GetStat", new[] { typeof(int) });
-                var s = m?.Invoke(item, new object[] { "Durability".GetHashCode() });
-                if (s != null)
+                // Item.GetStat 与 Stat.BaseValue/Value 均为 public（Publicizer 已公开），直接访问零反射
+                var stat = item.GetStat("Durability".GetHashCode());
+                if (stat != null)
                 {
-                    var baseProp = s.GetType().GetProperty("BaseValue");
-                    var curProp = s.GetType().GetProperty("Value");
-                    if (baseProp == null || curProp == null) return item.StackCount;
-                    var bvObj = baseProp.GetValue(s);
-                    var cvObj = curProp.GetValue(s);
-                    if (bvObj == null || cvObj == null) return item.StackCount;
-                    float bv = (float)bvObj;
-                    float cv = (float)cvObj;
-                    if (bv > 0) return item.StackCount * (cv / bv);
+                    float baseVal = stat.BaseValue;
+                    float curVal = stat.Value;
+                    if (baseVal > 0) return item.StackCount * (curVal / baseVal);
                 }
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[FMLTask_SubmitItemByTag.GetEffective] Reflection failed: {e.Message}");
+                Debug.LogWarning($"[FMLTask_SubmitItemByTag.GetEffective] Failed: {e.Message}");
             }
             return item.StackCount;
         }
@@ -94,22 +87,9 @@ namespace FeatherMod.Quests
         {
             var inv = CharacterMainControl.Main?.CharacterItem?.Inventory;
             if (inv == null) return null;
-            var r = new List<Item>();
-            try
-            {
-                var slots = inv.GetType().GetProperty("AllSlots")?.GetValue(inv) as System.Collections.IEnumerable;
-                if (slots == null) return r;
-                foreach (var s in slots)
-                {
-                    var item = s.GetType().GetProperty("Content")?.GetValue(s) as Item;
-                    if (item != null) r.Add(item);
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[FMLTask_SubmitItemByTag.EnumeratePlayerItems] Reflection failed: {e.Message}");
-            }
-            return r;
+
+            // 游戏原生 Inventory 没有 AllSlots；物品列表是 public List<Item> Content，直接访问零反射
+            return inv.Content;
         }
     }
 }

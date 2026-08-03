@@ -71,6 +71,10 @@
 		</Reference>
   </ItemGroup>
 	<ItemGroup>
+		<!-- fml.json 声明 FML 自身依赖（HarmonyLoadMod），必须随包分发才能生效 -->
+		<None Include="fml.json" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+	<ItemGroup>
 		<!-- All members in an assembly -->
 		<Publicize Include="TeamSoda.Duckov.Core" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false" />
 		<Publicize Include="TeamSoda.Duckov.Utilities" IncludeVirtualMembers="false" />

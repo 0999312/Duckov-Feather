@@ -29,7 +29,7 @@ namespace FeatherMod
             _specialCatches.Add(entry);
             // 使用合成 key 保证可被 RemoveAllByOwner 追踪
             var synthKey = new Identifier(entry.BaitId.Domain, $"special_{entry.BaitId.Path}_{entry.FishId.Path}");
-            Set(synthKey, default, modid);
+            Set(synthKey, default!, modid);
         }
 
         /// <summary>按 Identifier 查询钓鱼池配置。</summary>

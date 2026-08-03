@@ -178,18 +178,14 @@ namespace FeatherMod
 
         /// <summary>
         /// 在场景中查找玩家主角的 <see cref="global::CustomFaceInstance"/>。
+        /// 注：CustomFaceManager 不暴露 CustomFaceInstance（仅 SaveSetting/LoadSetting 数据方法），
+        /// 且 LoadFromData 需要绑定 MainCharacterFace 的渲染器才生效——故不做无绑定实例兜底。
         /// </summary>
         public static global::CustomFaceInstance? GetPlayerFaceInstance()
         {
             var mainFace = UnityEngine.Object.FindObjectOfType<global::MainCharacterFace>();
             if (mainFace == null || mainFace.customFace == null)
-            {
-                // 尝试通过 CustomFaceManager 查找
-                var manager = UnityEngine.Object.FindObjectOfType<global::CustomFaceManager>();
-                if (manager == null) return null;
-                // CustomFaceManager 没有直接暴露 CustomFaceInstance，回退
                 return null;
-            }
             return mainFace.customFace;
         }
 

@@ -48,19 +48,13 @@ namespace FeatherMod
 
         /// <summary>
         /// FishSpawner.Awake 后注入 FML 注册的特殊配对。
-        /// 通过反射访问 private List<SpecialPair> specialPairs 字段（Publicizer 已公开）。
+        /// specialPairs / SpecialPair 经 Krafs.Publicizer 已公开，直接访问零反射。
         /// </summary>
         private static void AwakePostfix(Duckov.Utilities.FishSpawner __instance)
         {
             try
             {
-                // 获取原生 specialPairs 字段
-                var specialPairsField = typeof(Duckov.Utilities.FishSpawner).GetField("specialPairs",
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                if (specialPairsField == null) return;
-
-                // 获取原生列表
-                var specialPairs = specialPairsField.GetValue(__instance) as System.Collections.IList;
+                var specialPairs = __instance.specialPairs;
                 if (specialPairs == null) return;
 
                 // 注入 FML 注册的特殊配对
@@ -69,17 +63,12 @@ namespace FeatherMod
                     if (ResolveBaitId(entry.BaitId, out var baitTypeId) &&
                         ResolveFishId(entry.FishId, out var fishTypeId))
                     {
-                        // 构造游戏原生的 SpecialPair (private struct)
-                        // 由于是 private struct，需要用反射创建
-                        var specialPairType = typeof(Duckov.Utilities.FishSpawner).GetNestedType("SpecialPair",
-                            BindingFlags.NonPublic);
-                        if (specialPairType == null) continue;
-
-                        var pair = Activator.CreateInstance(specialPairType);
-                        specialPairType.GetField("baitID")?.SetValue(pair, baitTypeId);
-                        specialPairType.GetField("fishID")?.SetValue(pair, fishTypeId);
-                        specialPairType.GetField("chance")?.SetValue(pair, entry.Chance);
-
+                        var pair = new Duckov.Utilities.FishSpawner.SpecialPair
+                        {
+                            baitID = baitTypeId,
+                            fishID = fishTypeId,
+                            chance = entry.Chance,
+                        };
                         specialPairs.Add(pair);
                     }
                 }

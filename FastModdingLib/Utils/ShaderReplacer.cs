@@ -186,7 +186,7 @@ namespace FeatherMod.Utils
             return true;
         }
 
-        private static Shader FindShader(string name)
+        private static Shader? FindShader(string name)
         {
             if (!ShaderCache.TryGetValue(name, out var shader))
             {

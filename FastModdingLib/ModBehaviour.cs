@@ -1,5 +1,6 @@
 using FeatherMod.Modding;
 using FeatherMod.Options;
+using FeatherMod.Utils;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
@@ -43,6 +44,12 @@ namespace FeatherMod
         /// </summary>
         protected override void OnAfterSetup()
         {
+            // 注册 FML 自身路径，使 AssetUtil/ItemUtils 等按 modid 解析资源的 API 对
+            // FeatherMod 域同样可用（Assembly.Location 为空时跳过，依赖子 mod 显式注册）。
+            var selfLocation = Assembly.GetExecutingAssembly().Location;
+            if (!string.IsNullOrEmpty(selfLocation))
+                ModPathResolver.Register(GetModid(), selfLocation);
+
             _harmony = new Harmony(GetModid());
 
             // 仅 Patch FML 自身的 [HarmonyPatch]（AudioObjectMixin、OtherPatches 等）

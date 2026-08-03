@@ -3,6 +3,7 @@ using Duckov.Quests;
 using Duckov.Utilities;
 using FeatherMod.Utils;
 using SodaCraft.Localizations;
+using System;
 using UnityEngine;
 
 namespace FeatherMod.Quests
@@ -28,6 +29,7 @@ namespace FeatherMod.Quests
         internal string prefabName = "";
 
         private bool _claimed;
+        private bool _subscribed;
 
         private Identifier BuildingId =>
             new Identifier(string.IsNullOrEmpty(buildingDomain) ? "unknown" : buildingDomain, buildingPath);
@@ -52,16 +54,32 @@ namespace FeatherMod.Quests
                 ReportStatusChanged();
             }
 
-            if (Master != null)
+            SubscribeQuestCompleted();
+        }
+
+        /// <summary>
+        /// 订阅 Quest.onCompleted。该事件是 internal event：backing 字段为编译器生成的
+        /// private 字段，GetField 必然返回 null（旧实现因此静默失效）；
+        /// 用 GetEvent + AddEventHandler 标准订阅（事件反射，非 backing field 反射）。
+        /// </summary>
+        private void SubscribeQuestCompleted()
+        {
+            if (_subscribed || Master == null) return;
+            try
             {
-                var fi = typeof(Quest).GetField("onCompleted",
-                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
-                var evt = fi?.GetValue(Master) as System.Action<Quest>;
+                var evt = typeof(Quest).GetEvent("onCompleted",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Public);
                 if (evt != null)
                 {
-                    evt += OnQuestCompleted;
-                    fi?.SetValue(Master, evt);
+                    evt.AddEventHandler(Master, new Action<Quest>(OnQuestCompleted));
+                    _subscribed = true;
                 }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[FMLReward_UnlockBuilding] Failed to subscribe onCompleted: {e.Message}");
             }
         }
 

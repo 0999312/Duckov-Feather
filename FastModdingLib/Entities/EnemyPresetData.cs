@@ -30,7 +30,7 @@ namespace FeatherMod
 
         /// <summary>使用游戏默认 CharacterModel（GameplayDataSettings.Prefabs.DefaultCharacterModel）。
         /// 即玩家捏脸系统的基础模型，适用于 FaceRef.FromJson 等自定义捏脸场景。</summary>
-        public static ModelRef Default => new ModelRef { GamePrefabName = null };
+        public static ModelRef Default => new ModelRef { GamePrefabName = null! };
 
         /// <summary>从 AssetBundle 加载自定义模型。</summary>
         public static ModelRef FromBundle(string bundle, string path)
@@ -284,62 +284,62 @@ namespace FeatherMod
         {
             var preset = ScriptableObject.CreateInstance<CharacterRandomPreset>();
 
-            // 基础标识
-            SetField(preset, "nameKey", NameKey);
-            SetField(preset, "isBoss", IsBoss);
-            SetField(preset, "health", Health);
-            SetField(preset, "exp", Exp);
-            SetField(preset, "hasSoul", HasSoul);
-            SetField(preset, "showHealthBar", ShowHealthBar);
-            SetField(preset, "showName", ShowName);
-            SetField(preset, "canTalk", CanTalk);
-            SetField(preset, "canDieIfNotRaidMap", CanDieIfNotRaidMap);
-            SetField(preset, "defaultWeaponOut", DefaultWeaponOut);
+            // 基础标识（[SerializeField] private 经 Publicizer 已公开，直接赋值零反射）
+            preset.nameKey = NameKey;
+            preset.isBoss = IsBoss;
+            preset.health = Health;
+            preset.exp = Exp;
+            preset.hasSoul = HasSoul;
+            preset.showHealthBar = ShowHealthBar;
+            preset.showName = ShowName;
+            preset.canTalk = CanTalk;
+            preset.canDieIfNotRaidMap = CanDieIfNotRaidMap;
+            preset.defaultWeaponOut = DefaultWeaponOut;
 
             // 阵营
-            SetField(preset, "team", Team);
+            preset.team = Team;
 
             // 捏脸（🆕 Phase 5）
             switch (Face.Mode)
             {
                 case FaceRefMode.PlayerFace:
-                    SetField(preset, "usePlayerPreset", true);
+                    preset.usePlayerPreset = true;
                     break;
                 case FaceRefMode.Preset when Face.PresetName != null:
-                    SetField(preset, "facePreset", FindFacePreset(Face.PresetName));
+                    preset.facePreset = FindFacePreset(Face.PresetName);
                     break;
                 case FaceRefMode.Custom:
-                    SetField(preset, "facePreset", CreateCustomFacePreset(Face.CustomParts));
+                    preset.facePreset = CreateCustomFacePreset(Face.CustomParts);
                     break;
             }
 
             // AI 战斗
-            SetField(preset, "sightDistance", SightDistance);
-            SetField(preset, "sightAngle", SightAngle);
-            SetField(preset, "reactionTime", ReactionTime);
-            SetField(preset, "hearingAbility", HearingAbility);
-            SetField(preset, "patrolRange", PatrolRange);
-            SetField(preset, "combatMoveRange", CombatMoveRange);
-            SetField(preset, "canDash", CanDash);
-            SetField(preset, "damageMultiplier", DamageMultiplier);
-            SetField(preset, "moveSpeedFactor", MoveSpeedFactor);
-            SetField(preset, "forgetTime", ForgetTime);
+            preset.sightDistance = SightDistance;
+            preset.sightAngle = SightAngle;
+            preset.reactionTime = ReactionTime;
+            preset.hearingAbility = HearingAbility;
+            preset.patrolRange = PatrolRange;
+            preset.combatMoveRange = CombatMoveRange;
+            preset.canDash = CanDash;
+            preset.damageMultiplier = DamageMultiplier;
+            preset.moveSpeedFactor = MoveSpeedFactor;
+            preset.forgetTime = ForgetTime;
 
             // 元素抗性
-            SetField(preset, "elementFactor_Physics", ElementFactor_Physics);
-            SetField(preset, "elementFactor_Fire", ElementFactor_Fire);
-            SetField(preset, "elementFactor_Ice", ElementFactor_Ice);
-            SetField(preset, "elementFactor_Poison", ElementFactor_Poison);
-            SetField(preset, "elementFactor_Electricity", ElementFactor_Electricity);
-            SetField(preset, "elementFactor_Space", ElementFactor_Space);
-            SetField(preset, "elementFactor_Ghost", ElementFactor_Ghost);
+            preset.elementFactor_Physics = ElementFactor_Physics;
+            preset.elementFactor_Fire = ElementFactor_Fire;
+            preset.elementFactor_Ice = ElementFactor_Ice;
+            preset.elementFactor_Poison = ElementFactor_Poison;
+            preset.elementFactor_Electricity = ElementFactor_Electricity;
+            preset.elementFactor_Space = ElementFactor_Space;
+            preset.elementFactor_Ghost = ElementFactor_Ghost;
 
             // 战利品
             if (Loot != null)
             {
-                SetField(preset, "dropBoxOnDead", Loot.DropBoxOnDead);
-                SetField(preset, "hasCashChance", Loot.HasCashChance);
-                SetField(preset, "cashRange", Loot.CashRange);
+                preset.dropBoxOnDead = Loot.DropBoxOnDead;
+                preset.hasCashChance = Loot.HasCashChance;
+                preset.cashRange = Loot.CashRange;
             }
 
             // 武器配置
@@ -351,25 +351,33 @@ namespace FeatherMod
             return preset;
         }
 
+        /// <summary>
+        /// 将 WeaponConfig 应用到 preset 的 itemsToGenerate（随机生成武器池）。
+        /// itemsToGenerate / RandomItemGenerateDescription 经 Publicizer 已公开，直接构建零反射。
+        /// </summary>
         private static void ApplyWeaponConfig(CharacterRandomPreset preset, WeaponConfig weapon)
         {
             if (weapon.WeaponPool.Length == 0) return;
 
-            // 构建 itemsToGenerate 条目
-            // 通过反射操作 preset 的 itemsToGenerate 列表
-            var itemsField = typeof(CharacterRandomPreset).GetField("itemsToGenerate",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            // itemsToGenerate 的具体操作留给运行时——此处仅做字段预设
-            // 实际注入通过 EnemyUtils.RegisterEnemy 内部完成
-        }
+            if (preset.itemsToGenerate == null)
+                preset.itemsToGenerate = new List<RandomItemGenerateDescription>();
 
-        private static void SetField<T>(CharacterRandomPreset preset, string fieldName, T value)
-        {
-            var field = typeof(CharacterRandomPreset).GetField(fieldName,
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.NonPublic |
-                System.Reflection.BindingFlags.Public);
-            field?.SetValue(preset, value);
+            foreach (var w in weapon.WeaponPool)
+            {
+                int weaponTypeId = w.ResolveTypeId();
+                if (weaponTypeId <= 0) continue;
+
+                var desc = new RandomItemGenerateDescription
+                {
+                    randomFromPool = true,
+                    chance = Mathf.Clamp01(weapon.Chance),
+                    randomCount = new Vector2Int(1, 1),
+                };
+                desc.itemPool = new RandomContainer<RandomItemGenerateDescription.Entry>();
+                desc.itemPool.AddEntry(new RandomItemGenerateDescription.Entry { itemTypeID = weaponTypeId }, 1f);
+                desc.itemPool.RefreshPercent();
+                preset.itemsToGenerate.Add(desc);
+            }
         }
 
         /// <summary>按名称查找已有 CustomFacePreset。</summary>
@@ -380,7 +388,12 @@ namespace FeatherMod
             if (faceData?.DefaultPreset != null && faceData.DefaultPreset.name == name)
                 return faceData.DefaultPreset;
 
-            // 扩展：查找更多预设来源
+            // 回退：按资源名加载（CustomFacePreset_{name}）
+            var loaded = Resources.Load<CustomFacePreset>($"CustomFacePreset_{name}");
+            if (loaded != null)
+                return loaded;
+
+            Debug.LogWarning($"[FML] CustomFacePreset '{name}' not found.");
             return null;
         }
 
@@ -388,8 +401,25 @@ namespace FeatherMod
         private static CustomFacePreset? CreateCustomFacePreset(FacePartIds parts)
         {
             var preset = ScriptableObject.CreateInstance<CustomFacePreset>();
-            // 注：完整的 CustomFaceSettingData 填充需要更深入的反射支持
-            // 当前为占位实现——基础预设创建可用，自定义部件需后续完善
+            try
+            {
+                // CustomFaceSettingData 是 struct——先取副本、修改、再整体写回，否则修改无效。
+                // 字段（hairID/eyeID/...）经 Krafs.Publicizer 已公开，直接访问零反射。
+                var s = preset.settings;
+                s.savedSetting = true;
+                if (!string.IsNullOrEmpty(parts.HairId)) s.hairID = int.TryParse(parts.HairId, out var h) ? h : 0;
+                if (!string.IsNullOrEmpty(parts.EyeId)) s.eyeID = int.TryParse(parts.EyeId, out var e) ? e : 0;
+                if (!string.IsNullOrEmpty(parts.MouthId)) s.mouthID = int.TryParse(parts.MouthId, out var m) ? m : 0;
+                if (!string.IsNullOrEmpty(parts.EyebrowId)) s.eyebrowID = int.TryParse(parts.EyebrowId, out var eb) ? eb : 0;
+                if (!string.IsNullOrEmpty(parts.TailId)) s.tailID = int.TryParse(parts.TailId, out var t) ? t : 0;
+                if (!string.IsNullOrEmpty(parts.FootId)) s.footID = int.TryParse(parts.FootId, out var f) ? f : 0;
+                if (!string.IsNullOrEmpty(parts.WingId)) s.wingID = int.TryParse(parts.WingId, out var w) ? w : 0;
+                preset.settings = s; // struct 写回
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[FML EnemyPresetData] Face settings injection: {e.Message}");
+            }
             return preset;
         }
     }

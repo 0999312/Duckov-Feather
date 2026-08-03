@@ -103,14 +103,14 @@ namespace FeatherMod
         // ═══════════════════════════════════════════════════
 
         /// <summary>
-        /// 为已生成的 NPC 设置装备。通过 <see cref="global::CharacterModel"/> 的
-        /// 反射访问实现。如果 CharacterModel 上存在 <c>SetEquipment</c> 或类似方法，
-        /// 则调用之；否则输出警告并记录到待处理队列（下次生成时生效）。
+        /// 为已生成的 NPC 设置装备。
+        /// 注：运行时装备修改当前版本不可实现（CharacterModel 无装备 API，槽位走物品系统）——
+        /// 本方法实际将装备记录到待处理队列，下次生成时生效。
         /// </summary>
         /// <param name="npcId">已注册的 NPC 标识符。</param>
         /// <param name="slot">装备槽位。</param>
         /// <param name="item">装备物品。</param>
-        /// <returns>是否成功应用装备。</returns>
+        /// <returns>是否成功应用装备（运行时路径恒 false，走待处理队列）。</returns>
         public static bool SetNpcEquipment(Identifier npcId, EquipmentSlot slot, ItemEntry item)
         {
             // 尝试通过 FriendlyNpcUtils.Registry 查找已生成的 NPC
@@ -120,7 +120,7 @@ namespace FeatherMod
                 var model = go.GetComponent<global::CharacterModel>();
                 if (model != null)
                 {
-                    // 尝试运行时设置装备
+                    // 运行时装备 API 未实现（见下方内部说明），统一走待处理队列
                     if (TrySetEquipmentOnModel(model, slot, item))
                     {
                         Debug.Log($"[FML Equipment] Set {slot}={item} on NPC '{npcId}' (runtime).");
@@ -210,16 +210,19 @@ namespace FeatherMod
         }
 
         // ═══════════════════════════════════════════════════
-        //  运行时装备操作（待后续基于 CharacterItemControl 物品系统实现）
-        //  CharacterModel 无反编译源码中确认仅有 SetFaceFromPreset/SetFaceFromData，
-        //  无 SetEquipment/GetEquipment。装备通过物品槽位管理：
-        //  CharacterMainControl.PrimWeaponSlot/MeleeWeaponSlot/ArmorSlot/HelmatSlot/BackpackSlot
+        //  运行时装备操作 — 当前版本不可用（遗留）
+        //  已核验：CharacterModel 仅有 SetFaceFromPreset/SetFaceFromData，
+        //  无 SetEquipment/GetEquipment 方法；CharacterMainControl 上也无
+        //  PrimWeaponSlot/ArmorSlot/HelmatSlot/BackpackSlot 等槽位属性
+        //  （历史注释信息已过时，2026-07-31 元数据核验）。
+        //  运行时改装备需基于物品系统（CharacterItem/槽位）实现，属新功能开发。
+        //  当前正确用法：生成前配置（FriendlyNpcConfig / ConfigureNpcEquipment）。
         // ═══════════════════════════════════════════════════
 
         private static bool TrySetEquipmentOnModel(global::CharacterModel model, EquipmentSlot slot, ItemEntry item)
         {
-            Debug.LogWarning($"[FML Equipment] Runtime equipment modification not yet implemented. " +
-                "Equipment must be configured before NPC spawn via FriendlyNpcConfig or EquipmentUtils.ConfigureNpcEquipment.");
+            Debug.LogWarning($"[FML Equipment] Runtime equipment modification is not implemented. " +
+                "Configure equipment before NPC spawn via FriendlyNpcConfig or EquipmentUtils.ConfigureNpcEquipment.");
             return false;
         }
 
@@ -230,7 +233,8 @@ namespace FeatherMod
 
         private static bool TryClearEquipmentOnModel(global::CharacterModel model, EquipmentSlot slot)
         {
-            Debug.LogWarning($"[FML Equipment] Runtime equipment modification not yet implemented.");
+            Debug.LogWarning($"[FML Equipment] Runtime equipment modification is not implemented. " +
+                "Clear the configured equipment via EquipmentUtils.ClearConfiguredEquipment / ClearAllEquipment.");
             return false;
         }
     }

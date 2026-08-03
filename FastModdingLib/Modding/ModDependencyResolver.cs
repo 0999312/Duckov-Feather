@@ -20,7 +20,6 @@ namespace FeatherMod.Modding
         public static void Sort(List<ModInfo> modInfos)
         {
             if (modInfos == null || modInfos.Count <= 1) return;
-
             // 1. 构建 name → index 映射
             var nameToIndex = new Dictionary<string, int>();
             for (int i = 0; i < modInfos.Count; i++)
@@ -49,6 +48,7 @@ namespace FeatherMod.Modding
             modInfos.Clear();
             modInfos.AddRange(sorted);
 
+            EnsureFrameworkOrder(modInfos);
             LogSortResult(modInfos);
         }
 
@@ -83,6 +83,8 @@ namespace FeatherMod.Modding
             var sorted = TopologicalSortPreserveOrder(graph, modInfos);
             modInfos.Clear();
             modInfos.AddRange(sorted);
+
+            EnsureFrameworkOrder(modInfos);
         }
 
         private static HashSet<int>[] BuildGraph(List<ModInfo> modInfos, Dictionary<string, int> nameToIndex)
@@ -330,6 +332,36 @@ namespace FeatherMod.Modding
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 硬性保证 FML 框架本体（FeatherMod）排在 HarmonyLoadMod 之后。
+        /// 不依赖 fml.json（旧版 FML 包可能缺失）；按 name 或 publishedFileId 匹配。
+        /// 二者任意缺失时不动顺序（玩家未装 HarmonyLoadMod 属配置问题，交由加载失败自然暴露）。
+        /// </summary>
+        private static void EnsureFrameworkOrder(List<ModInfo> modInfos)
+        {
+            int fmlIdx = -1;
+            int harmonyIdx = -1;
+            for (int i = 0; i < modInfos.Count; i++)
+            {
+                if (modInfos[i].name == "FeatherMod")
+                {
+                    fmlIdx = i;
+                }
+                else if (modInfos[i].name == "HarmonyLoadMod" || modInfos[i].publishedFileId == 3589088839UL)
+                {
+                    harmonyIdx = i;
+                }
+            }
+
+            if (fmlIdx < 0 || harmonyIdx < 0 || fmlIdx > harmonyIdx) return;
+
+            // FeatherMod 在 HarmonyLoadMod 之前 → 移动到其后（保持其余相对顺序）
+            var item = modInfos[fmlIdx];
+            modInfos.RemoveAt(fmlIdx);
+            modInfos.Insert(harmonyIdx, item);
+            Debug.Log("[FML ModDependencyResolver] Moved FeatherMod after HarmonyLoadMod to ensure framework loads after Harmony.");
         }
 
         private static void LogSortResult(List<ModInfo> modInfos)

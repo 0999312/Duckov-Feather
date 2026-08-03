@@ -199,8 +199,8 @@ namespace FeatherMod
 
         private class QuestTriggerEntry
         {
-            public Identifier QuestId = default;
-            public Identifier NpcId = default;
+            public Identifier QuestId = default!;
+            public Identifier NpcId = default!;
             public string? ActorId;
             public DialogueLine[] Lines = Array.Empty<DialogueLine>();
             public DialogueTriggerMode Mode;

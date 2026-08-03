@@ -107,7 +107,7 @@ namespace FeatherMod.Items
                 id = candidate;
                 return true;
             }
-            id = default;
+            id = default!;
             return false;
         }
 

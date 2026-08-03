@@ -36,7 +36,6 @@ namespace FeatherMod
         private static bool _initialized;
         private static bool _vanillaRetryHooked;
         private static bool _onSetFileHooked;
-        private static bool _dumped; // 一次性 dump 标记
 
         /// <summary>
         /// Perk.Unlocked setter 事件抑制标志。PerkTree.SetupSaveData 批量操作期间设为 true，
@@ -507,7 +506,46 @@ namespace FeatherMod
             }
             toNode.relatedNode = toPerk;
 
-            graph.ConnectNodes(fromNode, toNode);
+            if (graph.ConnectNodes(fromNode, toNode) == null)
+            {
+                Debug.LogWarning($"[PerkTreeUtils] ConnectPerksInternal: ConnectNodes rejected connection '{fromPerk.name}' -> '{toPerk.name}' (max connections or node constraints).");
+            }
+        }
+
+        /// <summary>
+        /// 清理图中的悬空连接（targetNode 为 null 或非 <see cref="PerkRelationNode"/>）。
+        /// 原生 PerkTreeView.RefreshConnections 对悬空连接的
+        /// <c>outConnection.targetNode as PerkRelationNode</c> 无空检查，
+        /// 会直接 NRE（玩家解锁 Perk 时触发）。在树被 UI 访问前调用可避免崩溃。
+        /// </summary>
+        internal static void PruneDanglingConnections(PerkRelationGraph graph)
+        {
+            if (graph == null) return;
+            try
+            {
+                foreach (var node in graph.allNodes.ToList())
+                {
+                    if (node == null) continue;
+                    var outs = node.outConnections;
+                    if (outs == null || outs.Count == 0) continue;
+                    for (int i = outs.Count - 1; i >= 0; i--)
+                    {
+                        var conn = outs[i];
+                        if (conn == null || !(conn.targetNode is PerkRelationNode))
+                        {
+                            // 从目标节点的入连接列表移除（若目标存在且登记了此连接）
+                            if (conn != null && conn.targetNode != null && conn.targetNode.inConnections != null)
+                                conn.targetNode.inConnections.Remove(conn);
+                            outs.RemoveAt(i);
+                            Debug.LogWarning($"[PerkTreeUtils] PruneDanglingConnections: removed dangling connection from node '{node.name}'.");
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[PerkTreeUtils] PruneDanglingConnections failed: {e.Message}");
+            }
         }
 
         /// <summary>为 Perk 创建 Graph 节点。FML 树用占位，原版树注入用即时位置。</summary>

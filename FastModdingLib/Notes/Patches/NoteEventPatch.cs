@@ -85,7 +85,7 @@ namespace FeatherMod
                     return true;
                 }
             }
-            id = null;
+            id = null!;
             return false;
         }
     }

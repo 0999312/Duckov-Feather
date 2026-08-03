@@ -23,7 +23,7 @@ public class GamingConsoleMixins
         {
             id = new Identifier(__instance.CatridgeGameID);
         }
-        catch (ArgumentException e)
+        catch (ArgumentException)
         {
             return;
         }

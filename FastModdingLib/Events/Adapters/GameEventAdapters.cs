@@ -222,10 +222,10 @@ namespace FeatherMod.Events.Adapters
         // ═══════════════════════════════════════════════════
 
         private static void OnHurtBridge(object target, object info)
-            => EventBusManager.Instance.Sync.Post(new HurtEvent(target, info));
+            => EventBusManager.Instance.Sync.Post(new HurtEvent((Health)target, (DamageInfo)info));
 
         private static void OnDeadBridge(object victim, object info)
-            => EventBusManager.Instance.Sync.Post(new EntityDeathEvent(victim, info));
+            => EventBusManager.Instance.Sync.Post(new EntityDeathEvent((Health)victim, (DamageInfo)info));
 
         private static void OnLevelInitBridge()
             => EventBusManager.Instance.Sync.Post(new LevelInitializedEvent(null));
@@ -243,33 +243,33 @@ namespace FeatherMod.Events.Adapters
         }
 
         private static void OnPlayerHearSoundBridge(object soundInfo)
-            => EventBusManager.Instance.Sync.Post(new PlayerHearSoundEvent(soundInfo));
+            => EventBusManager.Instance.Sync.Post(new PlayerHearSoundEvent((AISound)soundInfo));
 
         private static void OnSoundSpawnedBridge(object soundInfo)
-            => EventBusManager.Instance.Sync.Post(new SoundSpawnedEvent(soundInfo));
+            => EventBusManager.Instance.Sync.Post(new SoundSpawnedEvent((AISound)soundInfo));
 
         private static void OnPlayerDeathBridge(object info)
-            => EventBusManager.Instance.Sync.Post(new PlayerDeathEvent(info));
+            => EventBusManager.Instance.Sync.Post(new PlayerDeathEvent((DamageInfo)info));
 
         // 原生: Action<CharacterMainControl>（仅 1 参：当前控制角色）
         private static void OnControllingCharChangedBridge(object character)
-            => EventBusManager.Instance.Sync.Post(new ControllingCharacterChangedEvent(null, character));
+            => EventBusManager.Instance.Sync.Post(new ControllingCharacterChangedEvent(null, (CharacterMainControl)character));
 
         // 原生: Action<int>（仅 1 参：解锁物品 typeID；无 bool unlocked 参数）
         private static void OnItemUnlockStateChangedBridge(object itemTypeID)
-            => EventBusManager.Instance.Sync.Post(new ItemUnlockStateChangedEvent(itemTypeID, true));
+            => EventBusManager.Instance.Sync.Post(new ItemUnlockStateChangedEvent((int)itemTypeID, true));
 
         // 原生: Action<CraftingFormula, Item>
         private static void OnItemCraftedBridge(object formula, object item)
-            => EventBusManager.Instance.Sync.Post(new ItemCraftedEvent(formula, item));
+            => EventBusManager.Instance.Sync.Post(new ItemCraftedEvent((CraftingFormula)formula, (ItemStatsSystem.Item)item));
 
         // 原生: Action<string>
         private static void OnFormulaUnlockedBridge(object formulaID)
-            => EventBusManager.Instance.Sync.Post(new FormulaUnlockedEvent(formulaID));
+            => EventBusManager.Instance.Sync.Post(new FormulaUnlockedEvent((string)formulaID));
 
         // 原生: Action<Quest, Task>（2 参）
         private static void OnQuestTaskFinishedBridge(object quest, object task)
-            => EventBusManager.Instance.Sync.Post(new QuestTaskFinishedEvent(quest, task));
+            => EventBusManager.Instance.Sync.Post(new QuestTaskFinishedEvent((Duckov.Quests.Quest)quest, (Duckov.Quests.Task)task));
 
         // 原生: Action（无参 event）
         private static void OnCollectSaveDataBridge()

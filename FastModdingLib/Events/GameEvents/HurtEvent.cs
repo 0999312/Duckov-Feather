@@ -3,28 +3,23 @@
 namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
-    /// 实体受伤事件。桥接自游戏原生 <c>Health.OnHurt</c> 静态事件。
-    /// 标记 [Cancelable]：可叫停后续 FML handler，但游戏侧伤害效果已应用（仅观察 + 后续链路 gating）。
+    /// 实体受伤事件。桥接游戏原生 <c>Health.OnHurt</c> 静态事件
+    /// （原生签名 <c>Action&lt;Health, DamageInfo&gt;</c>）。
+    /// 标注 [Cancelable]：可被 FML handler 拦截，跳过游戏原生伤害效果的应用（观察 + 拦截双路径 gating）。
     /// </summary>
     [Cancelable]
     public sealed class HurtEvent : Event
     {
-        /// <summary>
-        /// 受伤的目标角色。
-        /// TODO: 确认 CharacterMainControl 的命名空间后替换为强类型（当前 object 兜底保证编译）。
-        /// </summary>
-        public object Target { get; }
+        /// <summary>受伤的目标角色的 Health 组件。</summary>
+        public Health Target { get; }
 
-        /// <summary>
-        /// 伤害信息。
-        /// TODO: 确认 DamageInfo 的命名空间后替换为强类型（当前 object 兜底保证编译）。
-        /// </summary>
-        public object Info { get; }
+        /// <summary>伤害信息。</summary>
+        public DamageInfo Info { get; }
 
-        public HurtEvent(object target, object info)
+        public HurtEvent(Health target, DamageInfo info)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
-            Info = info ?? throw new ArgumentNullException(nameof(info));
+            Info = info;
         }
     }
 }

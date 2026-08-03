@@ -25,8 +25,6 @@ namespace FeatherMod.QuestGivers.Patches
     [HarmonyPatch(typeof(QuestManager), nameof(QuestManager.GetAllQuestsByQuestGiverID))]
     public static class QuestGiverIDPatch
     {
-        private static readonly BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-
         /// <summary>
         /// Prefix：判断传入的 questGiverID 是否为 FML 自定义值。
         /// 是 → 替换返回值为 FML 维护的任务列表，跳过原生方法。
@@ -79,11 +77,11 @@ namespace FeatherMod.QuestGivers.Patches
                     var instance = QuestManager.Instance;
                     if (instance != null)
                     {
-                        var activeField = typeof(QuestManager).GetField("activeQuests", Flags);
-                        if (activeField != null)
+                        // activeQuests 是 private List<Quest>，经 Publicizer 已公开——直接访问零反射
+                        var activeQuests = instance.activeQuests;
+                        if (activeQuests != null)
                         {
-                            var activeQuests = activeField.GetValue(instance) as List<Quest>;
-                            __result = activeQuests?
+                            __result = activeQuests
                                 .Where(e => e != null && (int)e.QuestGiverID == giverId)
                                 .ToList() ?? new List<Quest>();
                             return false;
@@ -121,11 +119,11 @@ namespace FeatherMod.QuestGivers.Patches
                     var instance = QuestManager.Instance;
                     if (instance != null)
                     {
-                        var historyField = typeof(QuestManager).GetField("historyQuests", Flags);
-                        if (historyField != null)
+                        // historyQuests 是 private List<Quest>，经 Publicizer 已公开——直接访问零反射
+                        var historyQuests = instance.historyQuests;
+                        if (historyQuests != null)
                         {
-                            var historyQuests = historyField.GetValue(instance) as List<Quest>;
-                            __result = historyQuests?
+                            __result = historyQuests
                                 .Where(e => e != null && (int)e.QuestGiverID == giverId)
                                 .ToList() ?? new List<Quest>();
                             return false;
@@ -163,12 +161,12 @@ namespace FeatherMod.QuestGivers.Patches
                     var instance = QuestManager.Instance;
                     if (instance != null)
                     {
-                        var activeField = typeof(QuestManager).GetField("activeQuests", Flags);
-                        if (activeField != null)
+                        // activeQuests 是 private List<Quest>，经 Publicizer 已公开——直接访问零反射
+                        var activeQuests = instance.activeQuests;
+                        if (activeQuests != null)
                         {
-                            var activeQuests = activeField.GetValue(instance) as List<Quest>;
-                            __result = activeQuests?.Any(e =>
-                                e != null && (int)e.QuestGiverID == giverId && e.NeedInspection) ?? false;
+                            __result = activeQuests.Any(e =>
+                                e != null && (int)e.QuestGiverID == giverId && e.NeedInspection);
                             return false;
                         }
                     }

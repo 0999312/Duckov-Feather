@@ -54,36 +54,24 @@ namespace FeatherMod
         {
             try
             {
-                var field = typeof(global::CustomFacePreset).GetField("settings",
-                    System.Reflection.BindingFlags.Public |
-                    System.Reflection.BindingFlags.NonPublic |
-                    System.Reflection.BindingFlags.Instance);
-                if (field == null) return;
-                var s = field.GetValue(preset);
-                if (s == null) return;
-
-                var t = s.GetType();
-                TrySet(t, s, "hairId", parts.HairId);
-                TrySet(t, s, "eyeId", parts.EyeId);
-                TrySet(t, s, "mouthId", parts.MouthId);
-                TrySet(t, s, "eyebrowId", parts.EyebrowId);
-                TrySet(t, s, "decorationId", parts.DecorationId);
-                TrySet(t, s, "tailId", parts.TailId);
-                TrySet(t, s, "footId", parts.FootId);
-                TrySet(t, s, "wingId", parts.WingId);
+                // CustomFaceSettingData 是 struct——先取副本、修改、再整体写回，否则修改无效。
+                // 字段（hairID/eyeID/...）经 Krafs.Publicizer 已公开，直接访问零反射。
+                var s = preset.settings;
+                s.savedSetting = true;
+                if (!string.IsNullOrEmpty(parts.HairId)) s.hairID = int.TryParse(parts.HairId, out var h) ? h : 0;
+                if (!string.IsNullOrEmpty(parts.EyeId)) s.eyeID = int.TryParse(parts.EyeId, out var e) ? e : 0;
+                if (!string.IsNullOrEmpty(parts.MouthId)) s.mouthID = int.TryParse(parts.MouthId, out var m) ? m : 0;
+                if (!string.IsNullOrEmpty(parts.EyebrowId)) s.eyebrowID = int.TryParse(parts.EyebrowId, out var eb) ? eb : 0;
+                if (!string.IsNullOrEmpty(parts.TailId)) s.tailID = int.TryParse(parts.TailId, out var t) ? t : 0;
+                if (!string.IsNullOrEmpty(parts.FootId)) s.footID = int.TryParse(parts.FootId, out var f) ? f : 0;
+                if (!string.IsNullOrEmpty(parts.WingId)) s.wingID = int.TryParse(parts.WingId, out var w) ? w : 0;
+                // 原生无 decorationId 字段（对应部件归类到 eye/其他分类），忽略 DecorationId
+                preset.settings = s; // struct 写回
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[FML FaceRef] Settings injection: {e.Message}");
             }
-        }
-
-        private static void TrySet(Type t, object obj, string fn, string? v)
-        {
-            if (string.IsNullOrEmpty(v)) return;
-            t.GetField(fn,
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
-                ?.SetValue(obj, v);
         }
     }
 }

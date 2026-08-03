@@ -84,7 +84,7 @@ namespace FeatherMod
         public static Sprite? LoadSprite(Identifier id)
         {
             var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-            return LoadSpriteFromDir(modDir, id.Path);
+            return LoadSpriteFromDir(modDir!, id.Path);
         }
 
         /// <summary>从指定目录加载 Sprite。适用物品图标、Perk 图标等所有 Sprite 场景。</summary>
@@ -142,7 +142,7 @@ namespace FeatherMod
         public static async UniTask<Sprite?> LoadSpriteAsync(Identifier id)
         {
             var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-            return await LoadSpriteFromDirAsync(modDir, id.Path);
+            return await LoadSpriteFromDirAsync(modDir!, id.Path);
         }
 
         /// <summary>
@@ -210,7 +210,7 @@ namespace FeatherMod
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath));
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath));
 
             config.modifiers.ForEach(modifier =>
             {
@@ -237,7 +237,7 @@ namespace FeatherMod
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath));
+                .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath));
 
             config.modifiers.ForEach(modifier =>
             {
@@ -270,7 +270,7 @@ namespace FeatherMod
                 ItemBuilder itemBuilder = ItemBuilder.New()
                     .TypeID(actualTypeId)
                     .EnableStacking(config.maxStackCount, 1)
-                    .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath));
+                    .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath));
 
                 config.modifiers.ForEach(modifier =>
                 {
@@ -304,7 +304,7 @@ namespace FeatherMod
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath));
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath));
 
             config.modifiers.ForEach(modifier =>
             {
@@ -326,7 +326,7 @@ namespace FeatherMod
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath))
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath))
                 .SetConstant("GameID", gameId.ToString());
 
             config.modifiers.ForEach(modifier =>
@@ -355,7 +355,7 @@ namespace FeatherMod
                 ItemBuilder itemBuilder = ItemBuilder.New()
                     .TypeID(actualTypeId)
                     .EnableStacking(config.maxStackCount, 1)
-                    .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath))
+                    .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath))
                     .SetConstant("GameID", gameId.ToString());
 
                 config.modifiers.ForEach(modifier =>
@@ -386,7 +386,7 @@ namespace FeatherMod
             ItemBuilder itemBuilder = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath))
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath))
                 .SetConstant("GameID", gameId.ToString());
 
             config.modifiers.ForEach(modifier =>
@@ -415,7 +415,7 @@ namespace FeatherMod
                 ItemBuilder itemBuilder = ItemBuilder.New()
                     .TypeID(actualTypeId)
                     .EnableStacking(config.maxStackCount, 1)
-                    .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath))
+                    .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath))
                     .SetConstant("GameID", gameId.ToString());
 
                 config.modifiers.ForEach(modifier =>
@@ -466,7 +466,7 @@ namespace FeatherMod
             var modDir = ModPathResolver.ResolveDirectory(id.Domain);
             Item component = ItemBuilder.New()
                 .TypeID(config.itemId)
-                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
+                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
                 .Instantiate();
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -498,7 +498,7 @@ namespace FeatherMod
             var modDir = ModPathResolver.ResolveDirectory(id.Domain);
             Item component = ItemBuilder.New()
                 .TypeID(config.itemId)
-                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? LoadSpriteFromDir(modDir, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
+                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? LoadSpriteFromDir(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
                 .Instantiate();
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -794,7 +794,7 @@ namespace FeatherMod
             Item component = ItemBuilder.New()
                 .TypeID(config.itemId)
                 .EnableStacking(config.maxStackCount, 1)
-                .Icon(ItemUtils.LoadSpriteFromDir(modDir, config.spritePath))
+                .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath))
                 .SetConstant("Caliber", config.Caliber, true)
                 .SetConstant("SFX_Put", config.SFX_Put, false)
                 .SetConstant("CritDamageFactorGain", config.CritDamageFactorGain, config.CritDamageFactorGain != 0F)
@@ -816,7 +816,7 @@ namespace FeatherMod
 
         /// <summary>
         /// 检查物品是否有指定标签。
-        /// 通过 <see cref="ItemAssetsCollection.GetMetaData"/> 查询物品元数据中的标签列表。
+        /// 直接遍历 <see cref="Item.Tags"/>（public TagCollection，Tag.name 为 public 属性）——零反射。
         /// </summary>
         /// <param name="item">待检查的物品。</param>
         /// <param name="tag">标签名称。</param>
@@ -826,28 +826,15 @@ namespace FeatherMod
             if (item == null || string.IsNullOrEmpty(tag)) return false;
             try
             {
-                var meta = ItemAssetsCollection.GetMetaData(item.TypeID);
-                // 反射访问 Tags 属性（ItemMetaData 是 struct，不能直接 ?.）
-                var tagsProp = meta.GetType().GetProperty("Tags");
-                if (tagsProp != null)
+                if (item.Tags == null) return false;
+                foreach (var t in item.Tags)
                 {
-                    var tags = tagsProp.GetValue(meta) as System.Collections.IEnumerable;
-                    if (tags != null)
-                    {
-                        foreach (var t in tags)
-                        {
-                            if (t != null)
-                            {
-                                var nameProp = t.GetType().GetProperty("name");
-                                var name = nameProp?.GetValue(t) as string;
-                                if (name == tag) return true;
-                            }
-                        }
-                    }
+                    if (t != null && t.name == tag) return true;
                 }
             }
-            catch
+            catch (Exception e)
             {
+                Debug.LogWarning($"[ItemUtils.HasTag] Failed: {e.Message}");
             }
             return false;
         }

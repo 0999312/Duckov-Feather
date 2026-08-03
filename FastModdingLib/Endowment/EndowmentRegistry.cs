@@ -50,7 +50,7 @@ namespace FeatherMod
                     return true;
                 }
             }
-            id = default;
+            id = default!;
             return false;
         }
 
@@ -66,16 +66,18 @@ namespace FeatherMod
 
         /// <summary>
         /// 尝试将指定天赋注入到 EndowmentManager.entries 列表。
-        /// 仅在 EndowmentManager.Instance 已存在时生效；否则静默跳过。
+        /// 无论 EndowmentManager 是否就绪，注册时立即分配 index 并写入 entry——
+        /// 保证 entry.index 永不残留 None（UI / 第三方 Harmony patch 依赖有效 index）。
+        /// 仅在 EndowmentManager.Instance 已存在时注入列表；否则静默跳过（由 Awake Postfix 兜底）。
         /// </summary>
         /// <returns>是否成功注入（Instance 未就绪时返回 false）。</returns>
         internal bool TryInjectToManager(Identifier id, EndowmentEntry entry)
         {
-            if (EndowmentManager.Instance == null)
-                return false;
-
             var idx = AllocateIndex(id);
             entry.index = idx;
+
+            if (EndowmentManager.Instance == null)
+                return false;
 
             if (!EndowmentManager.Instance.entries.Contains(entry))
                 EndowmentManager.Instance.entries.Add(entry);

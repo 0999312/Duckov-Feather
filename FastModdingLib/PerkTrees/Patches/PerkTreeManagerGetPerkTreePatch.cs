@@ -30,7 +30,12 @@ namespace FeatherMod.PerkTrees.Patches
             {
                 InjectIfMissing(cached);
                 if (cached.relationGraphOwner?.graph is PerkRelationGraph g)
+                {
+                    // UI 打开前清理悬空连接：原生 PerkTreeView.RefreshConnections
+                    // 对 targetNode 为 null 的连接无空检查，会直接 NRE
+                    PerkTreeUtils.PruneDanglingConnections(g);
                     PerkTreeUtils.TryLayoutGraph(g);
+                }
                 __result = cached;
                 return false; // 跳过原版方法
             }
@@ -45,7 +50,9 @@ namespace FeatherMod.PerkTrees.Patches
         {
             if (__result != null) return;
 
-            __result = TryFindFallback(id);
+            var fallback = TryFindFallback(id);
+            if (fallback != null)
+                __result = fallback;
         }
 
         private static PerkTree? TryFindFallback(string id)

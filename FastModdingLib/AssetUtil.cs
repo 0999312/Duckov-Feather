@@ -31,6 +31,11 @@ namespace FeatherMod
         public static AssetBundle? LoadBundle(Identifier identifier)
         {
             var modDir = ModPathResolver.ResolveDirectory(identifier.Domain);
+            if (modDir == null)
+            {
+                Debug.LogWarning($"[AssetUtil] Mod path for '{identifier.Domain}' not registered. Bundle '{identifier.Path}' not loaded.");
+                return null;
+            }
             return LoadBundleFromDir(modDir, identifier.Path);
         }
 

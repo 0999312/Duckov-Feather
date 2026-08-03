@@ -16,7 +16,7 @@ namespace FeatherMod.UI
         /// <summary>建筑 Identifier（由 BuildingUtils.RegisterBuilding 注册时的 id）。
         /// 序列化为字符串，派发前经 <see cref="Identifier.Parse"/> 规范化（缺省 domain 为 duckov）。</summary>
         [SerializeField]
-        private string? buildingIdentifier;
+        private string? buildingIdentifier = null;
 
         [SerializeField]
         [Tooltip("交互提示本地化键。为空时使用默认文本。")]

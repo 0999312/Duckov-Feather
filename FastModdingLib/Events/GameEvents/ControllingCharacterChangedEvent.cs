@@ -1,24 +1,19 @@
 ﻿namespace FeatherMod.Events.GameEvents
 {
     /// <summary>
-    /// 控制角色变更事件。桥接自游戏原生 <c>LevelManager.OnControllingCharacterChanged</c> 静态事件。
-    /// 仅观察用途，不支持取消。
+    /// 控制角色切换事件。桥接游戏原生 <c>LevelManager.OnControllingCharacterChanged</c> 静态事件
+    /// （原生签名 <c>Action&lt;CharacterMainControl&gt;</c>，仅 1 参：当前控制角色）。
+    /// 原事件不带旧角色，OldCharacter 恒为 null（保留字段以兼容多参数语义）。
     /// </summary>
     public sealed class ControllingCharacterChangedEvent : Event
     {
-        /// <summary>
-        /// 变更前的控制角色。
-        /// TODO: 确认 CharacterMainControl 命名空间后替换为强类型（当前 object 兜底保证编译）。
-        /// </summary>
-        public object? OldCharacter { get; }
+        /// <summary>切换前的控制角色（原生事件无此参数，恒为 null）。</summary>
+        public CharacterMainControl? OldCharacter { get; }
 
-        /// <summary>
-        /// 变更后的控制角色。
-        /// TODO: 确认 CharacterMainControl 命名空间后替换为强类型（当前 object 兜底保证编译）。
-        /// </summary>
-        public object? NewCharacter { get; }
+        /// <summary>当前的（新的）控制角色。</summary>
+        public CharacterMainControl? NewCharacter { get; }
 
-        public ControllingCharacterChangedEvent(object? oldCharacter, object? newCharacter)
+        public ControllingCharacterChangedEvent(CharacterMainControl? oldCharacter, CharacterMainControl? newCharacter)
         {
             OldCharacter = oldCharacter;
             NewCharacter = newCharacter;

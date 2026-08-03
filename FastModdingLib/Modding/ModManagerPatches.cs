@@ -1,13 +1,15 @@
 ﻿using Duckov.Modding;
 using HarmonyLib;
+using System;
+using System.IO;
 using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod.Modding
 {
     /// <summary>
-    /// Harmony 补丁集合。Hook <c>ModManager</c> 的排序与激活逻辑，
-    /// 注入 fml.json 声明的依赖排序与自激活策略。
+    /// Harmony 补丁集合。Hook <c>ModManager</c> 的排序逻辑，
+    /// 注入 fml.json 声明的依赖排序策略。
     /// 排序策略：仅保证拓扑依赖（dependencies / loadAfter / loadBefore），
     /// 不强制按 fml.json priority 重排，尊重玩家手动排序。
     /// </summary>
@@ -31,10 +33,6 @@ namespace FeatherMod.Modding
                     BindingFlags.NonPublic | BindingFlags.Static),
                 postfix: new HarmonyMethod(typeof(ModManagerPatches), nameof(SortModInfosByPriority_Postfix)));
             harmony.Patch(
-                original: typeof(ModManager).GetMethod("ShouldActivateMod",
-                    BindingFlags.NonPublic | BindingFlags.Instance),
-                postfix: new HarmonyMethod(typeof(ModManagerPatches), nameof(ShouldActivateMod_Postfix)));
-            harmony.Patch(
                 original: typeof(ModManager).GetMethod(nameof(ModManager.Reorder),
                     BindingFlags.Public | BindingFlags.Static),
                 postfix: new HarmonyMethod(typeof(ModManagerPatches), nameof(Reorder_Postfix)));
@@ -49,46 +47,11 @@ namespace FeatherMod.Modding
         /// </summary>
         public static void SortModInfosByPriority_Postfix()
         {
+            RepairModsES3IfCorrupt();
             ModMetaCache.Clear();
             ModMetaCache.LoadAll(ModManager.modInfos);
             ModDependencyResolver.SortByDependencyOnly(ModManager.modInfos);
             PersistPriorities();
-        }
-
-        /// <summary>
-        /// 后置增强 <c>ShouldActivateMod</c>：
-        /// 若游戏侧未要求激活（玩家未手动开启），但 fml.json 声明 autoActivate=true
-        /// 且所有依赖均已激活/存在，则改为返回 true。
-        /// </summary>
-        public static void ShouldActivateMod_Postfix(ModInfo info, ref bool __result)
-        {
-            if (__result) return; // 已激活，不干预
-
-            if (!ModMetaCache.TryGet(info.name, out var meta) || !meta.Loaded || !meta.AutoActivate)
-                return;
-
-            // 检查依赖是否全部就绪
-            if (meta.Dependencies != null)
-            {
-                foreach (var dep in meta.Dependencies)
-                {
-                    if (dep.IsEmpty) continue;
-                    ModInfo? depInfo = null;
-                    if (ModManager.modInfos != null)
-                    {
-                        foreach (var m in ModManager.modInfos)
-                            if (dep.Matches(m)) { depInfo = m; break; }
-                    }
-                    if (depInfo is ModInfo d && ModManager.IsModActive(d, out var _))
-                        continue;
-                    // 依赖不存在或未激活，不自动激活（Name 优先 + WorkshopId 兜底均未命中即视为未装载）
-                    Debug.Log($"[FML] Auto-activate '{info.name}' skipped: dependency '{dep}' not active.");
-                    return;
-                }
-            }
-
-            Debug.Log($"[FML] Auto-activating mod: {info.name} (priority={meta.Priority})");
-            __result = true;
         }
 
         /// <summary>
@@ -100,46 +63,74 @@ namespace FeatherMod.Modding
         /// </summary>
         public static void Reorder_Postfix()
         {
+            RepairModsES3IfCorrupt();
             ModMetaCache.Clear();
             ModMetaCache.LoadAll(ModManager.modInfos);
             ModDependencyResolver.SortByDependencyOnly(ModManager.modInfos);
             PersistPriorities();
+            // ModManager.OnReorder 是 public static event——外部无法直接 Invoke；
+            // backing 字段为编译器生成的 <OnReorder>k__BackingField（private static），
+            // 只能通过反射读取（AGENTS.md 允许的 event backing field 场景）。
             var onReorder = typeof(ModManager)
-                .GetField("OnReorder", BindingFlags.Public | BindingFlags.Static)
+                .GetField("<OnReorder>k__BackingField", BindingFlags.NonPublic | BindingFlags.Static)
                 ?.GetValue(null) as System.Action;
             onReorder?.Invoke();
         }
 
         /// <summary>
         /// 将当前 <c>ModManager.modInfos</c> 的顺序持久化到 ES3（Mods.ES3）。
-        /// 调用原生 <c>ModManager.RegeneratePriorities()</c> 私有方法，
+        /// 调用原生 <c>ModManager.RegeneratePriorities()</c>（private static 经 Publicizer 已公开，直接调用零反射），
         /// 将每个 mod 的索引作为 priority_XXX 键写入。
-        /// 若反射调用失败，回退到逐个调用 <c>SetModPriority</c>。
         /// </summary>
         private static void PersistPriorities()
         {
             var modInfos = ModManager.modInfos;
             if (modInfos == null || modInfos.Count == 0) return;
 
-            // 优先通过反射调用原生 RegeneratePriorities（一次处理所有 mod）
-            var regenerateMethod = typeof(ModManager).GetMethod("RegeneratePriorities",
-                BindingFlags.NonPublic | BindingFlags.Static);
-            if (regenerateMethod != null)
+            ModManager.RegeneratePriorities();
+        }
+
+        /// <summary>
+        /// Mods.ES3 损坏自愈。原生 <c>ModManager.Load&lt;T&gt;</c> 读取该文件失败时
+        /// 会刷屏 "Failed loading mod info." 且所有 mod 优先级退化为 int.MaxValue
+        /// （顺序随机、玩家手动排序丢失）。此处探测文件可读性，损坏时将主文件与
+        /// 备份一并隔离（重命名保留现场），后续 <see cref="PersistPriorities"/> 会重建干净文件。
+        /// 安全性：Mods.ES3 仅存 mod priority 键，隔离无玩家数据损失。
+        /// </summary>
+        private static void RepairModsES3IfCorrupt()
+        {
+            var settings = new ES3Settings
             {
-                regenerateMethod.Invoke(null, null);
-                return;
+                location = ES3.Location.File,
+                path = "Saves/Mods.ES3"
+            };
+
+            try
+            {
+                ES3.Load<int>("__fml_probe__", -1, settings);
+                return; // 文件可读，健康
+            }
+            catch
+            {
+                // 损坏：隔离主文件与备份
             }
 
-            // 回退：逐个调用 SetModPriority（public static）
-            var setPriorityMethod = typeof(ModManager).GetMethod("SetModPriority",
-                BindingFlags.Public | BindingFlags.Static);
-            if (setPriorityMethod != null)
+            string savesDir = Path.Combine(Application.persistentDataPath, "Saves");
+            string stamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+            foreach (var fileName in new[] { "Mods.ES3", "Mods.ES3.bac" })
             {
-                for (int i = 0; i < modInfos.Count; i++)
+                string fullPath = Path.Combine(savesDir, fileName);
+                if (!File.Exists(fullPath)) continue;
+                try
                 {
-                    setPriorityMethod.Invoke(null, new object[] { modInfos[i].name, i });
+                    File.Move(fullPath, fullPath + ".corrupt-" + stamp);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[FML] Failed to quarantine corrupt file {fullPath}: {e.Message}");
                 }
             }
+            Debug.LogWarning("[FML] Saves/Mods.ES3 was corrupt; quarantined. Mod priorities will be regenerated.");
         }
     }
 }

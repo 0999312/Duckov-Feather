@@ -7,7 +7,6 @@ using NodeCanvas.Framework;
 using SodaCraft.Localizations;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Text;
 using UnityEngine;
 
@@ -23,10 +22,6 @@ namespace FeatherMod
     public static class DialogueManager
     {
         private static bool _initialized;
-
-        // ── 反射缓存 ──
-
-        private static PropertyInfo? s_blackboardProp;
 
         // ── 镜头序列器（面板模式专用）──
 
@@ -241,31 +236,15 @@ namespace FeatherMod
         // ═══════════════════════════════════════════════════════
 
         /// <summary>
-        /// 设置 _blackboard。通过反射注入（_blackboard 可能是字段或属性，
-        /// 取决于 NodeCanvas 版本和 Publicizer 配置）。
+        /// 设置 controller 的 blackboard。
+        /// 直接走 NodeCanvas 公开属性 <c>GraphOwner.blackboard</c>（get/set 齐全），
+        /// 零反射——私有字段 <c>_blackboard</c> 声明在泛型基类 GraphOwner 上，
+        /// typeof(DialogueTreeController).GetField 不查找基类 private 字段，反射必然失败。
         /// </summary>
         private static void SetBlackboard(DialogueTreeController controller, Blackboard bb)
         {
-            if (s_blackboardProp == null)
-            {
-                // 先尝试字段（Publicizer 可能已公开）
-                var field = typeof(DialogueTreeController).GetField("_blackboard",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (field != null)
-                {
-                    field.SetValue(controller, bb);
-                    return;
-                }
-
-                // 回退到属性
-                s_blackboardProp = typeof(DialogueTreeController).GetProperty("_blackboard",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            }
-
-            if (s_blackboardProp != null)
-                s_blackboardProp.SetValue(controller, bb);
-            else
-                Debug.LogWarning("[FML Dialogue] _blackboard not accessible via reflection.");
+            if (controller == null || bb == null) return;
+            controller.blackboard = bb;
         }
 
         // ═══════════════════════════════════════════════════════

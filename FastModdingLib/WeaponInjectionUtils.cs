@@ -19,7 +19,7 @@ namespace FeatherMod
         private static bool _initialized;
 
         // ── 反射缓存 ──
-        private static FieldInfo? _itemsToGenerateField;
+        // itemsToGenerate 经 Krafs.Publicizer 已公开，无需反射缓存
 
         /// <summary>
         /// 暴露给 RegisterBootstrap 用于注册到元表和查询。
@@ -297,22 +297,9 @@ namespace FeatherMod
         //  内部 — 辅助
         // ═══════════════════════════════════════════════════
 
-        /// <summary>通过反射获取 CharacterRandomPreset 的私有 itemsToGenerate 列表。</summary>
+        /// <summary>获取 CharacterRandomPreset 的 itemsToGenerate 列表（[SerializeField] private 经 Publicizer 已公开，直接访问零反射）。</summary>
         private static List<RandomItemGenerateDescription>? GetItemsToGenerate(CharacterRandomPreset preset)
-        {
-            if (_itemsToGenerateField == null)
-            {
-                _itemsToGenerateField = typeof(CharacterRandomPreset).GetField("itemsToGenerate",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
-                if (_itemsToGenerateField == null)
-                {
-                    Debug.LogError("[FML] WeaponInjection: Cannot find 'itemsToGenerate' field on CharacterRandomPreset via reflection.");
-                    return null;
-                }
-            }
-
-            return _itemsToGenerateField.GetValue(preset) as List<RandomItemGenerateDescription>;
-        }
+            => preset.itemsToGenerate;
 
         /// <summary>查找并移除匹配的注入规则。</summary>
         private static bool RemoveMatching(Func<WeaponInjectionData, bool> predicate)

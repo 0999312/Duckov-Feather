@@ -16,7 +16,7 @@ public class MinigameUtil: Singleton<MinigameUtil>
 
     private static RenderTexture _renderTexture;
 
-    public static RenderTexture renderTexture
+    public static RenderTexture? renderTexture
     {
         get
         {
@@ -58,7 +58,8 @@ public class MinigameUtil: Singleton<MinigameUtil>
 
         MiniGame miniGame = baseObject.AddComponent<MiniGame>();
         miniGame.id = id.ToString();
-        miniGame.renderTexture = renderTexture;
+        if (renderTexture != null)
+            miniGame.renderTexture = renderTexture;
 
         GameObject cameramain = new GameObject(id + "_CameraMain");
         cameramain.layer = 30;

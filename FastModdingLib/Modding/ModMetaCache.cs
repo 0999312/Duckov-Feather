@@ -69,7 +69,7 @@ namespace FeatherMod.Modding
                     return ModMeta.Default;
                 }
 
-                string modId = modIdToken.Value<string>();
+                string modId = modIdToken.Value<string>() ?? string.Empty;
                 // 校验 modid 必须与 ModInfo.name 一致
                 if (modId != expectedName)
                 {
@@ -112,7 +112,6 @@ namespace FeatherMod.Modding
                         ? la.ToObject<string[]>() ?? System.Array.Empty<string>()
                         : System.Array.Empty<string>(),
                     LoadBefore = obj.TryGetValue("loadBefore", out var lb) ? lb.ToObject<string[]>() ?? new string[]{} : new string[]{},
-                    AutoActivate = obj.TryGetValue("autoActivate", out var a) && a.Value<bool>(),
                     Loaded = true
                 };
             }

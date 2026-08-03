@@ -1,10 +1,10 @@
-﻿using Duckov.Utilities;
+﻿using Cysharp.Threading.Tasks;
+using Duckov.Utilities;
 using FeatherMod.Entities;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using System;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod
@@ -15,7 +15,6 @@ namespace FeatherMod
         private static bool _initialized;
 
         /// <summary>暴露给 <c>RegisterBootstrap</c> 用于注册到元表。</summary>
-        /// <summary>暴露给 RegisterBootstrap 用于注册到元表和查询。</summary>
         public static EnemyRegistry Registry => _enemyRegistry;
 
         /// <summary>
@@ -56,6 +55,16 @@ namespace FeatherMod
         /// <summary>批量卸载指定 mod 注册的全部敌人。</summary>
         public static int UnregisterAllEnemies(string modid) => _enemyRegistry.RemoveAllByOwner(modid);
 
+        /// <summary>
+        /// 开启/关闭该敌人的 AutoSpawn：开启后每次关卡初始化（InitLevel）会在玩家出生点附近自动生成。
+        /// 默认关闭——仅注册 preset 供 <see cref="CharacterSpawnerGroup"/> 等原生系统使用时不会意外刷怪。
+        /// </summary>
+        public static void SetAutoSpawn(Identifier id, bool auto = true)
+        {
+            Init();
+            _enemyRegistry.SetAutoSpawn(id, auto);
+        }
+
         // ===== 查询 =====
 
         /// <summary>按 nameKey 查找 CharacterRandomPreset（升级版，null-safe）。</summary>
@@ -83,91 +92,59 @@ namespace FeatherMod
         /// 返回 <c>object</c> 而非 <c>BehaviourTree</c> 以避免编译期对 ParadoxNotion.dll 的硬引用；
         /// 调用方可安全地 cast 为 <c>ScriptableObject</c>。
         /// </summary>
-        public static object CompileStateMachine(IStateConfig config)
+        public static object? CompileStateMachine(IStateConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             return StateMachineToBT.Compile(config);
-        }
-
-        // ===== 反射缓存 =====
-
-        private static MethodInfo? _cachedCreateAsync;
-        private static readonly object _cacheLock = new object();
-
-        /// <summary>
-        /// 获取 <c>CharacterRandomPreset.CreateCharacterAsync</c> 的反射 MethodInfo。
-        /// 缓存以避免每帧重复反射查找。
-        /// </summary>
-        private static MethodInfo? GetCreateCharacterAsyncMethod()
-        {
-            if (_cachedCreateAsync != null) return _cachedCreateAsync;
-            lock (_cacheLock)
-            {
-                if (_cachedCreateAsync != null) return _cachedCreateAsync;
-                _cachedCreateAsync = typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync",
-                    new Type[] { typeof(Vector3), typeof(Vector3), typeof(int), typeof(CharacterSpawnerGroup), typeof(bool) });
-                if (_cachedCreateAsync == null)
-                {
-                    Debug.LogError("[FML EnemyUtils] CreateCharacterAsync method not found. Game API may have changed.");
-                }
-                return _cachedCreateAsync;
-            }
         }
 
         // ===== 生成 =====
 
         /// <summary>
         /// 在指定位置异步生成已注册的敌人。
-        /// 实际创建由 <c>CharacterRandomPreset.CreateCharacterAsync</c> 完成（返回 UniTask），
-        /// FML 在此触发后通过 <c>GameEventAdapters</c> 的 OnLevelInitialized 等 EventBus 事件
-        /// 通知 modder 生成完成。
+        /// 实际创建由 <c>CharacterRandomPreset.CreateCharacterAsync</c> 完成（public 方法，零反射）。
         /// </summary>
         /// <param name="position">生成位置。</param>
-        /// <returns>始终返回 null；实际角色通过 EventBus 回调获取——参见 <see cref="Events.GameEvents.LevelInitializedEvent"/> 或传入 <paramref name="onSpawned"/> 回调。</returns>
-        public static CharacterMainControl SpawnEnemy(Identifier id, Vector3 position, Action<CharacterMainControl>? onSpawned = null)
+        /// <param name="onSpawned">生成完成回调（await 完成后调用）。</param>
+        /// <returns>异步生成立即返回 null；实际角色通过 <paramref name="onSpawned"/> 回调获取。</returns>
+        public static CharacterMainControl? SpawnEnemy(Identifier id, Vector3 position, Action<CharacterMainControl>? onSpawned = null)
         {
             if (!TryGetEnemy(id, out var preset)) return null;
-            return SpawnInternal(preset, position, null, onSpawned);
+            _ = SpawnInternalAsync(preset, position, null, onSpawned);
+            return null;
         }
 
         /// <summary>
         /// 将已注册的敌人添加到指定 <see cref="CharacterSpawnerGroup"/> 异步生成。
         /// </summary>
-        public static CharacterMainControl SpawnEnemy(Identifier id, CharacterSpawnerGroup group, Action<CharacterMainControl>? onSpawned = null)
+        public static CharacterMainControl? SpawnEnemy(Identifier id, CharacterSpawnerGroup group, Action<CharacterMainControl>? onSpawned = null)
         {
             if (!TryGetEnemy(id, out var preset)) return null;
             var pos = group != null ? group.transform.position : Vector3.zero;
-            return SpawnInternal(preset, pos, group, onSpawned);
+            _ = SpawnInternalAsync(preset, pos, group, onSpawned);
+            return null;
         }
 
-        /// <summary>内部生成实现。</summary>
-        private static CharacterMainControl SpawnInternal(
+        /// <summary>内部生成实现（public 方法直接调用，零反射）。</summary>
+        private static async UniTask SpawnInternalAsync(
             CharacterRandomPreset preset, Vector3 position, CharacterSpawnerGroup? group,
             Action<CharacterMainControl>? onSpawned)
         {
             try
             {
-                var method = GetCreateCharacterAsyncMethod();
-                if (method == null) return null;
-
-                // 游戏实际重载：CreateCharacterAsync(Vector3 pos, Vector3 dir, int relatedScene, CharacterSpawnerGroup group, bool isLeader)
                 Vector3 dir = Vector3.forward;
-                int sceneBuildIndex = 0; // Enemy spawn in current scene context
+                int sceneBuildIndex = UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex;
 
-                if (onSpawned != null)
+                var character = await preset.CreateCharacterAsync(position, dir, sceneBuildIndex, group, false);
+                if (character != null)
                 {
-                    Debug.LogWarning("[FML EnemyUtils] onSpawned callback is not supported via reflection; " +
-                                     "subscribe to EventBus HurtEvent/LevelInitializedEvent instead.");
+                    onSpawned?.Invoke(character);
                 }
-
-                var args = new object[] { position, dir, sceneBuildIndex, group, false };
-                method.Invoke(preset, args);
             }
             catch (Exception e)
             {
                 Debug.LogError($"[FML EnemyUtils.SpawnEnemy] Failed: {e}");
             }
-            return null;
         }
     }
 }

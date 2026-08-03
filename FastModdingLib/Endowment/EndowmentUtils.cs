@@ -113,7 +113,7 @@ namespace FeatherMod
                     var modType = m.GetType();
                     return new EndowmentModifier
                     {
-                        StatKey = (string)modType.GetField("statKey")?.GetValue(m) ?? "",
+                        StatKey = modType.GetField("statKey")?.GetValue(m) as string ?? "",
                         Type = (ItemStatsSystem.Stats.ModifierType)(modType.GetField("type")?.GetValue(m) ?? 0),
                         Value = (float)(modType.GetField("value")?.GetValue(m) ?? 0f)
                     };
@@ -207,7 +207,7 @@ namespace FeatherMod
             var entry = go.AddComponent<EndowmentEntry>();
 
             // 利用 Publicizer 公开的字段直接赋值
-            entry.requirementTextKey = config.RequirementTextKey;
+            entry.requirementTextKey = config.RequirementTextKey ?? "";
             entry.unlockedByDefault = config.UnlockedByDefault;
 
             // 设置图标（null 时使用游戏默认图标）
@@ -215,14 +215,16 @@ namespace FeatherMod
                 entry.icon = config.Icon;
 
             // 转换 EndowmentModifier[] → EndowmentEntry.ModifierDescription[]
-            var nativeModifiers = new EndowmentEntry.ModifierDescription[config.Modifiers.Length];
-            for (int i = 0; i < config.Modifiers.Length; i++)
+            // （Modifiers 为 null 时兜底为空数组，避免裸 AddComponent 条目残留 null 字段）
+            var sourceModifiers = config.Modifiers ?? Array.Empty<EndowmentModifier>();
+            var nativeModifiers = new EndowmentEntry.ModifierDescription[sourceModifiers.Length];
+            for (int i = 0; i < sourceModifiers.Length; i++)
             {
                 nativeModifiers[i] = new EndowmentEntry.ModifierDescription
                 {
-                    statKey = config.Modifiers[i].StatKey,
-                    type = config.Modifiers[i].Type,
-                    value = config.Modifiers[i].Value
+                    statKey = sourceModifiers[i].StatKey,
+                    type = sourceModifiers[i].Type,
+                    value = sourceModifiers[i].Value
                 };
             }
             entry.modifiers = nativeModifiers;

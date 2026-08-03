@@ -17,7 +17,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod
@@ -29,7 +28,7 @@ namespace FeatherMod
     /// </summary>
     public static class FriendlyNpcUtils
     {
-        private static SimpleRegistry<GameObject> _registry;           // 运行时 NPC GameObject 注册表
+        private static SimpleRegistry<GameObject> _registry = new SimpleRegistry<GameObject>(); // 运行时 NPC GameObject 注册表
         // ⚠ _presetReg 已删除。preset 存在于游戏全局列表 GameplayDataSettings.CharacterRandomPresetData.presets，
         //   按 nameKey（= Identifier.Path）查找即可。Domain Reload 后全局列表自动持久化。
         private static Dictionary<Identifier, FriendlyNpcConfig> _configCache; // 配置缓存（用于 modder 主动 spawn 路径）
@@ -45,6 +44,13 @@ namespace FeatherMod
         // NPC save/restore persistence
         private static readonly Identifier NpcSaveId = new Identifier(FMLConstants.Domain, "friendly_npc_spawns");
         private static bool _saveRestoreHooked;
+
+        // ── 恢复去重：MainSceneLoaded / SubSceneLoaded / LevelInitialized 三个事件都会触发
+        //    RestoreNpcSpawns，且异步生成存在竞态（_registry 写入晚于下一次检查），
+        //    同一场景内会重复 remove→respawn。用"生成中"集合拦截：
+        //    进行中的生成跳过，完成后由 _registry（实例存在）拦截；读档时旧 GO 被销毁
+        //    → _registry 为空 → 可正常重新生成（不依赖场景 key，避免读档回归）。──
+        private static readonly HashSet<Identifier> _spawning = new HashSet<Identifier>();
 
         [Serializable]
         private struct NpcSpawnEntry
@@ -258,30 +264,25 @@ namespace FeatherMod
                 return null;
             }
 
-            var pos = position ?? config.SpawnPosition;
-            var rot = rotation ?? config.SpawnRotation;
-            string owner = _ownerCache.TryGetValue(id, out var o) ? o : id.Domain;
+                var pos = position ?? config.SpawnPosition;
+                var rot = rotation ?? config.SpawnRotation;
+                string owner = _ownerCache.TryGetValue(id, out var o) ? o : id.Domain;
 
-            try
-            {
-                // 将 Quaternion 旋转转换为方向向量
-                Vector3 dir = rot * Vector3.forward;
-
-                // 获取当前场景 buildIndex
-                int sceneBuildIndex = UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex;
-
-                var method = typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync",
-                    new Type[] { typeof(Vector3), typeof(Vector3), typeof(int), typeof(CharacterSpawnerGroup), typeof(bool) });
-
-                if (method == null)
+                try
                 {
-                    Debug.LogError("[FML FriendlyNpc] CreateCharacterAsync not found via reflection.");
-                    return null;
-                }
+                    // 将 Quaternion 旋转转换为方向向量
+                    Vector3 dir = rot * Vector3.forward;
 
-                // 反射调用返回 UniTask<CharacterMainControl>（boxed），直接 await
-                var uniTaskObj = method.Invoke(preset, new object[] { pos, dir, sceneBuildIndex, null, false });
-                var character = await (UniTask<CharacterMainControl>)uniTaskObj;
+                    // 获取当前场景 buildIndex
+                    int sceneBuildIndex = UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex;
+
+                    // public 方法（Publicizer 已公开），直接编译期调用，零反射
+                    var character = await preset.CreateCharacterAsync(pos, dir, sceneBuildIndex, null, false);
+                    if (character is null)
+                    {
+                        Debug.LogError($"[FML FriendlyNpc] CreateCharacterAsync returned null for '{id}'.");
+                        return null;
+                    }
 
                 // 生成成功后挂载交互组件
                 AttachInteractionComponents(character.gameObject, id, config);
@@ -294,7 +295,7 @@ namespace FeatherMod
                         health.invincible = true;
                 }
 
-                _registry.Set(id, character.gameObject, owner);
+                _registry!.Set(id, character.gameObject, owner);
                 PersistNpcSpawn(id, pos, rot);
                 EventBusManager.Instance.Sync.Post(new NpcCreatedEvent(id));
 
@@ -594,6 +595,8 @@ namespace FeatherMod
                     var id = new Identifier(entry.domain, entry.path);
                     if (_registry != null && _registry.TryGet(id, out var existingGo) && existingGo != null)
                         continue;
+                    // 生成中（异步未完成）→ 跳过，避免重复 spawn（同一关卡内多事件触发）
+                    if (!_spawning.Add(id)) continue;
 
                     // ── 自包含恢复：preset 从全局列表查找，config 从存档摘要或 _configCache 获取 ──
                     SpawnFriendlyNpcFromSave(entry, id).Forget();
@@ -628,18 +631,13 @@ namespace FeatherMod
                     return;
                 }
 
-                // 2. 生成角色
+                // 2. 生成角色（public 方法直接调用，零反射）
                 Vector3 pos = new Vector3(entry.posX, entry.posY, entry.posZ);
                 Quaternion rot = new Quaternion(entry.rotX, entry.rotY, entry.rotZ, entry.rotW);
                 Vector3 dir = rot * Vector3.forward;
                 int sceneBuildIndex = UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex;
 
-                var method = typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync",
-                    new Type[] { typeof(Vector3), typeof(Vector3), typeof(int), typeof(CharacterSpawnerGroup), typeof(bool) });
-                if (method == null) { Debug.LogError("[FML FriendlyNpc] CreateCharacterAsync not found."); return; }
-
-                var uniTaskObj = method.Invoke(preset, new object[] { pos, dir, sceneBuildIndex, null, false });
-                var character = await (UniTask<CharacterMainControl>)uniTaskObj;
+                var character = await preset.CreateCharacterAsync(pos, dir, sceneBuildIndex, null, false);
 
                 // 3. 从存档摘要重建交互组件
                 AttachInteractionComponentsFromSave(character.gameObject, id, entry);
@@ -659,6 +657,11 @@ namespace FeatherMod
             catch (Exception ex)
             {
                 Debug.LogWarning($"[FML FriendlyNpc] Failed to restore '{id}' from save: {ex.Message}");
+            }
+            finally
+            {
+                // 释放生成中标记：允许后续事件（或读档后重新生成）再次触发恢复
+                _spawning.Remove(id);
             }
         }
 
@@ -1107,17 +1110,13 @@ namespace FeatherMod
             return $"MerchantName_{config.ShopId}";
         }
 
-        /// <summary>检查 perkTreeID 是否已存在于 PerkTreeManager（原版树或 FML 注册树）。管理器未就绪时不误报。</summary>
+        /// <summary>检查 perkTreeID 是否已存在于 PerkTreeManager（原版树或 FML 注册树）。管理器未就绪时不误报。
+        /// 走 <c>PerkTreeManager.GetPerkTree</c>：FML 树由 PerkTreeManagerGetPerkTreePatch 前缀拦截并自动补注入缓存树，
+        /// 避免"注册时 Instance 为 null 导致树不在 perkTrees 列表"的误报。</summary>
         private static bool IsPerkTreeAvailable(string treeId)
         {
-            var mgr = PerkTreeManager.Instance;
-            if (mgr == null || mgr.perkTrees == null) return true;
-            foreach (var tree in mgr.perkTrees)
-            {
-                if (tree != null && tree.ID == treeId)
-                    return true;
-            }
-            return false;
+            if (PerkTreeManager.Instance == null) return true;
+            return PerkTreeManager.GetPerkTree(treeId) != null;
         }
 
         /// <summary>创建交互点子 GameObject（参照原版 Interact_Quest 子对象）。</summary>
@@ -1163,39 +1162,6 @@ namespace FeatherMod
             return null;
         }
 
-        /// <summary>按 nameKey 查找已生成的 CharacterMainControl（回退方案）。</summary>
-        private static CharacterMainControl? FindSpawnedCharacter(Identifier id)
-        {
-            var all = GameObject.FindObjectsOfType<CharacterMainControl>();
-            foreach (var c in all)
-            {
-                if (c.name.Contains(id.Path) || c.gameObject.name.Contains(id.Path))
-                    return c;
-            }
-            return null;
-        }
-
-        // ═══════════════════════════════════════════════════
-        //  反射辅助
-        // ═══════════════════════════════════════════════════
-
-        private static MethodInfo? _cachedCreateAsync;
-        private static readonly object _cacheLock = new object();
-
-        private static MethodInfo? GetCreateCharacterAsyncMethod()
-        {
-            if (_cachedCreateAsync != null) return _cachedCreateAsync;
-            lock (_cacheLock)
-            {
-                if (_cachedCreateAsync != null) return _cachedCreateAsync;
-                _cachedCreateAsync = typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync",
-                    new Type[] { typeof(Vector3), typeof(Vector3), typeof(int), typeof(CharacterSpawnerGroup), typeof(bool) });
-                if (_cachedCreateAsync == null)
-                    Debug.LogError("[FML FriendlyNpc] CreateCharacterAsync method not found.");
-                return _cachedCreateAsync;
-            }
-        }
-
         // Publicizer 已将所有 [SerializeField] private 字段变为 public，
         // 无需反射即可直接访问 CharacterRandomPreset / DuckovDialogueActor /
         // StockShop / InteractableBase / QuestGiver / PerkTreeUIInvoker 的字段与方法。
@@ -1209,6 +1175,7 @@ namespace FeatherMod
         {
             var preset = ScriptableObject.CreateInstance<CustomFacePreset>();
 
+            // CustomFaceSettingData 是 struct——先取副本、修改、再整体写回，否则修改无效
             var data = preset.settings;
             data.savedSetting = true;
             if (!string.IsNullOrEmpty(parts.HairId)) data.hairID = int.TryParse(parts.HairId, out var h) ? h : 0;
@@ -1218,7 +1185,7 @@ namespace FeatherMod
             if (!string.IsNullOrEmpty(parts.TailId)) data.tailID = int.TryParse(parts.TailId, out var t) ? t : 0;
             if (!string.IsNullOrEmpty(parts.FootId)) data.footID = int.TryParse(parts.FootId, out var f) ? f : 0;
             if (!string.IsNullOrEmpty(parts.WingId)) data.wingID = int.TryParse(parts.WingId, out var w) ? w : 0;
-            preset.settings = data;
+            preset.settings = data; // struct 写回
 
             return preset;
         }

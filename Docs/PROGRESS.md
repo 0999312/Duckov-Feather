@@ -1,6 +1,112 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-28
+> 最后更新：2026-07-31
+
+---
+
+## 代码整理与占位代码处理 — ✅ 已完成
+
+**完成时间**: 2026-07-31
+**类型**: 整理 + 占位代码清理（仅较小改动项）
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 重写 | `Events/GameEvents/` 12 个事件类 | **8 个 TODO 占位事件强类型化**（object → 已核验的原生类型）：HurtEvent(`Health`/`DamageInfo`)、EntityDeathEvent、ControllingCharacterChangedEvent(`CharacterMainControl`)、FormulaUnlockedEvent(`string`)、ItemUnlockStateChangedEvent(`int`)、ItemCraftedEvent(`CraftingFormula`/`Item`)、PlayerHearSoundEvent/SoundSpawnedEvent(`AISound`)、PlayerDeathEvent(`DamageInfo`)、QuestTaskFinishedEvent(`Duckov.Quests.Quest/Task`)、LevelInitializedEvent(`LevelManager?`)、CollectSaveDataEvent（保留 object，注释明确恒 null 语义） |
+| 修改 | `Events/Adapters/GameEventAdapters.cs` | 10 个桥接方法按强类型 cast 后构造事件（DynamicMethod 装箱层保持 object 签名不变） |
+| 修改 | `Entities/EnemyPresetData.cs` | `CreateCustomFacePreset` 占位 → 完整实现（struct 写回 + 直接赋值）；`FindFacePreset` 伪扩展 → 补 `Resources.Load<CustomFacePreset>` 回退 |
+| 修改 | `Entities/CustomFaceUtils.cs` | `GetPlayerFaceInstance` 伪回退（CustomFaceManager 不暴露实例）→ 删除 + 注释说明原因 |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | 删除死代码 `FindSpawnedCharacter` |
+| 修改 | `Entities/EquipmentUtils.cs` | 运行时装备 3 个占位方法保留但注释/警告改为明确限制（已核验 CharacterModel 无装备 API、CharacterMainControl 无槽位属性，历史注释过时）；`SetNpcEquipment` 文档修正为"恒走待处理队列" |
+
+### 遗留问题
+
+- [ ] `EquipmentUtils` 运行时装备（Set/Get/Clear on model）依赖物品槽位系统语义，属新功能开发——保留占位（明确警告），当前正确用法为生成前配置
+- [ ] `StateMachineToBT` 反射软引用（ParadoxNotion 动态图构建）——有意设计，保留
+- [ ] `LotteryBoxPatch` 循环内 value/weight 反射——兼容性敏感，未触碰
+- [ ] `BuildingSlotsWatcher`/Machine 生产系统整体未接线——大改动，需后续 Phase
+- [ ] `GameUIUtils.ExtractColorsFromView` 反射遍历——一次性 UI 主题提取，设计如此
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` / `-c Release` 0 错误
+- [x] 事件类型均经已安装 `TeamSoda.Duckov.Core.dll` 元数据核验（`AISound`/`CraftingFormula`/`DamageInfo` 为 struct，桥接处 unbox cast）
+- [x] 全库重新扫描：无剩余 TODO/占位代码（仅 7 处设计描述性注释）
+
+### 设计偏离
+
+- `FormulaUnlockedEvent.Formula` 强类型为 `string`（原生 `Action<string>` 参数即配方 ID），而非注释推测的 `CraftingFormula`
+- `CollectSaveDataEvent.SaveData` 保留 `object?`：原生无参事件，该字段恒 null——删除会破坏既有订阅方 API
+
+---
+
+## 运行日志交叉验证修复 — ✅ 已完成
+
+**完成时间**: 2026-07-31
+**类型**: 补丁类级特性修复（10 个补丁从静默失效恢复生效）+ 反射清理 + 运行时问题修复
+
+### 背景
+
+基于 2026-07-27 实测 7 小时运行日志 + 已安装游戏/部署 DLL 元数据核验发现：
+
+1. **Harmony 2.4.1 的 `PatchAll` 只处理带类级 Harmony 特性的类型**。`OtherPatches`
+   与 `PerkSetupSaveDataSuppressPatch` 缺少类级 `[HarmonyPatch]`，各自的方法级补丁
+   **从未被应用**（全部静默失效，Harmony 甚至不报错）。这也解释了为何
+   `GetAPresetByWeight`（返回 struct）/`CreateCharacter`（返回 UniTask）等签名错配
+   没有导致启动崩溃——它们从未被处理。
+2. 运行日志确认的运行时问题：PerkTree UI 解锁 NRE、NPC 每次进图 remove→respawn
+   抖动、PerkTree not found 警告、Dialogue _blackboard 反射失败等。
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 修改 | `Entities/Patches/OtherPatches.cs` | **类级 `[HarmonyPatch]`**（激活补丁类）；删除 6 个无效/占位补丁（CreateCharacterAsync/CreateCharacter/StartSpawn/AddSearchTask/Hurt/SetTeam）；修复 `GetAPresetByWeightPostfix` 签名（`ref CharacterRandomPresetInfo __result`，struct 判空）；重构 `InitLevelPostfix`（延迟 3 帧 + AutoSpawn 过滤 + 零反射直接调用 CreateCharacterAsync） |
+| 修改 | `PerkTrees/Patches/PerkSetupSaveDataSuppressPatch.cs` | **类级 `[HarmonyPatch]`**（激活存档槽位切换抑制补丁） |
+| 修改 | `PerkTrees/Patches/PerkTreeManagerGetPerkTreePatch.cs` | Prefix 命中时清理悬空连接（PruneDanglingConnections），防 PerkTreeView NRE |
+| 修改 | `PerkTrees/PerkTreeUtils.cs` | 新增 `PruneDanglingConnections`（移除 targetNode 为 null/非 PerkRelationNode 的连接，原生 RefreshConnections 无空检查）；`ConnectPerksInternal` 检查 ConnectNodes 返回值 |
+| 修改 | `PerkTrees/Patches/PerkTreeCollectGuard.cs` | 判定统一为 `IsFMLTree`（原名称前缀双轨判定不一致） |
+| 修改 | `Entities/FriendlyNpcUtils.cs` | NPC 恢复去重（`_spawning` 生成中集合：拦截同一关卡多事件触发的重复 spawn，完成/失败后释放；读档时旧 GO 已销毁 → `_registry` 为空 → 可正常重新生成，无场景 key 回归风险）；2 处 CreateCharacterAsync 反射 → 直接调用；`IsPerkTreeAvailable` 改走 `GetPerkTree`（消除"not found in PerkTreeManager"误报并自动补注入）；`CreateCustomFacePreset` struct 写回修复（CustomFaceSettingData 是 struct，副本修改必须写回）；删除死代码 `_cachedCreateAsync`/`GetCreateCharacterAsyncMethod`；移除 `System.Reflection` using |
+| 修改 | `Entities/EnemyUtils.cs` | 新增 `SetAutoSpawn(id, bool)` API；`SpawnInternal` 反射 → 直接调用 + 支持 onSpawned 回调；删除反射缓存 |
+| 修改 | `Entities/EnemyRegistry.cs` | 新增 `_autoSpawn` 集合 + `SetAutoSpawn/IsAutoSpawn`（OnRemoved/Clear 同步清理） |
+| 修改 | `Dialogues/DialogueManager.cs` | `SetBlackboard` 反射 → 直接 `controller.blackboard = bb`（public 属性；`_blackboard` 私有字段在泛型基类上 GetField 必失败）；移除反射缓存与 `System.Reflection` |
+| 修改 | `Items/ItemUtils.cs` | `HasTag` 反射（ItemMetaData.Tags 属性不存在，恒 false）→ 直接遍历 `Item.Tags`（public TagCollection，Tag.name public） |
+| 修改 | `Crafting/TagCostValidator.cs` | `EnumeratePlayerItems` 反射 `AllSlots`（不存在）→ `inv.Content`（public List\<Item\>）；`GetEffectiveAmount` GetStat/BaseValue/Value 反射 → 直接访问 |
+| 修改 | `Quests/FMLTask_SubmitItemByTag.cs` | 同上（AllSlots → Content、GetStat 直接访问） |
+| 修改 | `Quests/FMLTask_KillCountByTag.cs` | `Health.OnDead` 反射订阅 → 直接 `+=`（public static event） |
+| 修改 | `Quests/FMLReward_UnlockEndowment.cs` / `FMLReward_UnlockBuilding.cs` | `GetField("onCompleted")`（event backing field 必失败）→ `GetEvent + AddEventHandler` 标准订阅（internal event） |
+| 修改 | `Entities/Resolvers/FaceRefResolver.cs` | 字段名 hairId→hairID 等（原生 CustomFaceSettingData 大写 ID）+ struct 写回 + 删 DecorationId（原生无此字段） |
+| 修改 | `Fishing/Patches/FishSpawnerPatch.cs` | specialPairs/SpecialPair 反射 → 直接访问（Publicizer 已公开） |
+| 修改 | `Buildings/BuildingUtils.cs` | `SetBuildingField/GetBuildingField` 反射（6 处调用）→ Publicizer 直接赋值/读取；删除反射辅助与 `System.Reflection` |
+| 修改 | `Containers/ContainerUtils.cs` | `GetBuildingFunctionContainer` 反射 → `building.functionContainer` 直接访问 |
+| 修改 | `DecomposeRegistry.cs` | `RebuildDictionary` NonPublic 反射（方法实为 public）→ 直接调用 |
+| 修改 | `QuestGivers/Patches/QuestGiverIDPatch.cs` | `activeQuests/historyQuests` GetField 反射（3 处）→ Publicizer 直接访问 |
+| 修改 | `Entities/Patches/AICharacterControllerInit.cs` | `combatTree` GetField 反射（public 字段）→ 直接赋值（`bt as BehaviourTree`） |
+| 修改 | `Modding/ModManagerPatches.cs` | `RegeneratePriorities` private static 反射调用 → Publicizer 直接调用；`OnReorder` 触发从 `GetField("OnReorder")`（event 名非 backing field 名，必然失败）→ `GetField("\<OnReorder\>k__BackingField")`（AGENTS.md 允许的 event backing field 场景） |
+| 修改 | `Entities/EnemyPresetData.cs` | 30 处 `SetField` 反射 → Publicizer 直接赋值；**`ApplyWeaponConfig` 从空操作实现为真实武器池注入**（itemsToGenerate + RandomItemGenerateDescription.itemPool 直接构建，原为空死代码） |
+| 修改 | `WeaponInjectionUtils.cs` | `itemsToGenerate` FieldInfo 反射缓存 → Publicizer 直接访问 |
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` 0 错误（51 预存警告，无新增）
+- [x] `dotnet build -c Release` 0 错误
+- [x] 构建产物类级特性核验（MetadataLoadContext）：`OtherPatches`/`PerkSetupSaveDataSuppressPatch` 均为 CLASS-ATTR OK
+- [x] 已安装游戏签名核验：`GetAPresetByWeight` 返回 `CharacterRandomPresetInfo`（struct）、`CreateCharacter` 返回 `UniTask<CharacterMainControl>`、`Health.Hurt(DamageInfo damageInfo)`、`SetTeam(Teams _team)`——修复后签名全部匹配
+- [ ] 游戏内功能测试（补丁激活后敌人权重回调 / InitLevel AutoSpawn、PerkTree UI 解锁、NPC 进图恢复、对话黑板的实际行为）
+
+### 遗留问题
+
+- [ ] `BuildingSlotsWatcher`/Machine 生产系统整体未接线（死代码，需后续 Phase 实现或移除）
+- [ ] `LotteryBoxPatch` 循环内 value/weight 反射未缓存（本次未触碰，兼容性敏感）
+- [ ] `GameEvents` 7 个事件仍 object 兜底（TODO 未清）
+- [ ] 补丁激活后需游戏实测：`GetAPresetByWeightPostfix` 的 struct `__result` 写回、`InitLevelPostfix` 延迟生成、`PerkSetupSaveDataSuppressPatch` 槽位切换抑制、`FMLTask_KillCountByTag` 直接事件订阅
+
+### 设计偏离
+
+- `OtherPatches` 从 8 个补丁精简为 2 个（GetAPresetByWeight / InitLevel）：6 个为死代码/空操作/设计错误（async postfix 无法取回结果），按"拒绝过度设计"原则删除；敌人 AI 注入（IStateConfig）的正确位置在 `EnemyUtils.SpawnInternalAsync` await 之后（已支持 onSpawned 回调）
+- `InitLevelPostfix` 自动生成改为显式开关：新增 `EnemyUtils.SetAutoSpawn(id, true)`，默认不自动生成（原设计"注册即刷怪"为危险行为）
+- 日志中的 "Key not found" 存档警告与 Item ID:-1 经核验为旧版/其他 Mod 问题：当前 `SaveUtils.Load` 已有 KeyExists 预检查（无警告）；Item ID:-1 为用户确认的其它 Mod 同异步问题，不在本次修复范围
 
 ---
 

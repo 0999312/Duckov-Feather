@@ -15,7 +15,7 @@ namespace FeatherMod.Entities
         private const string GRAPH_TYPE = "NodeCanvas.Framework.Graph";
 
         /// <summary>编译状态机为 BehaviourTree。返回 object（实际类型为 BehaviourTree）。</summary>
-        public static object Compile(IStateConfig config)
+        public static object? Compile(IStateConfig config)
         {
             if (config == null) { Debug.LogError("[StateMachineToBT] config is null."); return null; }
             try
@@ -23,12 +23,12 @@ namespace FeatherMod.Entities
                 var states = DiscoverStates(config);
                 if (states.Count == 0) { Debug.LogError("[StateMachineToBT] No states discovered."); return null; }
 
-                Type btType = FindType(BT_TYPE);
+                Type? btType = FindType(BT_TYPE);
                 if (btType == null) { Debug.LogError("[StateMachineToBT] BehaviourTree type not found."); return null; }
                 var bt = ScriptableObject.CreateInstance(btType);
                 bt.name = "FML_Compiled_" + config.GetType().Name;
 
-                Type graphType = FindType(GRAPH_TYPE);
+                Type? graphType = FindType(GRAPH_TYPE);
                 if (graphType == null) { Debug.LogError("[StateMachineToBT] Graph type not found."); return null; }
                 var graph = Activator.CreateInstance(graphType, nonPublic: true);
 
@@ -113,7 +113,7 @@ namespace FeatherMod.Entities
             f?.SetValue(graph, node);
         }
 
-        private static Type FindType(string name)
+        private static Type? FindType(string name)
         {
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {

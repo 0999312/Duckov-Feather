@@ -1,7 +1,6 @@
 ﻿using Duckov.Quests;
 using ItemStatsSystem;
 using System;
-using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod.Quests
@@ -24,15 +23,7 @@ namespace FeatherMod.Quests
         public string RequireEnemyName { get => requireEnemyName; internal set => requireEnemyName = value ?? ""; }
         public bool RequireHeadShot { get => requireHeadShot; internal set => requireHeadShot = value; }
 
-        private static readonly MethodInfo? _addEventHandler = typeof(Health)
-            .GetEvent("OnDead", BindingFlags.Public | BindingFlags.Static)
-            ?.GetAddMethod();
-
-        private static readonly MethodInfo? _removeEventHandler = typeof(Health)
-            .GetEvent("OnDead", BindingFlags.Public | BindingFlags.Static)
-            ?.GetRemoveMethod();
-
-        private Delegate? _subscribedHandler;
+        private bool _subscribed;
 
         protected override bool CheckFinished()
             => amount >= requireAmount;
@@ -43,23 +34,17 @@ namespace FeatherMod.Quests
 
         protected override void OnInit()
         {
-            if (_addEventHandler != null)
-            {
-                var handler = Delegate.CreateDelegate(
-                    typeof(Action<Health, DamageInfo>), this,
-                    GetType().GetMethod("OnEnemyDead", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?? throw new InvalidOperationException("OnEnemyDead method not found"));
-                _subscribedHandler = handler;
-                _addEventHandler.Invoke(null, new object[] { handler });
-            }
+            // Health.OnDead 是 public static event——直接编译期订阅，零反射
+            Health.OnDead += OnEnemyDead;
+            _subscribed = true;
         }
 
         private void OnDisable()
         {
-            if (_removeEventHandler != null && _subscribedHandler != null)
+            if (_subscribed)
             {
-                _removeEventHandler.Invoke(null, new object[] { _subscribedHandler });
-                _subscribedHandler = null;
+                Health.OnDead -= OnEnemyDead;
+                _subscribed = false;
             }
         }
 

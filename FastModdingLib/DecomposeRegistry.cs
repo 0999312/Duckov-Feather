@@ -2,14 +2,13 @@
 using FeatherMod.Utils;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 namespace FeatherMod
 {
     /// <summary>
     /// 分解配方注册表。反向 key = <see cref="DecomposeFormula"/>.item (int itemId)；
     /// <see cref="OnRemoved"/> 从 <see cref="DecomposeDatabase"/>.Instance.Dic 移除 native 条目
-    /// 并触发 <c>RebuildDictionary</c> 反射（PLAN-Register §5.5 R7 要求保留该反射路径）。
+    /// 并触发 <c>RebuildDictionary</c>（public 方法，直接调用）。
     /// <para>
     /// 直接继承 <see cref="SimpleRegistry{T}"/> 并手维护反向索引，而非继承
     /// <see cref="ReverseLookupRegistry{T, TKey}"/>——后者在 R3 被声明为 sealed，
@@ -74,10 +73,7 @@ namespace FeatherMod
             var instance = DecomposeDatabase.Instance;
             instance.Dic.Remove(value.item);
             instance.entries = instance.Dic.Values.ToArray();
-            typeof(DecomposeDatabase).GetMethod(
-                "RebuildDictionary",
-                BindingFlags.Instance | BindingFlags.NonPublic
-            )?.Invoke(instance, null);
+            instance.RebuildDictionary(); // public 方法直接调用，零反射
         }
     }
 }

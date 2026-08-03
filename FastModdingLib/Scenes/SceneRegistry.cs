@@ -19,7 +19,7 @@ namespace FeatherMod
         public void Register(Identifier id, string sceneId, string modid)
         {
             // 使用 null 作为占位值（场景本身不是 Unity 对象）
-            Set(id, null, modid);
+            Set(id, null!, modid);
             _sceneIdMap[id] = sceneId;
             _reverseMap[sceneId] = id;
         }

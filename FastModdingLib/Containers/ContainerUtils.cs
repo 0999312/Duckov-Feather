@@ -123,7 +123,7 @@ namespace FeatherMod
                 Debug.LogError($"[ContainerUtils.TakeItem] Failed to transfer item to player: {e.Message}");
             }
 
-            return ItemEntry.Of(entry.Item.ItemId ?? default, takeAmount);
+            return ItemEntry.Of(entry.Item.ItemId ?? default!, takeAmount);
         }
 
         // ===== 绑定到建筑 =====
@@ -178,13 +178,9 @@ namespace FeatherMod
 
         // ===== 内部辅助 =====
 
-        /// <summary>通过反射获取 Building 的 functionContainer GameObject。</summary>
+        /// <summary>获取 Building 的 functionContainer GameObject（[SerializeField] private 经 Publicizer 已公开）。</summary>
         private static GameObject? GetBuildingFunctionContainer(Building building)
-        {
-            var field = typeof(Building).GetField("functionContainer",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
-            return field?.GetValue(building) as GameObject;
-        }
+            => building.functionContainer;
     }
 
     /// <summary>

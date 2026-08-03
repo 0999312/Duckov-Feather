@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Reflection;
 using ItemStatsSystem;
 using UnityEngine;
 
@@ -74,24 +73,18 @@ namespace FeatherMod.Crafting
 
             try
             {
-                var method = typeof(Item).GetMethod("GetStat", new[] { typeof(int) });
-                var stat = method?.Invoke(item, new object[] { "Durability".GetHashCode() });
+                // Item.GetStat 与 Stat.BaseValue/Value 均为 public（Publicizer 已公开），直接访问零反射
+                var stat = item.GetStat("Durability".GetHashCode());
                 if (stat != null)
                 {
-                    var baseProp = stat.GetType().GetProperty("BaseValue");
-                    var curProp = stat.GetType().GetProperty("Value");
-                    if (baseProp == null || curProp == null) return stack;
-                    var baseValObj = baseProp.GetValue(stat);
-                    var curValObj = curProp.GetValue(stat);
-                    if (baseValObj == null || curValObj == null) return stack;
-                    var baseVal = (float)baseValObj;
-                    var curVal = (float)curValObj;
+                    float baseVal = stat.BaseValue;
+                    float curVal = stat.Value;
                     if (baseVal > 0) return stack * (curVal / baseVal);
                 }
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[TagCostValidator.GetEffectiveAmount] Reflection failed: {e.Message}");
+                Debug.LogWarning($"[TagCostValidator.GetEffectiveAmount] Failed: {e.Message}");
             }
             return stack;
         }
@@ -101,23 +94,8 @@ namespace FeatherMod.Crafting
             var inv = CharacterMainControl.Main?.CharacterItem?.Inventory;
             if (inv == null) return null;
 
-            var result = new List<Item>();
-            try
-            {
-                var allSlots = inv.GetType().GetProperty("AllSlots")?.GetValue(inv) as System.Collections.IEnumerable;
-                if (allSlots == null) return result;
-
-                foreach (var slot in allSlots)
-                {
-                    var item = slot.GetType().GetProperty("Content")?.GetValue(slot) as Item;
-                    if (item != null) result.Add(item);
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[TagCostValidator.GetEffectiveAmount] Reflection failed: {e.Message}");
-            }
-            return result;
+            // 游戏原生 Inventory 没有 AllSlots；物品列表是 public List<Item> Content，直接访问零反射
+            return inv.Content;
         }
     }
 }

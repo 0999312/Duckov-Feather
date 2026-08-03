@@ -147,7 +147,7 @@ namespace FeatherMod
         /// <param name="position">世界空间坐标。</param>
         /// <param name="sceneId">目标场景（null = 当前活动场景）。</param>
         /// <returns>创建的 NoteInteract 组件。</returns>
-        public static NoteInteract SpawnPickup(Identifier id, Vector3 position, string? sceneId = null)
+        public static NoteInteract? SpawnPickup(Identifier id, Vector3 position, string? sceneId = null)
         {
             if (!_registry.TryGetKey(id, out var key))
                 return null;

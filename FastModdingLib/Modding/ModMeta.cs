@@ -71,9 +71,6 @@ namespace FeatherMod.Modding
 
         public string[] LoadBefore;
 
-        /// <summary>依赖就绪后是否自动激活（无需玩家手动开关）。默认 false。</summary>
-        public bool AutoActivate;
-
         /// <summary>fml.json 是否成功加载并完成 modid 校验。false 表示文件不存在、缺 modid 或格式错误。</summary>
         public bool Loaded;
 
@@ -84,7 +81,6 @@ namespace FeatherMod.Modding
             Dependencies = new ModDependency[]{},
             LoadAfter = new string[]{},
             LoadBefore = new string[]{},
-            AutoActivate = false,
             Loaded = false
         };
     }

@@ -15,7 +15,11 @@ namespace FeatherMod.PerkTrees.Patches
     /// 在操作期间设 SuppressPerkEvents=true，Perk.set_Unlocked Prefix 直接写
     /// _unlocked 字段并跳过原 setter（不触发 onUnlockStateChanged）。
     /// 正常流程（ForceUnlock / ConfirmUnlock）不走 SetupSaveData，不受影响。
+    ///
+    /// ⚠ 类级 [HarmonyPatch] 必须存在：Harmony 2.4.x 的 PatchAll 只扫描带类级
+    /// Harmony 特性的类型（历史版本缺少类级特性导致本补丁从未生效）。
     /// </summary>
+    [HarmonyPatch]
     internal static class PerkSetupSaveDataSuppressPatch
     {
         // ═══════════════════════════════════════════════════

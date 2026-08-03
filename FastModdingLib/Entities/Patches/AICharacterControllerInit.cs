@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using NodeCanvas.BehaviourTrees;
 using System;
 using UnityEngine;
 
@@ -33,19 +34,9 @@ namespace FeatherMod.Entities.Patches
                 }
 
                 // 注入到 combatTree 插槽（替换原有 BT）
-                // AICharacterController 的 combatTree 字段可能为 public 或非 public
-                var combatField = typeof(AICharacterController).GetField("combatTree",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
-                    System.Reflection.BindingFlags.Instance);
-                if (combatField != null)
-                {
-                    combatField.SetValue(__instance, bt);
-                    Debug.Log($"[FML] Injected compiled BehaviourTree into AICharacterController combatTree.");
-                }
-                else
-                {
-                    Debug.LogWarning("[FML] AICharacterController.combatTree field not found via reflection.");
-                }
+                // combatTree 是 public 字段（native AICharacterController.cs），直接赋值零反射
+                __instance.combatTree = bt as BehaviourTree;
+                Debug.Log($"[FML] Injected compiled BehaviourTree into AICharacterController combatTree.");
             }
             catch (Exception e)
             {

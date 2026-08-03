@@ -14,7 +14,6 @@ using Saves;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 
 namespace FeatherMod
@@ -183,6 +182,12 @@ namespace FeatherMod
             // 修复 null 数组字段，防止 RequirementsSatisfied() NRE
             SanitizeBuildingInfo(ref info);
 
+            if (prefab == null)
+            {
+                Debug.LogError($"[FML Building] Failed to resolve prefab for '{config.Id}'. Registration aborted.");
+                return;
+            }
+
             RegisterBuilding(config.Id, info, prefab);
         }
 
@@ -202,7 +207,13 @@ namespace FeatherMod
                 return info;
 
             // 回退到 native collection
-            return GetBuildingInfo(id.Path);
+            var collection = GameplayDataSettings.BuildingDataCollection;
+            foreach (var native in collection?.infos ?? System.Linq.Enumerable.Empty<BuildingInfo>())
+            {
+                if (native.id == id.Path)
+                    return native;
+            }
+            return null;
         }
 
         /// <summary>
@@ -778,8 +789,6 @@ namespace FeatherMod
 
         // ===== 代码端创建建筑 =====
 
-        private static readonly BindingFlags _buildingFlags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-
         /// <summary>
         /// 纯代码创建简易 Building GameObject（无需 Unity 编辑器）。
         /// 自动创建带 Building 组件 + 基础 Cube 模型 + 网格碰撞体的完整 Prefab 结构。
@@ -802,8 +811,8 @@ namespace FeatherMod
                 {
                     var clone = UnityEngine.Object.Instantiate(existingPrefab);
                     clone.name = $"Building_{id.Path}";
-                    SetBuildingField(clone, "id", id.Path);
-                    SetBuildingField(clone, "dimensions", dimensions);
+                    clone.id = id.Path; // [SerializeField] private 经 Publicizer 已公开，直接赋值
+                    clone.dimensions = dimensions;
                     // Prefab 需跨场景存活，防止场景切换导致注册表持有僵尸引用
                     UnityEngine.Object.DontDestroyOnLoad(clone.gameObject);
                     return clone;
@@ -822,8 +831,8 @@ namespace FeatherMod
             var building = go.AddComponent<Building>();
 
             // 设置 Building 组件字段
-            SetBuildingField(building, "id", id.Path);
-            SetBuildingField(building, "dimensions", dimensions);
+            building.id = id.Path; // [SerializeField] private 经 Publicizer 已公开，直接赋值
+            building.dimensions = dimensions;
 
             // 创建 graphicsContainer（美术层 + 物理碰撞）
             var graphics = new GameObject("Graphics");
@@ -842,7 +851,7 @@ namespace FeatherMod
             physicsCollider.size = new Vector3(dimensions.x, 2f, dimensions.y);
             physicsCollider.center = Vector3.zero;
 
-            SetBuildingField(building, "graphicsContainer", graphics);
+            building.graphicsContainer = graphics;
 
             // 创建 functionContainer（功能层——交互碰撞体）
             var func = new GameObject("Function");
@@ -851,7 +860,7 @@ namespace FeatherMod
             var collider = func.AddComponent<BoxCollider>();
             collider.isTrigger = true;
             collider.size = new Vector3(dimensions.x, 2f, dimensions.y);
-            SetBuildingField(building, "functionContainer", func);
+            building.functionContainer = func;
 
             go.SetActive(true);  // 字段就绪，允许 Awake
 
@@ -873,7 +882,7 @@ namespace FeatherMod
             var prefab = BuildingDataCollection.GetPrefab(info.prefabName);
             if (prefab == null) return;
 
-            var graphics = GetBuildingField<GameObject>(prefab, "graphicsContainer");
+            var graphics = prefab.graphicsContainer; // [SerializeField] private 经 Publicizer 已公开
             if (graphics == null) return;
 
             if (replaceExisting)
@@ -889,23 +898,6 @@ namespace FeatherMod
             ShaderReplacer.ApplyTo(model);
         }
 
-        // ===== Building 反射辅助 =====
-
-        /// <summary>通过反射设置 Building 的 private [SerializeField] 字段。</summary>
-        private static void SetBuildingField<T>(Building building, string fieldName, T value)
-        {
-            var field = typeof(Building).GetField(fieldName, _buildingFlags);
-            if (field != null) field.SetValue(building, value);
-            else Debug.LogWarning($"[BuildingUtils] Field '{fieldName}' not found on Building.");
-        }
-
-        /// <summary>通过反射读取 Building 的 private [SerializeField] 字段。</summary>
-        private static T? GetBuildingField<T>(Building building, string fieldName) where T : class
-        {
-            var field = typeof(Building).GetField(fieldName, _buildingFlags);
-            return field?.GetValue(building) as T;
-        }
-
         // ══════════ Container Access ══════════
 
         /// <summary>
@@ -917,7 +909,7 @@ namespace FeatherMod
         /// <param name="building">目标建筑实例。</param>
         /// <returns>Function 容器 GameObject；若字段缺失或为空则返回 <c>null</c>。</returns>
         public static GameObject? GetFunctionContainer(Building building)
-            => GetBuildingField<GameObject>(building, "functionContainer");
+            => building.functionContainer; // [SerializeField] private 经 Publicizer 已公开
 
         /// <summary>
         /// 获取建筑的 Graphics 容器（视觉层）。
@@ -929,7 +921,7 @@ namespace FeatherMod
         /// <param name="building">目标建筑实例。</param>
         /// <returns>Graphics 容器 GameObject；若字段缺失或为空则返回 <c>null</c>。</returns>
         public static GameObject? GetGraphicsContainer(Building building)
-            => GetBuildingField<GameObject>(building, "graphicsContainer");
+            => building.graphicsContainer; // [SerializeField] private 经 Publicizer 已公开
 
         /// <summary>
         /// 修复 BuildingInfo 中可能为 null 的数组字段，初始化为空数组。

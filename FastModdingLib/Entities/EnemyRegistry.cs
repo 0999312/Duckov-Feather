@@ -20,6 +20,23 @@ namespace FeatherMod.Entities
         private readonly Dictionary<Identifier, IStateConfig> _aiConfigs =
             new Dictionary<Identifier, IStateConfig>();
 
+        /// <summary>显式开启 AutoSpawn 的敌人（InitLevel 时在玩家附近自动生成）。默认关闭。</summary>
+        private readonly Dictionary<Identifier, bool> _autoSpawn =
+            new Dictionary<Identifier, bool>();
+
+        /// <summary>开启/关闭该敌人的 AutoSpawn（InitLevel 时在玩家附近自动生成）。默认关闭。</summary>
+        public void SetAutoSpawn(Identifier id, bool auto = true)
+        {
+            if (auto) _autoSpawn[id] = true;
+            else _autoSpawn.Remove(id);
+        }
+
+        /// <summary>查询该敌人是否开启 AutoSpawn。</summary>
+        public bool IsAutoSpawn(Identifier id)
+        {
+            return _autoSpawn.TryGetValue(id, out var v) && v;
+        }
+
         /// <summary>
         /// 注册敌人 preset 到 FML Registry 并注入到游戏 preset 列表。
         /// modid 从 <see cref="Identifier.Domain"/> 推导。
@@ -53,12 +70,14 @@ namespace FeatherMod.Entities
         {
             _injectedPresets.Remove(id);
             _aiConfigs.Remove(id);
+            _autoSpawn.Remove(id);
         }
 
         public new void Clear()
         {
             _injectedPresets.Clear();
             _aiConfigs.Clear();
+            _autoSpawn.Clear();
             base.Clear();
         }
     }

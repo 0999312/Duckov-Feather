@@ -768,7 +768,7 @@ public class MyGunMod : Duckov.Modding.ModBehaviour, IHasModid
 **A**: 不冲突。`FMLBootstrap.TearDownMod(GetModid())` 会按你的 modid 清理 Registry 条目，你可以在 `OnBeforeDeactivate` 中同时执行自定义卸载逻辑。
 
 ### Q: fml.json 是什么？我需要创建吗？
-**A**: `fml.json` 是模组根目录下的声明式配置文件。可声明 modid、优先级、依赖关系、自激活策略。非必需，不创建时 FML 使用默认值（最低优先级、无依赖、不自动激活）。详见 [USAGE.md §2.1](USAGE.md#21-fmljson--声明式模组配置)。
+**A**: `fml.json` 是模组根目录下的声明式配置文件。可声明 modid、优先级、依赖关系。非必需，不创建时 FML 使用默认值（最低优先级、无依赖）。详见 [USAGE.md §2.1](USAGE.md#21-fmljson--声明式模组配置)。
 
 ### Q: fml.json 的 modid 必须和 info.ini 一致吗？
 **A**: **必须**。`fml.json` 中的 `modid` 必须与 `info.ini` 的 `name` 字段完全一致，否则整个 fml.json 会被忽略（日志给出警告）。
