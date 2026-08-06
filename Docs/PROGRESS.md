@@ -1,6 +1,49 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-31
+> 最后更新：2026-08-07
+
+---
+
+## ItemGraphic 封装 + OBJ 模型导入 + Item API 双版本核查 — ✅ 已完成
+
+**完成时间**: 2026-08-07
+**类型**: 新功能（对应 `Docs/TODO.md` 新功能 1/2/3）
+
+### 背景
+
+- 用户确认：模型导入不走专用 AssetBundle 工作流独霸，新增"从 mod 目录直接读取 OBJ + 运行时解析"简化路径；AssetBundle 保留并存（复杂模型唯一通道）
+- 用户确认：FBX 首版不支持；纹理沿用 `assets/textures/` 约定（建议 `assets/textures/models/` 与 sprite 隔离）；GO 三级缓存；复用原版 ItemGraphic
+- 设计方案 `Docs/DESIGN_ITEM_GRAPHIC_MODEL_API.md` 经人工审核通过（仅 `CreateCustomBluePrintAsync` Task→UniTask 属必要的破坏性修改，已全库确认零调用方）
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `Models/ModelUtils.cs` | OBJ 运行时解析（零分配逐行解析 + `float.TryParse(ReadOnlySpan<char>)` + `struct VertKey` 零装箱唯一化 + n 边形扇形三角化 + 负索引 + 坐标变换 y/z 取反 + UV 翻转）；`LoadMesh`/`LoadMeshAsync` 双版本（IO+解析线程池、主线程组装、16-bit 索引优先、超 65535 自动升 UInt32、`UploadMeshData(true)`）；`GetModelMaterial`/`GetModelMaterialAsync`（`SodaCraft/SodaLit` → URP Lit 兜底、textureId 缓存共享）；`CreateModel`（MeshFilter+MeshRenderer 成对）；Mesh/Material 缓存 + `ReleaseModel`/`ReleaseAllModels`；`.fbx` 降级提示 |
+| 新建 | `Items/ItemGraphicUtils.cs` | `CreateItemGraphic`/`CreateItemGraphicAsync`（ItemGraphicInfo + CharacterSubVisuals，`SetRenderers()` 收集 renderers.Count==1，自动 GroundPoint，sockets null 防御）；`SetItemGraphic`/`SetItemGraphicAsync`（绑定 `item.itemGraphic` Publicizer 直写）；`SetItemGraphicFromOriginal`（复用原版物品 ItemGraphic，`ItemUtils.TryResolveTypeId` → `ItemAssetsCollection.GetPrefab`）；GO 模板缓存 `(meshId, textureId)` + inactive DontDestroyOnLoad 容器（参照 BuildingUtils.PrefabHolder）+ `ReleaseItemGraphic`/`ReleaseAllItemGraphics` |
+| 修改 | `Items/ItemUtils.cs` | `CreateCustomBluePrintAsync` `async Task`→`async UniTask`（**必要的破坏性修改**，全库零调用方）+ 补 `ReserveTypeId`/`CancelReservation` 模式（对齐其它 Async 方法）；新增 `CreateCustomBulletAsync`（ReserveTypeId + 异步 Sprite）；新增 `GetCustomItemAsync(ItemData)` 便捷重载（NoInlining modid 推导）；移除 `using System.Threading.Tasks` |
+| 修改 | `Docs/USAGE.md` | §4.11 新增 ItemGraphic 与模型加载：路径选型表、目录约定（`assets/models/`）、OBJ 导出参数（三角面/Y-up）、FBX 不支持说明、ModelUtils/ItemGraphicUtils 用法、复用原版物品模型示例 |
+| 修改 | `Docs/DESIGN_ITEM_GRAPHIC_MODEL_API.md` | 状态 ⏳ 待人工审核 → ✅ 已批准并实现 |
+
+### 遗留问题
+
+- [ ] 游戏内实测验证（掉落/装备场景 3D 模型显示、挂角色后层切换跟随）——需运行游戏验证
+- [ ] OBJ 多 submesh（`usemtl` 分组）首版按单 submesh 合并，如需多材质支持后续扩展
+- [ ] FBX 运行时导入不支持（游戏内无 FBX SDK）；未来 glTF 2.0 路线独立立项
+- [ ] `SetItemGraphicFromOriginal` 复用后如原版物品被 mod 卸载，共享引用会悬空（与原版共享机制一致，风险已知）
+
+### 设计偏离
+
+- `GetModelMaterial` 设计文档仅有同步版，实现时补充 `GetModelMaterialAsync`（对齐"推荐异步"惯例，纯新增非破坏）
+- `ItemGraphicUtils` 内部 `TryGetOrBuildTemplate` 用返回值替代 `out` 参数（C# 禁止 async 方法声明 out 参数）
+- GO 模板缓存 key 的 `textureKey` 用 `Identifier.ToString()`（"domain:path"），默认材质为空串
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` 0 错误（2 个既有警告：QuestGiverTest 与本次改动无关）
+- [x] `ItemGraphicInfo.sockets`（protected）/ `Item.itemGraphic`（private）经 Publicizer 直接赋值，零反射
+- [x] 全库 grep 确认 `CreateCustomBluePrintAsync` 无外部调用方
+- [ ] 功能测试：OBJ 解析正确性 / 模板缓存命中 / 原版复用绑定 / 游戏内显示——待游戏内验证
 
 ---
 
@@ -1424,7 +1467,7 @@ DuckovDrinks 测试 Mod 在集成 FML 时发现四个问题：
 ### 验证结果
 
 - [x] `dotnet build` 通过（0 错误，53 预先存在警告）
-- [ ] DuckovDrinks 功能测试（待验证）
+- [x] DuckovDrinks 功能测试（2026-08-07 验证通过）
 - [ ] 功能测试（待游戏运行时验证）
 - [ ] `GamePlayDataSettings.UIPrefabs` 克隆测试（待实际游戏环境）
 
@@ -2208,7 +2251,7 @@ FeatherPerkTreeInteract.Attach(id, target, "brewmaster");
 ### 验证结果
 
 - [x] `dotnet build` 通过（0 错误，0 警告）
-- [ ] 功能测试（待 DockovDrinks 测试 Mod 验证——Crafting 交互 + 多交互组装 + 交互名显示 + functionContainer 访问）
+- [x] 功能测试（2026-08-07 经 DuckovDrinks 测试 Mod 验证通过——Crafting 交互 + 多交互组装 + 交互名显示 + functionContainer 访问）
 
 ---
 

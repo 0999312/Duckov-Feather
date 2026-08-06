@@ -29,6 +29,7 @@
 - [架构概览](#架构概览)
 - [技术栈](#技术栈)
 - [工程配置](#工程配置)
+- [使用 AI Agent 开发模组](#-使用-ai-agent-开发模组)
 - [文档](#文档)
 - [常见问题 (FAQ)](#常见问题-faq)
 - [贡献指南](#贡献指南)
@@ -198,7 +199,7 @@ FML 提供 **29 个功能模块**，覆盖 Mod 开发的大部分场景：
 | 组件 | 版本/说明 |
 |------|----------|
 | 目标框架 | .NET Standard 2.1 |
-| Harmony | 2.4.1.0（vendored） |
+| Harmony | 2.4.1.0（仓库内 vendored 供编译；运行时由前置 mod HarmonyLoadMod 提供） |
 | Publicizer | Krafs.Publicizer（内部使用，模组无感） |
 | 异步 | UniTask |
 | Mod 排序 | 拓扑排序 + `fml.json` 声明式依赖 |
@@ -227,17 +228,58 @@ FML 提供 **29 个功能模块**，覆盖 Mod 开发的大部分场景：
 
 ---
 
+## 🤖 使用 AI Agent 开发模组
+
+FML 的文档体系专为 AI Agent 协作设计：将 **文档 + DLL** 复制到模组项目工作区，Agent 即可独立完成模组开发。
+
+**一句话提示词**（复制到 Agent 对话）：
+
+> 你正在用 FML（Feather Modding Lib）为《逃离鸭科夫》开发模组。开始前请先阅读工作区 `Docs/` 下的 FML 文档（`USAGE.md` 教程 + `API/` 目录的 API 参考），严格遵循 FML 约定：模组主类继承 `Duckov.Modding.ModBehaviour` 并实现 `IHasModid`；所有公开注册 API 使用 `Identifier`（`duckov` 域引用原版内容）；异步一律使用 UniTask；资源注册后由框架自动卸载。API 签名以 `Docs/API/` 为准，用法不确定时先查 `USAGE.md` 对应章节，不要凭记忆猜测游戏 API。
+
+**需要复制到模组项目工作区的文件**（不含 FML 源码）：
+
+| 文件 | 来源 | 用途 |
+|------|------|------|
+| `libs/FeatherMod.dll` | Steam 创意工坊 / GitHub Release | FML 运行时库（csproj 引用） |
+| `Docs/USAGE.md` | 本仓库 `Docs/` | 教程式使用指南（Agent 上下文） |
+| `Docs/API/`（10 个文件） | 本仓库 `Docs/API/` | API 参考（Agent 检索签名） |
+
+> Harmony 由前置 mod **HarmonyLoadMod**（创意工坊 `workshopId: 3589088839`）提供，不随 FML 分发；模组代码直接用 Harmony API 时仅需编译期引用。
+
+> GitHub Release 提供**两类包**：① **完整 Mod ZIP**（解压放入游戏 `Mods/` 目录即装好框架本体）；② **最小 DLL 包**（`FeatherMod.dll` + 可选 docs，供模组项目引用）。完整配置步骤、模组项目 `AGENTS.md` 模板与 Release 放置清单见 **[Docs/MODDING_WITH_AI.md](Docs/MODDING_WITH_AI.md)**。
+
+---
+
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [Docs/USAGE.md](Docs/USAGE.md) | 完整使用指南 — 快速开始、全模块 API（32 章） |
+| [Docs/USAGE.md](Docs/USAGE.md) | 完整使用指南 — 快速开始、核心概念、全模块教程（32 章） |
+| [Docs/MODDING_WITH_AI.md](Docs/MODDING_WITH_AI.md) | **AI Agent 配置指南** — 一句话提示词、文件清单、模组 AGENTS.md 模板 |
+| [Docs/API/API.md](Docs/API/API.md) | **API 参考索引** — 模块地图 + 命名空间速查 |
+| [Docs/API/API_CORE.md](Docs/API/API_CORE.md) | API 参考 — 核心（Identifier / Registry / EventBus / I18n / ModUtils / AssetUtil / SaveUtils） |
+| [Docs/API/API_ITEMS.md](Docs/API/API_ITEMS.md) | API 参考 — 物品 / 标签 / 模型 / 原版反查 |
+| [Docs/API/API_CRAFTING.md](Docs/API/API_CRAFTING.md) | API 参考 — 合成 / 分解 / ItemEntry |
+| [Docs/API/API_QUESTS.md](Docs/API/API_QUESTS.md) | API 参考 — 任务 / 奖励 / QuestGiver |
+| [Docs/API/API_BUILDING.md](Docs/API/API_BUILDING.md) | API 参考 — 建筑 / MachineRecipe / 建筑 UI / TimeUtils |
+| [Docs/API/API_PERK_ENDOWMENT.md](Docs/API/API_PERK_ENDOWMENT.md) | API 参考 — Perk 技能树 / 天赋 |
+| [Docs/API/API_ENTITIES.md](Docs/API/API_ENTITIES.md) | API 参考 — 敌人 / 友善 NPC / 捏脸 / 装备 / 注入器 |
+| [Docs/API/API_INTERACTION_UI.md](Docs/API/API_INTERACTION_UI.md) | API 参考 — 交互 / View 调度 / UI / 设置面板 |
+| [Docs/API/API_SYSTEM.md](Docs/API/API_SYSTEM.md) | API 参考 — 商店 / 音频 / 经济 / Buff / 容器 / 笔记 / 钓鱼 / 天气 / 多场景 / 对话 |
 | [Docs/MIGRATION.md](Docs/MIGRATION.md) | 迁移指南 — 从旧版 FML 升级 |
 | [Docs/PROGRESS.md](Docs/PROGRESS.md) | 项目进度 — Phase 完成状态与变更记录 |
 
 ---
 
 ## 常见问题 (FAQ)
+
+<details>
+<summary><b>如何安装 FML（框架本体）？</b></summary>
+
+从 **GitHub Release** 下载**完整 Mod ZIP**（或从 **Steam 创意工坊**订阅），解压后将 `FeatherMod/` 目录整体放入游戏 `Mods/` 目录，并在 Steam 创意工坊订阅依赖 **HarmonyLoadMod**（`workshopId: 3589088839`）。在游戏内 Mods 列表确认 FeatherMod 已激活即可。
+
+> 模组开发者不需要安装框架——你的模组通过引用 `FeatherMod.dll` 开发，玩家安装你的模组时自动要求 FML 已安装（`fml.json` 依赖声明）。
+</details>
 
 <details>
 <summary><b>为什么不能用数字 ID？必须走 Identifier？</b></summary>
@@ -270,7 +312,7 @@ FML 提供 **29 个功能模块**，覆盖 Mod 开发的大部分场景：
 }
 ```
 
-FML 会自动按拓扑排序确保依赖先加载。如需**运行时条件注册**（可选联动），可使用 `ModUtils.IsModLoaded(modid)` 在代码中做分支判断。详见 `fml.json` 完整配置说明和 [USAGE.md §34 跨模组联动](Docs/USAGE.md#34-跨模组联动modutils)。
+FML 会自动按拓扑排序确保依赖先加载。如需**运行时条件注册**（可选联动），可使用 `ModUtils.IsModLoaded(modid)` 在代码中做分支判断。详见 `fml.json` 完整配置说明和 [USAGE.md §31 跨模组联动](Docs/USAGE.md#31-跨模组联动--cross-mod-integration)。
 </details>
 
 <details>

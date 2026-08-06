@@ -11,7 +11,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading.Tasks;
 
 using Unity.VisualScripting;
 
@@ -224,6 +223,18 @@ namespace FeatherMod
             SetItemProperties(component, config);
 
             return component;
+        }
+
+        /// <summary>
+        /// 【推荐】异步创建自定义 Item 实例（不注册到 Registry）。Sprite 加载使用异步 IO。
+        /// modid 从调用方程序集名自动推导。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static async UniTask<Item> GetCustomItemAsync(ItemData config)
+        {
+            var callingAssembly = System.Reflection.Assembly.GetCallingAssembly();
+            string modid = callingAssembly.GetName().Name;
+            return await GetCustomItemAsync(new Identifier(modid, config.localizationKey), config);
         }
 
         /// <summary>
@@ -446,33 +457,46 @@ namespace FeatherMod
         /// <summary>
         /// 创建并注册自定义蓝图。modid 从 <see cref="Identifier.Domain"/> 推导。
         /// </summary>
-        public static async Task CreateCustomBluePrintAsync(Identifier id, BlueprintData config)
+        public static async UniTask CreateCustomBluePrintAsync(Identifier id, BlueprintData config)
         {
-            // 确保标签已在游戏中注册（TagUtils.RegisterTag 会先查游戏原生 AllTags，
-            // 已存在则复用，不存在则创建 ScriptableObject 实例并注册到游戏原生数据库）。
-            TagUtils.RegisterTag(DefaultBPTag);
-            TagUtils.RegisterTag(config.FormulaTag, new TagConfig
+            // 在 await 前预定 TypeID，防止被低优先级同步加载抢占。
+            // 若首选 ID 冲突则自动分配空闲值。
+            int actualTypeId = ReserveTypeId(id, config.itemId);
+
+            try
             {
-                Color = Color.blue,
-                Show = true,
-            });
+                // 确保标签已在游戏中注册（TagUtils.RegisterTag 会先查游戏原生 AllTags，
+                // 已存在则复用，不存在则创建 ScriptableObject 实例并注册到游戏原生数据库）。
+                TagUtils.RegisterTag(DefaultBPTag);
+                TagUtils.RegisterTag(config.FormulaTag, new TagConfig
+                {
+                    Color = Color.blue,
+                    Show = true,
+                });
 
-            // 将蓝图通用标签和 formulaTag 注入 tags 列表（避免重复）
-            if (!config.tags.Contains(DefaultBPTag))
-                config.tags.Insert(0, DefaultBPTag);
-            if (!config.tags.Contains(config.FormulaTag))
-                config.tags.Add(config.FormulaTag);
+                // 将蓝图通用标签和 formulaTag 注入 tags 列表（避免重复）
+                if (!config.tags.Contains(DefaultBPTag))
+                    config.tags.Insert(0, DefaultBPTag);
+                if (!config.tags.Contains(config.FormulaTag))
+                    config.tags.Add(config.FormulaTag);
 
-            var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-            Item component = ItemBuilder.New()
-                .TypeID(config.itemId)
-                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
-                .Instantiate();
-            UnityEngine.Object.DontDestroyOnLoad(component);
-            SetItemProperties(component, config);
-            ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
-            formula.formulaID = config.formulaID.Path;  // 游戏原生用 Path，非完整 Identifier
-            RegisterItem(id, component);
+                var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+                Item component = ItemBuilder.New()
+                    .TypeID(actualTypeId)
+                    .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
+                    .Instantiate();
+                UnityEngine.Object.DontDestroyOnLoad(component);
+                SetItemProperties(component, config);
+                ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
+                formula.formulaID = config.formulaID.Path;  // 游戏原生用 Path，非完整 Identifier
+                RegisterItem(id, component);
+            }
+            finally
+            {
+                // 无论成功失败，确保预定被清理。RegisterItem 成功时内部已 ConfirmReservation，
+                // 此处再清一次幂等无害；失败时（如 Sprite 加载异常）释放预定防止 TypeID 泄漏。
+                CancelReservation(id);
+            }
         }
 
         /// <summary>
@@ -812,6 +836,50 @@ namespace FeatherMod
             ItemUtils.SetItemProperties(component, config);
             ItemSetting_Bullet setting = component.AddComponent<ItemSetting_Bullet>();
             ItemUtils.RegisterItem(id, component);
+        }
+
+        /// <summary>
+        /// 【推荐】创建并注册自定义子弹（异步）。Sprite 加载使用异步 IO。
+        /// modid 从 <see cref="Identifier.Domain"/> 推导，mod 目录从 <see cref="ModPathResolver"/> 自动探测。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static async UniTask CreateCustomBulletAsync(Identifier id, BulletData config)
+        {
+            // 在 await 前预定 TypeID，防止被低优先级同步加载抢占。
+            // 若首选 ID 冲突则自动分配空闲值。
+            int actualTypeId = ReserveTypeId(id, config.itemId);
+
+            try
+            {
+                var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+                Item component = ItemBuilder.New()
+                    .TypeID(actualTypeId)
+                    .EnableStacking(config.maxStackCount, 1)
+                    .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath))
+                    .SetConstant("Caliber", config.Caliber, true)
+                    .SetConstant("SFX_Put", config.SFX_Put, false)
+                    .SetConstant("CritDamageFactorGain", config.CritDamageFactorGain, config.CritDamageFactorGain != 0F)
+                    .SetConstant("damageMultiplier", config.damageMultiplier, config.damageMultiplier != 0F)
+                    .SetConstant("CritRateGain", config.CritRateGain, config.CritRateGain != 0F)
+                    .SetConstant("ArmorPiercingGain", config.ArmorPiercingGain, config.ArmorPiercingGain != 0F)
+                    .SetConstant("ArmorBreakGain", config.ArmorBreakGain, config.ArmorBreakGain != 0F)
+                    .SetConstant("DurabilityCost", config.DurabilityCost, config.DurabilityCost != 0F)
+                    .SetConstant("ExplosionRange", config.ExplosionRange, config.ExplosionRange != 0F)
+                    .SetConstant("ExplosionDamage", config.ExplosionDamage, config.ExplosionDamage != 0F)
+                    .SetConstant("buffChanceMultiplier", config.buffChanceMultiplier, true)
+                    .SetConstant("bleedChance", config.bleedChance, true)
+                    .Instantiate();
+                UnityEngine.Object.DontDestroyOnLoad(component);
+                ItemUtils.SetItemProperties(component, config);
+                ItemSetting_Bullet setting = component.AddComponent<ItemSetting_Bullet>();
+                RegisterItem(id, component);
+            }
+            finally
+            {
+                // 无论成功失败，确保预定被清理。RegisterItem 成功时内部已 ConfirmReservation，
+                // 此处再清一次幂等无害；失败时（如 Sprite 加载异常）释放预定防止 TypeID 泄漏。
+                CancelReservation(id);
+            }
         }
 
         /// <summary>
