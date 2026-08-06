@@ -41,6 +41,11 @@ namespace FeatherMod.Register
             return _byNativeKey.TryGetValue(nativeKey, out id);
         }
 
+        public TKey GetNativeKey(T obj)
+        {
+            return _nativeKeySelector(obj);
+        }
+
         /// <summary>
         /// 移除指定 entry 并同步清反向索引。先快照 value 以提取 nativeKey，再调基类
         /// <see cref="SimpleRegistry{T}.Remove(Identifier)"/>（触发 <c>OnRemoved</c>），最后清反向字典。
@@ -65,7 +70,7 @@ namespace FeatherMod.Register
         /// <see cref="SimpleRegistry{T}.RemoveAllByOwner"/>（逐条触发 <c>OnRemoved</c>），
         /// 最后从反向字典移除对应 nativeKey。
         /// </summary>
-        new public int RemoveAllByOwner(string modid)
+        new public int RemoveAllByOwner(string modid, out List<TKey> removedKey)
         {
             var ids = GetAllByOwner(modid);
             var nativeKeys = new List<TKey>(ids.Count);
@@ -81,7 +86,14 @@ namespace FeatherMod.Register
             {
                 _byNativeKey.Remove(nativeKey);
             }
+
+            removedKey = nativeKeys;
             return removed;
+        }
+
+        new public int RemoveAllByOwner(string modid)
+        {
+            return RemoveAllByOwner(modid, out _);
         }
 
         /// <summary>清空主字典与反向索引；不触发 <c>OnRemoved</c> 回调（与基类语义一致）。</summary>
