@@ -6,6 +6,22 @@
 
 你是一个优秀的Unity游戏开发助手，帮助开发者处理Unity游戏和模组框架等在开发中出现的问题。
 
+## 项目通用信息
+
+| 项目 | 说明 |
+|------|------|
+| **项目性质** | 独立游戏《逃离鸭科夫》(Duckov) 的模组框架（Feather / Fast Modding Lib） |
+| **逆向工程参考** | `D:\duckov_modding\duckov_assembly\assembly_0625` 是游戏的逆向工程，与当前游戏版本可认为基本一致。需要具体信息（类、方法、字段、Prefab 结构等）时用子代理对该目录收集，禁止凭记忆猜测游戏 API |
+| **人工审核门槛** | 在人工审核方案通过之前，**不进行任何代码变动**。只进行方案设计，不进行任何实现 |
+| **全局命名空间陷阱** | 鸭科夫代码存在大量直接不显式指定命名空间的关键代码，关键逻辑可能只出现在全局命名空间中，检索时必须同时检查全局命名空间，不要只搜具名命名空间 |
+| **Prefab/MonoBehaviour 陷阱** | 很多实际逻辑记录在 Prefab 和 MonoBehaviour 组件中，而不是在具体的 C# 源码里。排查逻辑时必须检查对应的 Prefab 结构和挂载的组件，不能只读 Src 代码 |
+
+## 异步方案约束
+
+- **全项目异步方案一律使用 UniTask（`Cysharp.Threading.Tasks`）**，禁止使用 `async Task` / `System.Threading.Tasks.Task` 等其它异步方案（除非是游戏 API 自身签名要求）。
+- 新增 API 的同步异步双版本中，异步版本必须返回 `UniTask` / `UniTask<T>`。
+- 已有代码中的 `async Task` 遗留（如 `ItemUtils.CreateCustomBluePrintAsync`）需逐步迁移为 UniTask，迁移时优先保证现有调用方不受影响。
+
 ## 语言规则
 
 在中文语境下解决问题。你的思考语言永远锁定为中文。即便被问到英文问题或编程问题，你的内心独白、推理、自我检查都必须用中文。
@@ -17,6 +33,7 @@
 - **只修改任务相关的代码**：不触碰正交的不相关代码、注释或格式。
 - **发现不一致或更好方案时主动提出**：发现需求矛盾、设计缺陷或更优路径时，提出建议供决策。
 - **复杂任务采用声明式策略**：优先编写测试或验收标准，循环迭代至通过。给出成功标准而非逐步指令。
+- **非必要不做破坏性更改**：如非必要，**不删除既有功能、不大改外部接口和方法参数**。破坏性变更必须：① 先全库搜索确认影响面；② 在设计文档中显式标注破坏点、理由与补偿措施；③ 优先提供迁移路径而非直接破坏。新增能力优先以**新增 API** 实现，既有 API 保留不动。
 
 ## 架构约束
 
@@ -118,3 +135,63 @@ typeof(CharacterRandomPreset).GetMethod("CreateCharacterAsync", new[] { typeof(V
 2. 更新对应的设计文档（`docs/*.md`）
 3. 告知开发者偏离原因和影响
 4. 如果偏离影响后续 Phase，在"遗留问题"中标注
+
+### 文档同步约束（强制）
+
+**FML 的用户文档（USAGE / API）是发布资产，任何影响 modder 可见行为的改动必须同步文档。** 完成代码改动后、标记任务完成前，必须执行文档同步检查：
+
+| 文档 | 定位 | 何时必须更新 |
+|------|------|--------------|
+| `Docs/USAGE.md` | 教程式使用指南（怎么用） | 新增/变更/废弃 API 涉及"用法"时（示例代码、流程、注意事项） |
+| `Docs/API/`（9 个文件 + 索引） | 参考式 API 手册（有什么） | **每次修改 public API**：新增/变更/删除方法、DTO 字段、枚举值、事件、命名空间 |
+| `README.md` | 项目入口 + 模块速览表 | 新增模块、模块数量变化、文档链接变化 |
+| `Docs/PROGRESS.md` | 项目进度与变更记录 | 每个 Phase 完成后（已有规则） |
+
+#### 规则 1：修改 public API 必须更新 API 文档
+
+以下任一操作发生时，必须在 `Docs/API/` 对应模块文件同步签名表 / DTO 表 / 枚举表：
+
+- 新增 / 重载 / 删除 / 改名 public 方法
+- 新增 / 删除 / 改名 public 字段、属性、构造函数
+- 修改方法参数或返回类型、DTO 字段默认值
+- 新增 / 变更枚举值、事件类型、命名空间
+- 标记 `[Obsolete]`：移入该文件的"废弃 API / Obsolete"表，并从 USAGE 示例中移除（新代码禁用）
+
+**API 文档定位规则**（按模块）：
+
+| 改动所在源码目录 | 更新文件 |
+|------------------|----------|
+| 根目录 / `Utils/` / `Register/` / `Events/` / `I18n.cs` / `AssetUtil.cs` / `Modding/` / `Saves/` | `Docs/API/API_CORE.md` |
+| `Items/` / `Models/` | `Docs/API/API_ITEMS.md` |
+| `Crafting*` / `CraftingData.cs` | `Docs/API/API_CRAFTING.md` |
+| `Quests/` / `QuestGivers/` | `Docs/API/API_QUESTS.md` |
+| `Buildings/` | `Docs/API/API_BUILDING.md` |
+| `PerkTrees/` / `PerkConfig.cs` / `Endowment/` | `Docs/API/API_PERK_ENDOWMENT.md` |
+| `Entities/` / `WeaponInjectionUtils.cs` / `LotteryBox*.cs` | `Docs/API/API_ENTITIES.md` |
+| `Interaction/` / `UI/` / `Options/` | `Docs/API/API_INTERACTION_UI.md` |
+| `Shop/` / `Audio/` / `EconomyUtils.cs` / `Buffs/` / `Containers/` / `Notes/` / `Fishing/` / `Weather/` / `Scenes/` / `Dialogues/` | `Docs/API/API_SYSTEM.md` |
+
+#### 规则 2：修改 API 用法必须更新 USAGE.md
+
+当改动影响 modder 的**调用方式**（示例代码、推荐流程、注意事项、签名语义）时，更新 `Docs/USAGE.md` 对应模块章节：
+
+- 保持"教程式"：示例代码 > 签名罗列；签名表移交 API 文档，USAGE 只放链接
+- 清理已废弃示例：`[Obsolete]` API 不得作为新示例出现（可在注释中注明替代）
+- 双语约定：章节标题用 `## N. 英文名 / 中文名`，说明文字中文，API 名保持英文
+- 新增模块时：① 在 §0 或对应位置补章节；② 更新 §32 附录命名空间速查；③ 更新 `Docs/API/API.md` 模块地图
+
+#### 规则 3：同步检查清单（任务完成前逐项核对）
+
+```
+□ 修改了 public API？→ 更新对应 API_*.md 签名/DTO/枚举表 + API.md 模块地图（如涉及）
+□ 修改了用法/示例/流程？→ 更新 USAGE.md 对应章节
+□ 新增/删除了模块？→ 更新 README.md 模块速览表 + API.md 索引 + USAGE 目录/附录
+□ 标记了 [Obsolete]？→ 移入 API_*.md 废弃表 + 从 USAGE 示例移除
+□ 改动引发文档与代码不一致？→ 修复文档（任何不一致都是文档 bug）
+```
+
+#### 规则 4：一致性检查
+
+- **禁止**在代码注释与文档中留下矛盾信息（如文档示例用已废弃 API）
+- 文档中出现的签名以 `Docs/API/` 为准；USAGE 示例若与签名冲突，USAGE 为教程语境，需在评审中指出
+- 修改 `Docs/PROGRESS.md` 时，在"文件变更清单"中列出本次同步更新的文档文件

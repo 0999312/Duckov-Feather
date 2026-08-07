@@ -1,6 +1,89 @@
 # 项目进度文档 (PROGRESS.md)
 
-> 最后更新：2026-07-31
+> 最后更新：2026-08-07
+
+---
+
+## ItemData Slot 抽象 API — ✅ 已完成
+
+**完成时间**: 2026-08-07
+**类型**: 新功能（ItemData 带槽位物品构造）
+
+### 背景
+
+- 游戏原生 `ItemBuilder.Slot(key, requireTags, excludeTags)` 已存在但 FML 未暴露；`Slot` 槽位兼容性完全由 Tag 决定（不查 typeID）
+- 人工审核通过的设计要点：`ItemData.slots` 默认空表 → 无槽位物品（现有 modder 零影响）；Tag 缺失时**不自动注册**，舍弃缺失 Tag 并告警（槽位保留）；提供内建槽位 key 常量类
+- 评审补充：游戏 `Slot` 有 `SlotIcon`（public setter，UI 改装界面显示槽位图标），原生 `ItemBuilder.Slot()` 不支持图标 → 新增 `SlotData.spritePath`，Instantiate 后赋值
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 修改 | `Items/ItemData.cs` | `ItemData` 新增 `slots` 字段（`List<SlotData>`，默认空表）；新增 `SlotData` 类（key / spritePath / requireTags / excludeTags） |
+| 新建 | `Items/SlotKeys.cs` | 游戏内建槽位 key 常量：枪械 6（Scope/Muzzle/Grip/Stock/Tec/Mag）+ 角色 10（Helmet→"Helmat" 等）+ Bait/MonitorSlot/ConsoleSlot；注释明确仅约定 key、不固定 Tag 约束 |
+| 修改 | `Items/ItemUtils.cs` | 新增私有 `ApplySlots`（Tag 解析：缺失 Tag 舍弃+告警、槽位保留）、`ApplySlotIcons` / `ApplySlotIconsAsync`（Instantiate 后赋 `SlotIcon`，同步/异步 IO）；8 个物品构造路径接入（GetCustomItem / GetCustomItemAsync / CreateCustomItem / CreateCustomItemAsync / Cartridge ×4；便捷重载自动生效）；补 `using ItemStatsSystem.Items` |
+| 修改 | `Docs/API/API_ITEMS.md` | ItemData 表加 `slots`；新增 SlotData / SlotKeys 章节；修正 ItemData 命名空间标注 `FeatherMod.Items`→`FeatherMod` |
+| 修改 | `Docs/USAGE.md` | §3.2 新增"带槽位物品"示例（含 Tag 缺失语义说明）；§32.2 命名空间速查修正 `ItemData` 等归属 |
+| 修改 | `Docs/API/API.md` | 命名空间速查：`ItemData` 系列 + `SlotData`/`SlotKeys` 归入 `FeatherMod` |
+
+### 遗留问题
+
+- [ ] `SlotIcon` 效果需游戏内确认：唯一使用点为 `SlotDisplay.Setup`（`Duckov.UI/SlotDisplay.cs` L271-278，`Target.SlotIcon != null` 则显示，否则 `defaultSlotIcon` 兜底）；枪械原生槽位 `slotIcon` 全为 null（默认图标），角色槽位配了图标——自定义槽位图标是否显示待实测
+- [ ] 蓝图（BlueprintData）/子弹（BulletData）构造路径未接入 slots（专用物品无装配语义，如需要可后续扩展）
+
+### 设计偏离
+
+- 设计评审时用户指出 Slot 有 Icon（调研报告未覆盖原生 `ItemBuilder.Slot()` 不接受 icon 的事实）→ 实现拆为 `ApplySlots`（Instantiate 前，key+tags）+ `ApplySlotIcons`（Instantiate 后，icon），避免改动游戏原生 builder
+- Tag 缺失语义按用户确认：不自动注册、舍弃并告警（初始设计为自动注册，已按评审修正）
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` 0 错误（2 个既有警告 QuestGiverTest 与本次无关）
+- [x] 全库 grep 确认 8 个构造路径均已接入 `ApplySlots` + 图标赋值
+- [ ] 功能测试：带槽物品游戏内显示槽位 / 配件装配 / 图标显示——待游戏内验证
+
+---
+
+## ItemGraphic 封装 + OBJ 模型导入 + Item API 双版本核查 — ✅ 已完成
+
+**完成时间**: 2026-08-07
+**类型**: 新功能（对应 `Docs/TODO.md` 新功能 1/2/3）
+
+### 背景
+
+- 用户确认：模型导入不走专用 AssetBundle 工作流独霸，新增"从 mod 目录直接读取 OBJ + 运行时解析"简化路径；AssetBundle 保留并存（复杂模型唯一通道）
+- 用户确认：FBX 首版不支持；纹理沿用 `assets/textures/` 约定（建议 `assets/textures/models/` 与 sprite 隔离）；GO 三级缓存；复用原版 ItemGraphic
+- 设计方案 `Docs/DESIGN_ITEM_GRAPHIC_MODEL_API.md` 经人工审核通过（仅 `CreateCustomBluePrintAsync` Task→UniTask 属必要的破坏性修改，已全库确认零调用方）
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 新建 | `Models/ModelUtils.cs` | OBJ 运行时解析（零分配逐行解析 + `float.TryParse(ReadOnlySpan<char>)` + `struct VertKey` 零装箱唯一化 + n 边形扇形三角化 + 负索引 + 坐标变换 y/z 取反 + UV 翻转）；`LoadMesh`/`LoadMeshAsync` 双版本（IO+解析线程池、主线程组装、16-bit 索引优先、超 65535 自动升 UInt32、`UploadMeshData(true)`）；`GetModelMaterial`/`GetModelMaterialAsync`（`SodaCraft/SodaLit` → URP Lit 兜底、textureId 缓存共享）；`CreateModel`（MeshFilter+MeshRenderer 成对）；Mesh/Material 缓存 + `ReleaseModel`/`ReleaseAllModels`；`.fbx` 降级提示 |
+| 新建 | `Items/ItemGraphicUtils.cs` | `CreateItemGraphic`/`CreateItemGraphicAsync`（ItemGraphicInfo + CharacterSubVisuals，`SetRenderers()` 收集 renderers.Count==1，自动 GroundPoint，sockets null 防御）；`SetItemGraphic`/`SetItemGraphicAsync`（绑定 `item.itemGraphic` Publicizer 直写）；`SetItemGraphicFromOriginal`（复用原版物品 ItemGraphic，`ItemUtils.TryResolveTypeId` → `ItemAssetsCollection.GetPrefab`）；GO 模板缓存 `(meshId, textureId)` + inactive DontDestroyOnLoad 容器（参照 BuildingUtils.PrefabHolder）+ `ReleaseItemGraphic`/`ReleaseAllItemGraphics` |
+| 修改 | `Items/ItemUtils.cs` | `CreateCustomBluePrintAsync` `async Task`→`async UniTask`（**必要的破坏性修改**，全库零调用方）+ 补 `ReserveTypeId`/`CancelReservation` 模式（对齐其它 Async 方法）；新增 `CreateCustomBulletAsync`（ReserveTypeId + 异步 Sprite）；新增 `GetCustomItemAsync(ItemData)` 便捷重载（NoInlining modid 推导）；移除 `using System.Threading.Tasks` |
+| 修改 | `Docs/USAGE.md` | §4.11 新增 ItemGraphic 与模型加载：路径选型表、目录约定（`assets/models/`）、OBJ 导出参数（三角面/Y-up）、FBX 不支持说明、ModelUtils/ItemGraphicUtils 用法、复用原版物品模型示例 |
+| 修改 | `Docs/DESIGN_ITEM_GRAPHIC_MODEL_API.md` | 状态 ⏳ 待人工审核 → ✅ 已批准并实现 |
+
+### 遗留问题
+
+- [ ] 游戏内实测验证（掉落/装备场景 3D 模型显示、挂角色后层切换跟随）——需运行游戏验证
+- [ ] OBJ 多 submesh（`usemtl` 分组）首版按单 submesh 合并，如需多材质支持后续扩展
+- [ ] FBX 运行时导入不支持（游戏内无 FBX SDK）；未来 glTF 2.0 路线独立立项
+- [ ] `SetItemGraphicFromOriginal` 复用后如原版物品被 mod 卸载，共享引用会悬空（与原版共享机制一致，风险已知）
+
+### 设计偏离
+
+- `GetModelMaterial` 设计文档仅有同步版，实现时补充 `GetModelMaterialAsync`（对齐"推荐异步"惯例，纯新增非破坏）
+- `ItemGraphicUtils` 内部 `TryGetOrBuildTemplate` 用返回值替代 `out` 参数（C# 禁止 async 方法声明 out 参数）
+- GO 模板缓存 key 的 `textureKey` 用 `Identifier.ToString()`（"domain:path"），默认材质为空串
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` 0 错误（2 个既有警告：QuestGiverTest 与本次改动无关）
+- [x] `ItemGraphicInfo.sockets`（protected）/ `Item.itemGraphic`（private）经 Publicizer 直接赋值，零反射
+- [x] 全库 grep 确认 `CreateCustomBluePrintAsync` 无外部调用方
+- [ ] 功能测试：OBJ 解析正确性 / 模板缓存命中 / 原版复用绑定 / 游戏内显示——待游戏内验证
 
 ---
 
@@ -1424,7 +1507,7 @@ DuckovDrinks 测试 Mod 在集成 FML 时发现四个问题：
 ### 验证结果
 
 - [x] `dotnet build` 通过（0 错误，53 预先存在警告）
-- [ ] DuckovDrinks 功能测试（待验证）
+- [x] DuckovDrinks 功能测试（2026-08-07 验证通过）
 - [ ] 功能测试（待游戏运行时验证）
 - [ ] `GamePlayDataSettings.UIPrefabs` 克隆测试（待实际游戏环境）
 
@@ -2208,7 +2291,7 @@ FeatherPerkTreeInteract.Attach(id, target, "brewmaster");
 ### 验证结果
 
 - [x] `dotnet build` 通过（0 错误，0 警告）
-- [ ] 功能测试（待 DockovDrinks 测试 Mod 验证——Crafting 交互 + 多交互组装 + 交互名显示 + functionContainer 访问）
+- [x] 功能测试（2026-08-07 经 DuckovDrinks 测试 Mod 验证通过——Crafting 交互 + 多交互组装 + 交互名显示 + functionContainer 访问）
 
 ---
 

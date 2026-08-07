@@ -6,12 +6,12 @@ using FeatherMod.Items;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using ItemStatsSystem;
+using ItemStatsSystem.Items;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading.Tasks;
 
 using Unity.VisualScripting;
 
@@ -201,6 +201,93 @@ namespace FeatherMod
         // ===== 物品构造 =====
 
         /// <summary>
+        /// 将 <see cref="ItemData.slots"/> 应用到 ItemBuilder。
+        /// 空表 / null → 无槽位物品。Tag 解析规则：必须已存在（游戏原生或 <see cref="TagUtils.RegisterTag"/> 注册），
+        /// 不存在的 Tag 舍弃并告警（槽位本身保留）。
+        /// </summary>
+        private static void ApplySlots(ItemBuilder itemBuilder, ItemData config)
+        {
+            if (config.slots == null || config.slots.Count == 0)
+                return;
+
+            void Resolve(List<string> names, List<Tag> target, string slotKey)
+            {
+                foreach (string tagName in names)
+                {
+                    Tag? tag = TagUtils.GetTag(tagName);
+                    if (tag != null)
+                    {
+                        target.Add(tag);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[FML] 槽位 '{slotKey}' 引用的 Tag '{tagName}' 不存在，已舍弃（槽位保留）。请先用 TagUtils.RegisterTag 注册。");
+                    }
+                }
+            }
+
+            foreach (SlotData slot in config.slots)
+            {
+                if (string.IsNullOrWhiteSpace(slot.key))
+                {
+                    Debug.LogWarning($"[FML] ItemData '{config.localizationKey}' 存在空 key 的槽位配置，已跳过。");
+                    continue;
+                }
+
+                List<Tag> requireTags = new List<Tag>();
+                List<Tag> excludeTags = new List<Tag>();
+                Resolve(slot.requireTags, requireTags, slot.key);
+                Resolve(slot.excludeTags, excludeTags, slot.key);
+                itemBuilder.Slot(slot.key, requireTags, excludeTags);
+            }
+        }
+
+        /// <summary>
+        /// 将 <see cref="SlotData.spritePath"/> 应用到已实例化的槽位（游戏 ItemBuilder.Slot 不接受图标，须在 Instantiate 后赋值）。
+        /// 必须在 <see cref="ApplySlots"/> 之后、物品实例化后调用。spritePath 为空的槽位跳过（UI 显示默认槽位图标）。
+        /// </summary>
+        private static void ApplySlotIcons(Item item, ItemData config, string? modDir)
+        {
+            if (config.slots == null || config.slots.Count == 0 || item.Slots == null)
+                return;
+
+            foreach (SlotData slot in config.slots)
+            {
+                if (string.IsNullOrWhiteSpace(slot.spritePath))
+                    continue;
+
+                Slot? gameSlot = item.Slots.GetSlot(slot.key);
+                if (gameSlot == null)
+                {
+                    Debug.LogWarning($"[FML] 槽位 '{slot.key}' 未创建，无法设置图标（spritePath='{slot.spritePath}'）。");
+                    continue;
+                }
+                gameSlot.SlotIcon = LoadSpriteFromDir(modDir!, slot.spritePath);
+            }
+        }
+
+        /// <summary><see cref="ApplySlotIcons"/> 的异步版本，Sprite 加载使用异步 IO。</summary>
+        private static async UniTask ApplySlotIconsAsync(Item item, ItemData config, string? modDir)
+        {
+            if (config.slots == null || config.slots.Count == 0 || item.Slots == null)
+                return;
+
+            foreach (SlotData slot in config.slots)
+            {
+                if (string.IsNullOrWhiteSpace(slot.spritePath))
+                    continue;
+
+                Slot? gameSlot = item.Slots.GetSlot(slot.key);
+                if (gameSlot == null)
+                {
+                    Debug.LogWarning($"[FML] 槽位 '{slot.key}' 未创建，无法设置图标（spritePath='{slot.spritePath}'）。");
+                    continue;
+                }
+                gameSlot.SlotIcon = await LoadSpriteFromDirAsync(modDir!, slot.spritePath);
+            }
+        }
+
+        /// <summary>
         /// 创建自定义 Item 实例（不注册到 Registry）。modid 从调用方程序集名自动推导。
         /// 要求调用方已通过 <see cref="ModPathResolver.Register"/> 注册路径。
         /// </summary>
@@ -280,14 +367,28 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
 
             return component;
+        }
+
+        /// <summary>
+        /// 【推荐】异步创建自定义 Item 实例（不注册到 Registry）。Sprite 加载使用异步 IO。
+        /// modid 从调用方程序集名自动推导。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static async UniTask<Item> GetCustomItemAsync(ItemData config)
+        {
+            var callingAssembly = System.Reflection.Assembly.GetCallingAssembly();
+            string modid = callingAssembly.GetName().Name;
+            return await GetCustomItemAsync(new Identifier(modid, config.localizationKey), config);
         }
 
         /// <summary>
@@ -359,9 +460,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            await ApplySlotIconsAsync(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -444,9 +547,11 @@ namespace FeatherMod
                 {
                     itemBuilder.Modifier(modifier.getModifier());
                 });
+                ApplySlots(itemBuilder, config);
 
                 Item component = itemBuilder
                     .Instantiate();
+                await ApplySlotIconsAsync(component, config, modDir);
 
                 UnityEngine.Object.DontDestroyOnLoad(component);
                 SetItemProperties(component, config);
@@ -530,9 +635,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -605,9 +712,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -686,9 +795,11 @@ namespace FeatherMod
                 {
                     itemBuilder.Modifier(modifier.getModifier());
                 });
+                ApplySlots(itemBuilder, config);
 
                 Item component = itemBuilder
                     .Instantiate();
+                await ApplySlotIconsAsync(component, config, modDir);
 
                 UnityEngine.Object.DontDestroyOnLoad(component);
                 SetItemProperties(component, config);
@@ -769,9 +880,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -850,9 +963,11 @@ namespace FeatherMod
                 {
                     itemBuilder.Modifier(modifier.getModifier());
                 });
+                ApplySlots(itemBuilder, config);
 
                 Item component = itemBuilder
                     .Instantiate();
+                await ApplySlotIconsAsync(component, config, modDir);
 
                 UnityEngine.Object.DontDestroyOnLoad(component);
                 SetItemProperties(component, config);
@@ -876,31 +991,44 @@ namespace FeatherMod
         /// </summary>
         public static async UniTask CreateCustomBluePrintAsync(Identifier id, BlueprintData config)
         {
-            // 确保标签已在游戏中注册（TagUtils.RegisterTag 会先查游戏原生 AllTags，
-            // 已存在则复用，不存在则创建 ScriptableObject 实例并注册到游戏原生数据库）。
-            TagUtils.RegisterTag(DefaultBPTag);
-            TagUtils.RegisterTag(config.FormulaTag, new TagConfig
+            // 在 await 前预定 TypeID，防止被低优先级同步加载抢占。
+            // 若首选 ID 冲突则自动分配空闲值。
+            int actualTypeId = ReserveTypeId(id, config.itemId);
+
+            try
             {
-                Color = Color.blue,
-                Show = true,
-            });
+                // 确保标签已在游戏中注册（TagUtils.RegisterTag 会先查游戏原生 AllTags，
+                // 已存在则复用，不存在则创建 ScriptableObject 实例并注册到游戏原生数据库）。
+                TagUtils.RegisterTag(DefaultBPTag);
+                TagUtils.RegisterTag(config.FormulaTag, new TagConfig
+                {
+                    Color = Color.blue,
+                    Show = true,
+                });
 
-            // 将蓝图通用标签和 formulaTag 注入 tags 列表（避免重复）
-            if (!config.tags.Contains(DefaultBPTag))
-                config.tags.Insert(0, DefaultBPTag);
-            if (!config.tags.Contains(config.FormulaTag))
-                config.tags.Add(config.FormulaTag);
+                // 将蓝图通用标签和 formulaTag 注入 tags 列表（避免重复）
+                if (!config.tags.Contains(DefaultBPTag))
+                    config.tags.Insert(0, DefaultBPTag);
+                if (!config.tags.Contains(config.FormulaTag))
+                    config.tags.Add(config.FormulaTag);
 
-            var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-            Item component = ItemBuilder.New()
-                .TypeID(config.itemId)
-                .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
-                .Instantiate();
-            UnityEngine.Object.DontDestroyOnLoad(component);
-            SetItemProperties(component, config);
-            ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
-            formula.formulaID = config.formulaID.Path;  // 游戏原生用 Path，非完整 Identifier
-            RegisterItem(id, component);
+                var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+                Item component = ItemBuilder.New()
+                    .TypeID(actualTypeId)
+                    .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
+                    .Instantiate();
+                UnityEngine.Object.DontDestroyOnLoad(component);
+                SetItemProperties(component, config);
+                ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
+                formula.formulaID = config.formulaID.Path;  // 游戏原生用 Path，非完整 Identifier
+                RegisterItem(id, component);
+            }
+            finally
+            {
+                // 无论成功失败，确保预定被清理。RegisterItem 成功时内部已 ConfirmReservation，
+                // 此处再清一次幂等无害；失败时（如 Sprite 加载异常）释放预定防止 TypeID 泄漏。
+                CancelReservation(id);
+            }
         }
 
         /// <summary>
@@ -1303,6 +1431,50 @@ namespace FeatherMod
             ItemUtils.SetItemProperties(component, config);
             ItemSetting_Bullet setting = component.AddComponent<ItemSetting_Bullet>();
             ItemUtils.RegisterItem(id, component);
+        }
+
+        /// <summary>
+        /// 【推荐】创建并注册自定义子弹（异步）。Sprite 加载使用异步 IO。
+        /// modid 从 <see cref="Identifier.Domain"/> 推导，mod 目录从 <see cref="ModPathResolver"/> 自动探测。
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static async UniTask CreateCustomBulletAsync(Identifier id, BulletData config)
+        {
+            // 在 await 前预定 TypeID，防止被低优先级同步加载抢占。
+            // 若首选 ID 冲突则自动分配空闲值。
+            int actualTypeId = ReserveTypeId(id, config.itemId);
+
+            try
+            {
+                var modDir = ModPathResolver.ResolveDirectory(id.Domain);
+                Item component = ItemBuilder.New()
+                    .TypeID(actualTypeId)
+                    .EnableStacking(config.maxStackCount, 1)
+                    .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath))
+                    .SetConstant("Caliber", config.Caliber, true)
+                    .SetConstant("SFX_Put", config.SFX_Put, false)
+                    .SetConstant("CritDamageFactorGain", config.CritDamageFactorGain, config.CritDamageFactorGain != 0F)
+                    .SetConstant("damageMultiplier", config.damageMultiplier, config.damageMultiplier != 0F)
+                    .SetConstant("CritRateGain", config.CritRateGain, config.CritRateGain != 0F)
+                    .SetConstant("ArmorPiercingGain", config.ArmorPiercingGain, config.ArmorPiercingGain != 0F)
+                    .SetConstant("ArmorBreakGain", config.ArmorBreakGain, config.ArmorBreakGain != 0F)
+                    .SetConstant("DurabilityCost", config.DurabilityCost, config.DurabilityCost != 0F)
+                    .SetConstant("ExplosionRange", config.ExplosionRange, config.ExplosionRange != 0F)
+                    .SetConstant("ExplosionDamage", config.ExplosionDamage, config.ExplosionDamage != 0F)
+                    .SetConstant("buffChanceMultiplier", config.buffChanceMultiplier, true)
+                    .SetConstant("bleedChance", config.bleedChance, true)
+                    .Instantiate();
+                UnityEngine.Object.DontDestroyOnLoad(component);
+                ItemUtils.SetItemProperties(component, config);
+                ItemSetting_Bullet setting = component.AddComponent<ItemSetting_Bullet>();
+                RegisterItem(id, component);
+            }
+            finally
+            {
+                // 无论成功失败，确保预定被清理。RegisterItem 成功时内部已 ConfirmReservation，
+                // 此处再清一次幂等无害；失败时（如 Sprite 加载异常）释放预定防止 TypeID 泄漏。
+                CancelReservation(id);
+            }
         }
 
         /// <summary>
