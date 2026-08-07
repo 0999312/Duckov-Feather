@@ -1,5 +1,8 @@
 ﻿using FeatherMod.Utils;
 using System;
+
+using Duckov.Utilities;
+
 using UnityEngine;
 
 namespace FeatherMod.Register
@@ -36,10 +39,12 @@ namespace FeatherMod.Register
         // 升级为 ReverseLookupRegistry<int,int>（R6）以支持 ItemUtils.TryGetCustomItem 反查；
         // nativeKeySelector 为 identity（T=int, TKey=int）。
         public readonly ReverseLookupRegistry<int, int> ItemID = new ReverseLookupRegistry<int, int>(typeID => typeID);
+        public readonly ReverseLookupRegistry<Tag, string> TagRegistry = new(tag => tag.name);
 
         protected RegistryManager()
         {
             Registry.Set(new Identifier(FMLConstants.Domain, "itemid"), ItemID);
+            Registry.Set(new Identifier(FMLConstants.Domain, "tags"), TagRegistry);
         }
 
         /// <summary>

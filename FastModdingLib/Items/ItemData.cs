@@ -1,10 +1,19 @@
-﻿using Duckov.Buffs;
+﻿using System;
+
+using Duckov.Buffs;
 using Duckov.ItemUsage;
 using Duckov.Utilities;
 using FeatherMod.Utils;
 using ItemStatsSystem;
 using ItemStatsSystem.Stats;
 using System.Collections.Generic;
+
+using Duckov.ItemBuilders;
+
+using FeatherMod.Items;
+using FeatherMod.Register;
+using FeatherMod.Utils;
+
 using Unity.VisualScripting;
 
 namespace FeatherMod
@@ -25,6 +34,16 @@ namespace FeatherMod
         public List<string> tags = new List<string>();
         public UsageData? usages;
         public List<ModifierData> modifiers = new List<ModifierData>();
+
+        public Dictionary<string, (object, bool)> consts = new();
+        public Dictionary<string, (object, bool)> variables = new();
+
+        public void AddTags(Identifier tag)
+        {
+            string? v = TagLookup.GetNativeMayNotExist(tag);
+            if (v == null) throw new IndexOutOfRangeException($"Key {tag} has not yet been registered.");
+            tags.Add(v);
+        }
 
         /// <summary>槽位配置。默认空表 → 无槽位物品。槽位约束完全由 Tag 决定，见 <see cref="SlotData"/>。</summary>
         public List<SlotData> slots = new List<SlotData>();
