@@ -6,6 +6,7 @@ using FeatherMod.Items;
 using FeatherMod.Register;
 using FeatherMod.Utils;
 using ItemStatsSystem;
+using ItemStatsSystem.Items;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -188,6 +189,93 @@ namespace FeatherMod
         // ===== 物品构造 =====
 
         /// <summary>
+        /// 将 <see cref="ItemData.slots"/> 应用到 ItemBuilder。
+        /// 空表 / null → 无槽位物品。Tag 解析规则：必须已存在（游戏原生或 <see cref="TagUtils.RegisterTag"/> 注册），
+        /// 不存在的 Tag 舍弃并告警（槽位本身保留）。
+        /// </summary>
+        private static void ApplySlots(ItemBuilder itemBuilder, ItemData config)
+        {
+            if (config.slots == null || config.slots.Count == 0)
+                return;
+
+            void Resolve(List<string> names, List<Tag> target, string slotKey)
+            {
+                foreach (string tagName in names)
+                {
+                    Tag? tag = TagUtils.GetTag(tagName);
+                    if (tag != null)
+                    {
+                        target.Add(tag);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[FML] 槽位 '{slotKey}' 引用的 Tag '{tagName}' 不存在，已舍弃（槽位保留）。请先用 TagUtils.RegisterTag 注册。");
+                    }
+                }
+            }
+
+            foreach (SlotData slot in config.slots)
+            {
+                if (string.IsNullOrWhiteSpace(slot.key))
+                {
+                    Debug.LogWarning($"[FML] ItemData '{config.localizationKey}' 存在空 key 的槽位配置，已跳过。");
+                    continue;
+                }
+
+                List<Tag> requireTags = new List<Tag>();
+                List<Tag> excludeTags = new List<Tag>();
+                Resolve(slot.requireTags, requireTags, slot.key);
+                Resolve(slot.excludeTags, excludeTags, slot.key);
+                itemBuilder.Slot(slot.key, requireTags, excludeTags);
+            }
+        }
+
+        /// <summary>
+        /// 将 <see cref="SlotData.spritePath"/> 应用到已实例化的槽位（游戏 ItemBuilder.Slot 不接受图标，须在 Instantiate 后赋值）。
+        /// 必须在 <see cref="ApplySlots"/> 之后、物品实例化后调用。spritePath 为空的槽位跳过（UI 显示默认槽位图标）。
+        /// </summary>
+        private static void ApplySlotIcons(Item item, ItemData config, string? modDir)
+        {
+            if (config.slots == null || config.slots.Count == 0 || item.Slots == null)
+                return;
+
+            foreach (SlotData slot in config.slots)
+            {
+                if (string.IsNullOrWhiteSpace(slot.spritePath))
+                    continue;
+
+                Slot? gameSlot = item.Slots.GetSlot(slot.key);
+                if (gameSlot == null)
+                {
+                    Debug.LogWarning($"[FML] 槽位 '{slot.key}' 未创建，无法设置图标（spritePath='{slot.spritePath}'）。");
+                    continue;
+                }
+                gameSlot.SlotIcon = LoadSpriteFromDir(modDir!, slot.spritePath);
+            }
+        }
+
+        /// <summary><see cref="ApplySlotIcons"/> 的异步版本，Sprite 加载使用异步 IO。</summary>
+        private static async UniTask ApplySlotIconsAsync(Item item, ItemData config, string? modDir)
+        {
+            if (config.slots == null || config.slots.Count == 0 || item.Slots == null)
+                return;
+
+            foreach (SlotData slot in config.slots)
+            {
+                if (string.IsNullOrWhiteSpace(slot.spritePath))
+                    continue;
+
+                Slot? gameSlot = item.Slots.GetSlot(slot.key);
+                if (gameSlot == null)
+                {
+                    Debug.LogWarning($"[FML] 槽位 '{slot.key}' 未创建，无法设置图标（spritePath='{slot.spritePath}'）。");
+                    continue;
+                }
+                gameSlot.SlotIcon = await LoadSpriteFromDirAsync(modDir!, slot.spritePath);
+            }
+        }
+
+        /// <summary>
         /// 创建自定义 Item 实例（不注册到 Registry）。modid 从调用方程序集名自动推导。
         /// 要求调用方已通过 <see cref="ModPathResolver.Register"/> 注册路径。
         /// </summary>
@@ -215,9 +303,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -254,9 +344,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            await ApplySlotIconsAsync(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -287,9 +379,11 @@ namespace FeatherMod
                 {
                     itemBuilder.Modifier(modifier.getModifier());
                 });
+                ApplySlots(itemBuilder, config);
 
                 Item component = itemBuilder
                     .Instantiate();
+                await ApplySlotIconsAsync(component, config, modDir);
 
                 UnityEngine.Object.DontDestroyOnLoad(component);
                 SetItemProperties(component, config);
@@ -321,9 +415,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -344,9 +440,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -373,9 +471,11 @@ namespace FeatherMod
                 {
                     itemBuilder.Modifier(modifier.getModifier());
                 });
+                ApplySlots(itemBuilder, config);
 
                 Item component = itemBuilder
                     .Instantiate();
+                await ApplySlotIconsAsync(component, config, modDir);
 
                 UnityEngine.Object.DontDestroyOnLoad(component);
                 SetItemProperties(component, config);
@@ -404,9 +504,11 @@ namespace FeatherMod
             {
                 itemBuilder.Modifier(modifier.getModifier());
             });
+            ApplySlots(itemBuilder, config);
 
             Item component = itemBuilder
                 .Instantiate();
+            ApplySlotIcons(component, config, modDir);
 
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
@@ -433,9 +535,11 @@ namespace FeatherMod
                 {
                     itemBuilder.Modifier(modifier.getModifier());
                 });
+                ApplySlots(itemBuilder, config);
 
                 Item component = itemBuilder
                     .Instantiate();
+                await ApplySlotIconsAsync(component, config, modDir);
 
                 UnityEngine.Object.DontDestroyOnLoad(component);
                 SetItemProperties(component, config);

@@ -25,6 +25,30 @@ namespace FeatherMod
         public List<string> tags = new List<string>();
         public UsageData? usages;
         public List<ModifierData> modifiers = new List<ModifierData>();
+
+        /// <summary>槽位配置。默认空表 → 无槽位物品。槽位约束完全由 Tag 决定，见 <see cref="SlotData"/>。</summary>
+        public List<SlotData> slots = new List<SlotData>();
+    }
+
+    /// <summary>
+    /// 物品槽位配置（游戏 <c>ItemStatsSystem.Items.Slot</c> 的抽象层）。
+    /// 槽位兼容性完全由 Tag 决定——游戏 <c>Slot.CheckAbleToPlug</c> 只校验 requireTags/excludeTags，不查 typeID。
+    /// 引用的 Tag 必须已存在（游戏原生 Tag 或 <see cref="TagUtils.RegisterTag"/> 注册）；不存在的 Tag 会被舍弃并告警，槽位本身保留。
+    /// </summary>
+    public class SlotData
+    {
+        /// <summary>槽位唯一标识。游戏内建 key 见 <see cref="SlotKeys"/>（如 "Muzzle" / "Scope"）。</summary>
+        public string key = string.Empty;
+
+        /// <summary>槽位图标路径（`assets/textures/` 下，与 <see cref="ItemData.spritePath"/> 同一约定）。
+        /// 留空 = 不设置图标，UI 显示默认槽位图标。</summary>
+        public string spritePath = string.Empty;
+
+        /// <summary>可装配件必须全部携带的 Tag 名称。</summary>
+        public List<string> requireTags = new List<string>();
+
+        /// <summary>禁止携带的 Tag 名称。</summary>
+        public List<string> excludeTags = new List<string>();
     }
 
     public class ModifierData

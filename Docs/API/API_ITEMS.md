@@ -12,6 +12,7 @@
 - [BlueprintData / BulletData — 蓝图与子弹](#blueprintdata--bulletdata)
 - [UsageData / UsageBehaviorData — 使用行为](#usagedata--usagebehaviordata)
 - [ModifierData — 属性修正](#modifierdata)
+- [SlotData / SlotKeys — 物品槽位](#slotdata--slotkeys--物品槽位)
 - [GameItemLookup — 原版物品反查](#gameitemlookup)
 - [TagUtils — 标签系统](#tagutils)
 - [ItemGraphicUtils — 3D 展示](#itemgraphicutils)
@@ -62,7 +63,7 @@
 
 ## ItemData
 
-**命名空间**：`FeatherMod.Items` | **源码**：`Items/ItemData.cs`
+**命名空间**：`FeatherMod` | **源码**：`Items/ItemData.cs`
 
 | 字段 | 类型 | 默认 | 说明 |
 |------|------|------|------|
@@ -80,6 +81,7 @@
 | `tags` | `List<string>` | — | 标签（需先 `TagUtils.RegisterTag`） |
 | `usages` | `UsageData?` | — | 使用行为 |
 | `modifiers` | `List<ModifierData>` | — | 属性修正 |
+| `slots` | `List<SlotData>` | 空表（无槽位） | 槽位配置，见 [SlotData](#slotdata--slotkeys--物品槽位) |
 
 ---
 
@@ -149,6 +151,40 @@
 | `overrideOrder` | `bool` | 覆盖计算顺序 |
 | `overrideOrderValue` | `int` | 顺序值 |
 | `display` | `bool` | 是否在 Tooltip 显示 |
+
+---
+
+## SlotData / SlotKeys — 物品槽位
+
+**命名空间**：`FeatherMod` | **源码**：`Items/ItemData.cs` / `Items/SlotKeys.cs`
+
+### SlotData
+
+游戏 `ItemStatsSystem.Items.Slot` 的抽象层，经 `ItemData.slots` 配置后由 ItemUtils 构造带槽位物品。**槽位兼容性完全由 Tag 决定**（游戏 `Slot.CheckAbleToPlug` 只校验 requireTags/excludeTags，不查 typeID）。
+
+| 字段 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `key` | `string` | — | 槽位唯一标识（内建 key 见 SlotKeys） |
+| `spritePath` | `string` | 空 | 槽位图标路径（`assets/textures/` 下）；留空显示 UI 默认槽位图标 |
+| `requireTags` | `List<string>` | — | 可装配件必须全部携带的 Tag 名称 |
+| `excludeTags` | `List<string>` | — | 禁止携带的 Tag 名称 |
+
+> **Tag 解析规则**：引用的 Tag 必须已存在（游戏原生 Tag 或 `TagUtils.RegisterTag` 注册）；不存在的 Tag 会被舍弃并告警，**槽位本身保留**。
+
+> **装配入口**：槽位物品可通过 `Slot.Plug(item)` / `ItemUtilities.TryPlug(item)` 装配，改装界面（`ItemCustomizeView`）自动生效。
+
+### SlotKeys — 游戏内建槽位 key 常量
+
+仅约定标识字符串，**不固定 Tag 约束**（例如枪械槽位的 Tag 实际来自 Bundle 内枪械预制体，不同武器可能不同）。
+
+| 常量 | 值 | 归属 |
+|------|----|------|
+| `Scope` / `Muzzle` / `Grip` / `Stock` / `Tec` / `Mag` | 同名 | 枪械（`1_Rifle-A_template.prefab`） |
+| `PrimaryWeapon` / `SecondaryWeapon` / `MeleeWeapon` | 同名 | 角色 |
+| `Helmet` | `"Helmat"`（游戏原生拼写） | 角色头盔 |
+| `Armor` / `FaceMask` / `Headset` / `Backpack` / `Totem1` / `Totem2` | 同名 | 角色 |
+| `Bait` | `"Bait"` | 鱼竿饵料 |
+| `MonitorSlot` / `ConsoleSlot` | 同名 | 游戏机 |
 
 ---
 

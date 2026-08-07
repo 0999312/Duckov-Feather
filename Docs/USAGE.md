@@ -340,6 +340,52 @@ ItemUtils.CreateCustomItem(new Identifier("mymod", "coffee"), itemData);
 | `RemoveBuffData` | 移除 Buff | `buffID`, `removeLayerCount` |
 | `ReturnItemData` | 使用后返还物品 | `itemTypeID`, `display` |
 
+#### 带槽位物品 / Items with Slots
+
+通过 `ItemData.slots` 给物品装配槽位（如自定义枪口槽），槽位兼容性完全由 Tag 决定：
+
+```csharp
+// 自定义 Tag 需先注册；游戏原生 Tag（"Muzzle"、"Scope" 等）已存在，无需注册
+TagUtils.RegisterTag("Rail");
+TagUtils.RegisterTag("CustomRail");
+
+var weaponData = new ItemData
+{
+    itemId = 150002,
+    localizationKey = "item_custom_weapon",
+    weight = 3.5f,
+    value = 1200,
+    tags = new List<string> { "Gun" },          // 枪械类物品需携带 "Gun" Tag 才能装入角色武器槽
+    slots = new List<SlotData>
+    {
+        new SlotData
+        {
+            key = SlotKeys.Muzzle,              // 复用游戏内建槽位 key
+            spritePath = "muzzle_slot.png",     // 槽位图标（可选，留空显示默认图标）
+            requireTags = new List<string> { "Muzzle" },  // 只允许携带 Muzzle Tag 的配件装入
+        },
+        new SlotData
+        {
+            key = "Rails",                      // 自定义槽位 key
+            requireTags = new List<string> { "Rail", "CustomRail" }, // 必须全部满足
+        },
+    },
+};
+
+await ItemUtils.CreateCustomItemAsync(new Identifier("mymod", "custom_weapon"), weaponData);
+
+// 配件物品：携带槽位要求的 Tag 即可被装入
+var muzzleData = new ItemData
+{
+    itemId = 150003,
+    localizationKey = "item_custom_muzzle",
+    tags = new List<string> { "Muzzle", "Accessory" },
+};
+await ItemUtils.CreateCustomItemAsync(new Identifier("mymod", "custom_muzzle"), muzzleData);
+```
+
+> **注意**：`requireTags` / `excludeTags` 引用的 Tag 必须已存在（原生 Tag 或 `TagUtils.RegisterTag`）。不存在的 Tag 会被舍弃并打印警告，**槽位本身保留**（该槽位将永远无法装入任何配件）。
+
 ### 3.3 仅构造不注册 / Construct Only
 
 ```csharp
@@ -2874,7 +2920,7 @@ MyMod/
 | `FeatherMod.Audio` | `AudioUtil`, `AudioData` |
 | `FeatherMod.Options` | `ModOptionsRegistry`, `ModOptionsBuilder` |
 | `FeatherMod.Entities` | `IStateConfig`, `Transition`, `EnemyPresetData`, `FriendlyNpcConfig`, `FaceRef`, `NpcRole`, `ModelRef` |
-| `FeatherMod.Items` | `ItemData`, `BulletData`, `BlueprintData`, `UsageData`, `ModifierData`, `GameItemLookup`, `TagUtils` |
+| `FeatherMod.Items` | `GameItemLookup`, `TagUtils`, `TagConfig` |
 | `FeatherMod.Crafting` | `CraftingFormulaData`, `DecomposeFormulaData`, `ItemEntry` |
 | `FeatherMod.Quests` | `QuestData`, `TaskData`, `RewardData` 及其子类 |
 | `FeatherMod.Saves` | `SaveUtils`, `ES3Validator` |

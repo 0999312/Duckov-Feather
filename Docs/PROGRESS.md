@@ -4,6 +4,46 @@
 
 ---
 
+## ItemData Slot 抽象 API — ✅ 已完成
+
+**完成时间**: 2026-08-07
+**类型**: 新功能（ItemData 带槽位物品构造）
+
+### 背景
+
+- 游戏原生 `ItemBuilder.Slot(key, requireTags, excludeTags)` 已存在但 FML 未暴露；`Slot` 槽位兼容性完全由 Tag 决定（不查 typeID）
+- 人工审核通过的设计要点：`ItemData.slots` 默认空表 → 无槽位物品（现有 modder 零影响）；Tag 缺失时**不自动注册**，舍弃缺失 Tag 并告警（槽位保留）；提供内建槽位 key 常量类
+- 评审补充：游戏 `Slot` 有 `SlotIcon`（public setter，UI 改装界面显示槽位图标），原生 `ItemBuilder.Slot()` 不支持图标 → 新增 `SlotData.spritePath`，Instantiate 后赋值
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 修改 | `Items/ItemData.cs` | `ItemData` 新增 `slots` 字段（`List<SlotData>`，默认空表）；新增 `SlotData` 类（key / spritePath / requireTags / excludeTags） |
+| 新建 | `Items/SlotKeys.cs` | 游戏内建槽位 key 常量：枪械 6（Scope/Muzzle/Grip/Stock/Tec/Mag）+ 角色 10（Helmet→"Helmat" 等）+ Bait/MonitorSlot/ConsoleSlot；注释明确仅约定 key、不固定 Tag 约束 |
+| 修改 | `Items/ItemUtils.cs` | 新增私有 `ApplySlots`（Tag 解析：缺失 Tag 舍弃+告警、槽位保留）、`ApplySlotIcons` / `ApplySlotIconsAsync`（Instantiate 后赋 `SlotIcon`，同步/异步 IO）；8 个物品构造路径接入（GetCustomItem / GetCustomItemAsync / CreateCustomItem / CreateCustomItemAsync / Cartridge ×4；便捷重载自动生效）；补 `using ItemStatsSystem.Items` |
+| 修改 | `Docs/API/API_ITEMS.md` | ItemData 表加 `slots`；新增 SlotData / SlotKeys 章节；修正 ItemData 命名空间标注 `FeatherMod.Items`→`FeatherMod` |
+| 修改 | `Docs/USAGE.md` | §3.2 新增"带槽位物品"示例（含 Tag 缺失语义说明）；§32.2 命名空间速查修正 `ItemData` 等归属 |
+| 修改 | `Docs/API/API.md` | 命名空间速查：`ItemData` 系列 + `SlotData`/`SlotKeys` 归入 `FeatherMod` |
+
+### 遗留问题
+
+- [ ] `SlotIcon` 效果需游戏内确认：唯一使用点为 `SlotDisplay.Setup`（`Duckov.UI/SlotDisplay.cs` L271-278，`Target.SlotIcon != null` 则显示，否则 `defaultSlotIcon` 兜底）；枪械原生槽位 `slotIcon` 全为 null（默认图标），角色槽位配了图标——自定义槽位图标是否显示待实测
+- [ ] 蓝图（BlueprintData）/子弹（BulletData）构造路径未接入 slots（专用物品无装配语义，如需要可后续扩展）
+
+### 设计偏离
+
+- 设计评审时用户指出 Slot 有 Icon（调研报告未覆盖原生 `ItemBuilder.Slot()` 不接受 icon 的事实）→ 实现拆为 `ApplySlots`（Instantiate 前，key+tags）+ `ApplySlotIcons`（Instantiate 后，icon），避免改动游戏原生 builder
+- Tag 缺失语义按用户确认：不自动注册、舍弃并告警（初始设计为自动注册，已按评审修正）
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` 0 错误（2 个既有警告 QuestGiverTest 与本次无关）
+- [x] 全库 grep 确认 8 个构造路径均已接入 `ApplySlots` + 图标赋值
+- [ ] 功能测试：带槽物品游戏内显示槽位 / 配件装配 / 图标显示——待游戏内验证
+
+---
+
 ## ItemGraphic 封装 + OBJ 模型导入 + Item API 双版本核查 — ✅ 已完成
 
 **完成时间**: 2026-08-07

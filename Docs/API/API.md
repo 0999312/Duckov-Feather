@@ -71,10 +71,10 @@ Docs/
 
 | 命名空间 | 包含 |
 |----------|------|
-| `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EndowmentUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ContainerUtils`, `NoteUtils`, `FishingUtils`, `FriendlyNpcUtils`, `CustomFaceUtils`, `WeatherUtils`, `MultiSceneUtils`, `DialogueManager`, `DialogueTrigger`, `ModBehaviour`, `LotteryBoxUtils`, `WeaponInjectionUtils`, `EquipmentUtils`, `QuestGiverUtils`, `TimeUtils`, `ItemGraphicUtils`, `ModelUtils`, `MachineRecipe`, `BuildingBehaviour`, `DialogueLine`, `DialogueSequence` |
+| `FeatherMod` | `ItemUtils`, `CraftingUtils`, `QuestUtils`, `ShopUtils`, `EconomyUtils`, `BuffUtils`, `BuildingUtils`, `PerkTreeUtils`, `EndowmentUtils`, `EnemyUtils`, `AssetUtil`, `I18n`, `ContainerUtils`, `NoteUtils`, `FishingUtils`, `FriendlyNpcUtils`, `CustomFaceUtils`, `WeatherUtils`, `MultiSceneUtils`, `DialogueManager`, `DialogueTrigger`, `ModBehaviour`, `LotteryBoxUtils`, `WeaponInjectionUtils`, `EquipmentUtils`, `QuestGiverUtils`, `TimeUtils`, `ItemGraphicUtils`, `ModelUtils`, `MachineRecipe`, `BuildingBehaviour`, `DialogueLine`, `DialogueSequence`, `ItemData`, `BulletData`, `BlueprintData`, `UsageData`, `ModifierData`, `SlotData`, `SlotKeys` |
 | `FeatherMod.Modding` | `ModUtils`, `ModMetaCache`, `ModMeta`, `ModDependency`, `ModDependencyResolver`, `ModManagerPatches` |
 | `FeatherMod.Utils` | `Identifier`, `Singleton<T>`, `ModPathResolver`, `TimeUtils`, `CameraUtils`, `ShaderReplacer`, `WildcardHelper`, `WeaponClassifier` |
-| `FeatherMod.Items` | `ItemData`, `BulletData`, `BlueprintData`, `UsageData`, `ModifierData`, `GameItemLookup`, `TagUtils`, `TagConfig` |
+| `FeatherMod.Items` | `GameItemLookup`, `TagUtils`, `TagConfig` |
 | `FeatherMod.Crafting` | `CraftingFormulaData`, `DecomposeFormulaData`, `ItemEntry`, `TagCostEntry`, `TagItemCost` |
 | `FeatherMod.Quests` | `QuestData`, `QuestDialogue`, `TaskData` 及子类, `RewardData` 及子类, `FMLTask_KillCountByTag`, `FMLTask_SubmitItemByTag` |
 | `FeatherMod.Entities` | `IStateConfig`, `Transition`, `StateMachineToBT`, `EnemyPresetData`, `FriendlyNpcConfig`, `FaceRef`, `NpcRole`, `ModelRef`, `EnemyRegistry` |
