@@ -330,6 +330,15 @@ await ItemUtils.CreateCustomItemAsync(new Identifier("mymod", "coffee"), itemDat
 ItemUtils.CreateCustomItem(new Identifier("mymod", "coffee"), itemData);
 ```
 
+`ItemData.consts` / `ItemData.variables` 可注入物品常量与变量（值类型支持 float / int / bool / string，`(value, display)` 元组第二项控制 Tooltip 显示）：
+
+```csharp
+itemData.consts["GameID"] = ("mymod_coffee", false);
+itemData.variables["freshness"] = (100f, true);
+```
+
+> `ItemData.AddTags(Identifier)` 可按 Identifier 解析原生 Tag 名加入 `tags`（Tag 未注册时抛 `IndexOutOfRangeException`，与 `TagUtils` 字符串注册为两套方式）。
+
 **可用 UsageBehavior**：
 
 | 类 | 用途 | 关键属性 |

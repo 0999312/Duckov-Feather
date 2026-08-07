@@ -4,6 +4,42 @@
 
 ---
 
+## Merge 冲突整理：Slot API 重复实现修复 — ✅ 已完成
+
+**完成时间**: 2026-08-07
+**类型**: 修复（merge PR #7 引入的重复实现与编译错误）
+
+### 背景
+
+- merge `side` 分支（PR #7）后，合作者与主线的 Slot API 实现重复合并：`ItemData.slots` 保留主线的 `List<SlotData>`，但 `ItemUtils` 8 个构造路径同时含合作者的 `Dictionary` 风格 slots 遍历（引用不存在的 `SlotData.Value/Key` 成员）→ 6+ 个编译错误
+- 合作者同分支带入的新功能：`ItemData.consts` / `variables`（`Dictionary<string, (object, bool)>` 注入物品常量/变量）、`AddTags(Identifier)`、`ItemUtils.RegisterTag(Identifier, TagBuilder)`——均为独立功能，保留
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 修改 | `Items/ItemUtils.cs` | 删除 9 处重复的 KeyValuePair 版 slots 遍历块（8 个物品构造路径 + 蓝图同步版）；统一走 `ApplySlots` / `ApplySlotIcons`；蓝图同步版补 `ApplySlots`+`ApplySlotIcons`、蓝图异步版补 `consts`/`variables`/`ApplySlots`/`ApplySlotIconsAsync`（两版行为对齐，均支持槽位/常量/变量） |
+| 修改 | `Items/ItemData.cs` | 清理 merge 冗余 using（删除 `Duckov.ItemBuilders` / `FeatherMod.Register` / 重复的 `FeatherMod.Utils`） |
+| 修改 | `Docs/API/API_ITEMS.md` | ItemData 表补齐 `consts` / `variables` / `AddTags`（合作者提交时遗漏） |
+| 修改 | `Docs/USAGE.md` | §3.2 补 consts/variables 用法示例与 AddTags 说明 |
+
+### 遗留问题
+
+- [ ] 合作者的 `ItemUtils.RegisterTag(Identifier, TagBuilder)`（Identifier 化 Tag 注册）与 `TagUtils.RegisterTag(string, TagConfig)` 并存，语义与文档边界待确认（本次未改动）
+- [ ] `UnregisterAllTags` 依赖 `RegistryManager.Instance.TagRegistry`（合作者新增），需游戏内验证卸载流程
+
+### 设计偏离
+
+- 蓝图构造（`CreateCustomBluePrint` / `CreateCustomBluePrintAsync`）按合作者意图支持 slots/consts/variables（与普通物品构造对齐）；此前设计文档标注"蓝图未接入 slots"已过时，以本行为准
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` 0 错误 0 警告
+- [x] 全库 grep 确认无 `SlotData.Value/Key`、`requiredTags` 残留引用
+- [ ] 游戏内验证：带槽物品构造 / 蓝图常量注入——待游戏内验证
+
+---
+
 ## ItemData Slot 抽象 API — ✅ 已完成
 
 **完成时间**: 2026-08-07

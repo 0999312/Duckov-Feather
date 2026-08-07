@@ -3,16 +3,11 @@
 using Duckov.Buffs;
 using Duckov.ItemUsage;
 using Duckov.Utilities;
+using FeatherMod.Items;
 using FeatherMod.Utils;
 using ItemStatsSystem;
 using ItemStatsSystem.Stats;
 using System.Collections.Generic;
-
-using Duckov.ItemBuilders;
-
-using FeatherMod.Items;
-using FeatherMod.Register;
-using FeatherMod.Utils;
 
 using Unity.VisualScripting;
 

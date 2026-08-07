@@ -82,6 +82,9 @@
 | `usages` | `UsageData?` | — | 使用行为 |
 | `modifiers` | `List<ModifierData>` | — | 属性修正 |
 | `slots` | `List<SlotData>` | 空表（无槽位） | 槽位配置，见 [SlotData](#slotdata--slotkeys--物品槽位) |
+| `consts` | `Dictionary<string, (object, bool)>` | 空 | 常量（`(value, display)` 对，自动转 `ItemBuilder.SetConstant`） |
+| `variables` | `Dictionary<string, (object, bool)>` | 空 | 变量（同上，转 `ItemBuilder.SetVariable`） |
+| `AddTags(Identifier)` | 方法 | — | 按 Identifier 解析原生 Tag 名并加入 `tags`（未注册抛 `IndexOutOfRangeException`） |
 
 ---
 

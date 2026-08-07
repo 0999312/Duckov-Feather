@@ -311,34 +311,6 @@ namespace FeatherMod
                 .EnableStacking(config.maxStackCount, 1)
                 .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath));
 
-            foreach (var keyValuePair in config.slots)
-            {
-                List<Tag> exists = new();
-                foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                {
-                    string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                    if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                    var tg = GetTargetTag(v);
-                    if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                    exists.Add(tg);
-                }
-
-                List<Tag> excludes = new();
-                if (keyValuePair.Value.excludeTags != null)
-                {
-                    foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        excludes.Add(tg);
-                    }
-                }
-
-                itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-            }
-
             foreach (var keyValuePair in config.consts)
             {
                 switch (keyValuePair.Value.Item1)
@@ -404,34 +376,6 @@ namespace FeatherMod
                 .EnableStacking(config.maxStackCount, 1)
                 .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath));
 
-            foreach (var keyValuePair in config.slots)
-            {
-                List<Tag> exists = new();
-                foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                {
-                    string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                    if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                    var tg = GetTargetTag(v);
-                    if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                    exists.Add(tg);
-                }
-
-                List<Tag> excludes = new();
-                if (keyValuePair.Value.excludeTags != null)
-                {
-                    foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        excludes.Add(tg);
-                    }
-                }
-
-                itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-            }
-
             foreach (var keyValuePair in config.consts)
             {
                 switch (keyValuePair.Value.Item1)
@@ -490,34 +434,6 @@ namespace FeatherMod
                     .TypeID(actualTypeId)
                     .EnableStacking(config.maxStackCount, 1)
                     .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath));
-
-                foreach (var keyValuePair in config.slots)
-                {
-                    List<Tag> exists = new();
-                    foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        exists.Add(tg);
-                    }
-
-                    List<Tag> excludes = new();
-                    if (keyValuePair.Value.excludeTags != null)
-                    {
-                        foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                        {
-                            string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                            if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                            var tg = GetTargetTag(v);
-                            if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                            excludes.Add(tg);
-                        }
-                    }
-
-                    itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-                }
 
                 foreach (var keyValuePair in config.consts)
                 {
@@ -579,34 +495,6 @@ namespace FeatherMod
                 .EnableStacking(config.maxStackCount, 1)
                 .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath));
 
-            foreach (var keyValuePair in config.slots)
-            {
-                List<Tag> exists = new();
-                foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                {
-                    string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                    if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                    var tg = GetTargetTag(v);
-                    if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                    exists.Add(tg);
-                }
-
-                List<Tag> excludes = new();
-                if (keyValuePair.Value.excludeTags != null)
-                {
-                    foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        excludes.Add(tg);
-                    }
-                }
-
-                itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-            }
-
             foreach (var keyValuePair in config.consts)
             {
                 switch (keyValuePair.Value.Item1)
@@ -655,34 +543,6 @@ namespace FeatherMod
                 .EnableStacking(config.maxStackCount, 1)
                 .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath))
                 .SetConstant("GameID", gameId.ToString());
-
-            foreach (var keyValuePair in config.slots)
-            {
-                List<Tag> exists = new();
-                foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                {
-                    string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                    if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                    var tg = GetTargetTag(v);
-                    if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                    exists.Add(tg);
-                }
-
-                List<Tag> excludes = new();
-                if (keyValuePair.Value.excludeTags != null)
-                {
-                    foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        excludes.Add(tg);
-                    }
-                }
-
-                itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-            }
 
             foreach (var keyValuePair in config.consts)
             {
@@ -738,34 +598,6 @@ namespace FeatherMod
                     .EnableStacking(config.maxStackCount, 1)
                     .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath))
                     .SetConstant("GameID", gameId.ToString());
-
-                foreach (var keyValuePair in config.slots)
-                {
-                    List<Tag> exists = new();
-                    foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        exists.Add(tg);
-                    }
-
-                    List<Tag> excludes = new();
-                    if (keyValuePair.Value.excludeTags != null)
-                    {
-                        foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                        {
-                            string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                            if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                            var tg = GetTargetTag(v);
-                            if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                            excludes.Add(tg);
-                        }
-                    }
-
-                    itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-                }
 
                 foreach (var keyValuePair in config.consts)
                 {
@@ -824,34 +656,6 @@ namespace FeatherMod
                 .Icon(ItemUtils.LoadSpriteFromDir(modDir!, config.spritePath))
                 .SetConstant("GameID", gameId.ToString());
 
-            foreach (var keyValuePair in config.slots)
-            {
-                List<Tag> exists = new();
-                foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                {
-                    string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                    if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                    var tg = GetTargetTag(v);
-                    if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                    exists.Add(tg);
-                }
-
-                List<Tag> excludes = new();
-                if (keyValuePair.Value.excludeTags != null)
-                {
-                    foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        excludes.Add(tg);
-                    }
-                }
-
-                itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-            }
-
             foreach (var keyValuePair in config.consts)
             {
                 switch (keyValuePair.Value.Item1)
@@ -906,34 +710,6 @@ namespace FeatherMod
                     .EnableStacking(config.maxStackCount, 1)
                     .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath))
                     .SetConstant("GameID", gameId.ToString());
-
-                foreach (var keyValuePair in config.slots)
-                {
-                    List<Tag> exists = new();
-                    foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        exists.Add(tg);
-                    }
-
-                    List<Tag> excludes = new();
-                    if (keyValuePair.Value.excludeTags != null)
-                    {
-                        foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                        {
-                            string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                            if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                            var tg = GetTargetTag(v);
-                            if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                            excludes.Add(tg);
-                        }
-                    }
-
-                    itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-                }
 
                 foreach (var keyValuePair in config.consts)
                 {
@@ -1013,10 +789,38 @@ namespace FeatherMod
                     config.tags.Add(config.FormulaTag);
 
                 var modDir = ModPathResolver.ResolveDirectory(id.Domain);
-                Item component = ItemBuilder.New()
+                var itemBuilder = ItemBuilder.New()
                     .TypeID(actualTypeId)
-                    .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon)
-                    .Instantiate();
+                    .Icon(!string.IsNullOrWhiteSpace(config.spritePath) ? await LoadSpriteFromDirAsync(modDir!, config.spritePath) : ItemAssetsCollection.GetPrefab(285).icon);
+
+                ApplySlots(itemBuilder, config);
+
+                foreach (var keyValuePair in config.consts)
+                {
+                    switch (keyValuePair.Value.Item1)
+                    {
+                        case float f: itemBuilder = itemBuilder.SetConstant(keyValuePair.Key, f, keyValuePair.Value.Item2); break;
+                        case int i: itemBuilder = itemBuilder.SetConstant(keyValuePair.Key, i, keyValuePair.Value.Item2); break;
+                        case bool b: itemBuilder = itemBuilder.SetConstant(keyValuePair.Key, b, keyValuePair.Value.Item2); break;
+                        case string s: itemBuilder = itemBuilder.SetConstant(keyValuePair.Key, s, keyValuePair.Value.Item2); break;
+                        default: throw new NotSupportedException();
+                    }
+                }
+
+                foreach (var keyValuePair in config.variables)
+                {
+                    switch (keyValuePair.Value.Item1)
+                    {
+                        case float f: itemBuilder = itemBuilder.SetVariable(keyValuePair.Key, f, keyValuePair.Value.Item2); break;
+                        case int i: itemBuilder = itemBuilder.SetVariable(keyValuePair.Key, i, keyValuePair.Value.Item2); break;
+                        case bool b: itemBuilder = itemBuilder.SetVariable(keyValuePair.Key, b, keyValuePair.Value.Item2); break;
+                        case string s: itemBuilder = itemBuilder.SetVariable(keyValuePair.Key, s, keyValuePair.Value.Item2); break;
+                        default: throw new NotSupportedException();
+                    }
+                }
+
+                Item component = itemBuilder.Instantiate();
+                await ApplySlotIconsAsync(component, config, modDir);
                 UnityEngine.Object.DontDestroyOnLoad(component);
                 SetItemProperties(component, config);
                 ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
@@ -1058,33 +862,7 @@ namespace FeatherMod
                     ? LoadSpriteFromDir(modDir!, config.spritePath)
                     : ItemAssetsCollection.GetPrefab(285).icon);
 
-            foreach (var keyValuePair in config.slots)
-            {
-                List<Tag> exists = new();
-                foreach (var targetSpec in keyValuePair.Value.requiredTags)
-                {
-                    string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                    if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                    var tg = GetTargetTag(v);
-                    if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                    exists.Add(tg);
-                }
-
-                List<Tag> excludes = new();
-                if (keyValuePair.Value.excludeTags != null)
-                {
-                    foreach (var targetSpec in keyValuePair.Value.excludeTags)
-                    {
-                        string? v = TagLookup.GetNativeMayNotExist(targetSpec);
-                        if (v == null) throw new IndexOutOfRangeException($"Key {targetSpec} has not yet been registered.");
-                        var tg = GetTargetTag(v);
-                        if (tg == null) throw new IndexOutOfRangeException($"Key {targetSpec} does not exists.");
-                        excludes.Add(tg);
-                    }
-                }
-
-                itemBuilder.Slot(keyValuePair.Key, exists, excludes);
-            }
+            ApplySlots(itemBuilder, config);
 
             foreach (var keyValuePair in config.consts)
             {
@@ -1111,6 +889,7 @@ namespace FeatherMod
             }
 
             var component = itemBuilder.Instantiate();
+            ApplySlotIcons(component, config, modDir);
             UnityEngine.Object.DontDestroyOnLoad(component);
             SetItemProperties(component, config);
             ItemSetting_Formula formula = component.AddComponent<ItemSetting_Formula>();
