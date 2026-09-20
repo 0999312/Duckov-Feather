@@ -7,6 +7,8 @@ using FeatherMod.Register;
 using FeatherMod.Utils;
 
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace FeatherMod.Minigame;
 
@@ -92,6 +94,18 @@ public class MinigameUtil: Singleton<MinigameUtil>
         uiCamera.depth = -90;
         uiCamera.clearFlags = CameraClearFlags.Depth;
         miniGame.uiCamera = uiCamera;
+
+        var baseData = camera.GetUniversalAdditionalCameraData();
+        var uiData = uiCamera.GetUniversalAdditionalCameraData();
+
+        baseData.SetRenderer(4);
+        uiData.SetRenderer(4);
+        uiData.renderType = CameraRenderType.Overlay;
+        if (!baseData.cameraStack.Contains(uiCamera)) baseData.cameraStack.Add(uiCamera);
+        baseData.renderPostProcessing = false;
+        baseData.dithering = false;
+        uiData.renderPostProcessing = false;
+        uiData.dithering = true;
 
         return baseObject;
     }
