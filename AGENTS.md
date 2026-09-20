@@ -20,7 +20,8 @@
 
 - **全项目异步方案一律使用 UniTask（`Cysharp.Threading.Tasks`）**，禁止使用 `async Task` / `System.Threading.Tasks.Task` 等其它异步方案（除非是游戏 API 自身签名要求）。
 - 新增 API 的同步异步双版本中，异步版本必须返回 `UniTask` / `UniTask<T>`。
-- 已有代码中的 `async Task` 遗留（如 `ItemUtils.CreateCustomBluePrintAsync`）需逐步迁移为 UniTask，迁移时优先保证现有调用方不受影响。
+- **⚠️ 二进制兼容红线**：已发布的 FML public API 返回类型**禁止**在 Task/UniTask 间切换——CLR 方法签名含返回类型，切换会导致按旧签名编译的 MOD 抛 `MissingMethodException`（2026-08-07 事故：`CreateCustomBluePrintAsync` Task→UniTask 致 DuckovWeaponExample / TopTierWeaponExpansion 崩溃，已回退）。
+- `ItemUtils.CreateCustomBluePrintAsync` 为历史遗留 `async Task` 方法（旧版 FML 二进制兼容），**保持 `Task` 不得迁移**；其余代码一律 UniTask。
 
 ## 语言规则
 

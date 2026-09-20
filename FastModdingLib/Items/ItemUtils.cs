@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading.Tasks;
 
 using Unity.VisualScripting;
 
@@ -708,7 +709,7 @@ namespace FeatherMod
                 ItemBuilder itemBuilder = ItemBuilder.New()
                     .TypeID(actualTypeId)
                     .EnableStacking(config.maxStackCount, 1)
-                    .Icon(await LoadSpriteFromDirAsync(modDir, config.spritePath))
+                    .Icon(await LoadSpriteFromDirAsync(modDir!, config.spritePath))
                     .SetConstant("GameID", gameId.ToString());
 
                 foreach (var keyValuePair in config.consts)
@@ -764,8 +765,10 @@ namespace FeatherMod
 
         /// <summary>
         /// 创建并注册自定义蓝图。modid 从 <see cref="Identifier.Domain"/> 推导。
+        /// 返回类型为 <see cref="Task"/> 而非 UniTask：保持与旧版 FML 的二进制兼容
+        /// （CLR 方法签名含返回类型，改回 UniTask 会导致已编译 MOD 抛 MissingMethodException）。
         /// </summary>
-        public static async UniTask CreateCustomBluePrintAsync(Identifier id, BlueprintData config)
+        public static async Task CreateCustomBluePrintAsync(Identifier id, BlueprintData config)
         {
             // 在 await 前预定 TypeID，防止被低优先级同步加载抢占。
             // 若首选 ID 冲突则自动分配空闲值。

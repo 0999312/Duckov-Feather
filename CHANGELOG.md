@@ -1,5 +1,17 @@
 # 更新日志
 
+## [未发布] 2026-08-07 之后
+
+### 兼容性修复
+
+- **`CreateCustomBluePrintAsync` 返回类型恢复为 `Task`**：上一版本 `async Task`→`async UniTask` 为破坏性变更（CLR 方法签名含返回类型），导致按旧签名编译的已发布 MOD（DuckovWeaponExample、TopTierWeaponExpansion）在加载时抛 `MissingMethodException` 崩溃。现已回退恢复 `Task`（方法体不变）。**红线：已发布 FML public API 返回类型禁止在 Task/UniTask 间切换。**
+- **Slot API 合并整理**：merge 时与合作者重复实现的槽位逻辑统一为 `List<SlotData>` + `ApplySlots`/`ApplySlotIcons`；蓝图构造两版对齐支持 `slots`/`consts`/`variables`。
+
+### 新功能
+
+- `ItemData.slots` + `SlotData`（key / spritePath / requireTags / excludeTags）——物品槽位配置，`SlotKeys` 提供游戏内建槽位 key 常量
+- `ItemData.consts` / `variables` 常量变量注入、`AddTags(Identifier)`
+
 ## [未发布] 2026-07-28 之后
 
 > 自 `4f0c169`（2026-07-28）以来的全部改动。规模：65 个文件，+809 / −948。

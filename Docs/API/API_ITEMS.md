@@ -38,7 +38,7 @@
 | `CreateCustomCartridge` | `static void CreateCustomCartridge(Identifier id, Identifier gameId, ItemData config)` | 基于原版弹药克隆 |
 | `CreateCustomCartridgeAsync` | `static async UniTask CreateCustomCartridgeAsync(Identifier id, Identifier gameId, ItemData config)` | |
 | `CreateCustomBluePrint` | `static void CreateCustomBluePrint(Identifier id, BlueprintData config)` | 创建蓝图物品 |
-| `CreateCustomBluePrintAsync` | `static async UniTask CreateCustomBluePrintAsync(Identifier id, BlueprintData config)` | |
+| `CreateCustomBluePrintAsync` | `static async Task CreateCustomBluePrintAsync(Identifier id, BlueprintData config)` | 返回 `Task`（旧版 FML 二进制兼容，勿改为 UniTask） |
 | **Bundle 注册** | | |
 | `RegisterGun` | `static void RegisterGun(Identifier id, AssetBundle assetBundle, string name, int originGunID = 654)` | 注册枪支（自动复制基础枪属性） |
 | `RegisterItemFromBundle` | `static void RegisterItemFromBundle(Identifier id, AssetBundle assetBundle, string name)` | 从 Bundle 注册普通物品 |

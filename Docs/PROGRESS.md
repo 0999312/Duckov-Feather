@@ -4,6 +4,43 @@
 
 ---
 
+## 破坏性回退：CreateCustomBluePrintAsync Task→UniTask 恢复为 Task — ✅ 已完成
+
+**完成时间**: 2026-08-07
+**类型**: 修复（二进制兼容性回退）
+
+### 背景
+
+- 游戏日志（2026-08-07_20-34-42）确认：`DuckovWeaponExample`、`TopTierWeaponExpansion` 等已发布 MOD 崩溃，`MissingMethodException: Method not found: System.Threading.Tasks.Task FeatherMod.ItemUtils.CreateCustomBluePrintAsync(...)`
+- 根因：CLR 方法签名含**返回类型**，`12412dd` 将 `CreateCustomBluePrintAsync` 从 `async Task` 改为 `async UniTask` 后，按旧签名编译的 MOD 无法解析该方法。当时"全库零调用方"只检查了仓库内，**未考虑外部已发布 MOD 的二进制兼容**
+- 用户决策：恢复 `Task` 返回类型（UniTask 与 Task 无法靠返回类型重载共存，只能二选一）
+
+### 文件变更清单
+
+| 操作 | 文件路径 | 改动摘要 |
+|---|---|---|
+| 修改 | `Items/ItemUtils.cs` | `CreateCustomBluePrintAsync` 签名 `async UniTask`→`async Task`（方法体不变，async Task 内 await UniTask 合法）；恢复 `using System.Threading.Tasks`；顺手修 GetCustomCartridgeAsync 的 `modDir` 空引用警告 |
+| 修改 | `Docs/API/API_ITEMS.md` | `CreateCustomBluePrintAsync` 签名表同步为 `static async Task`，注明"勿改为 UniTask" |
+| 修改 | `Docs/DESIGN_ITEM_GRAPHIC_MODEL_API.md` | 标注原 Task→UniTask 决策已回退 |
+
+### 遗留问题
+
+- [ ] 已发布 MOD 需要重新部署新版 FML 验证加载（DuckovWeaponExample / TopTierWeaponExpansion）
+- [ ] 其它 Async API（`GetCustomItemAsync` 等）历史上一直是 UniTask，无二进制兼容问题，但新 MOD 若混用旧版 FML 引用同样会崩溃——发布时需在 CHANGELOG 明示 FML 版本强绑定
+- [ ] `CreateCustomBluePrintAsync` 成为 FML 中唯一的 `async Task` 方法（AGENTS.md 异步约束已加例外条款），后续新增 API 仍一律 UniTask
+
+### 设计偏离
+
+- AGENTS.md「异步方案约束」增加例外：**FML 已发布 public API 的返回类型不得在 Task/UniTask 间切换**（二进制兼容）；`CreateCustomBluePrintAsync` 作为历史遗留保持 `Task`，新代码仍强制 UniTask
+
+### 验证结果
+
+- [x] `dotnet build -c Debug` 0 错误（4 个既有/合作者代码警告与本改动无关）
+- [x] 源码确认签名 `public static async Task CreateCustomBluePrintAsync(Identifier id, BlueprintData config)` 编译通过
+- [ ] 游戏内验证：旧 MOD 加载不再抛 MissingMethodException——待游戏内验证
+
+---
+
 ## Merge 冲突整理：Slot API 重复实现修复 — ✅ 已完成
 
 **完成时间**: 2026-08-07

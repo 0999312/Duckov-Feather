@@ -306,7 +306,7 @@ public static void SetItemGraphicFromOriginal(Item item, Identifier originalItem
 
 ### 6.2 迁移明细
 
-**① `CreateCustomBluePrintAsync`：`async Task` → `async UniTask`**
+**① `CreateCustomBluePrintAsync`：`async Task` → `async UniTask`** ⚠️ **已回退（2026-08-07）**：该变更破坏外部已发布 MOD 的二进制兼容（MissingMethodException），已恢复为 `async Task`，见 PROGRESS.md「破坏性回退」记录。
 - 全库 grep 无外部调用方（仅 `QuestTest.cs:19` 调用同步版 `CreateCustomBluePrint`），迁移零影响
 - 方法体无改动，仅返回类型 `Task` → `UniTask` + `using System.Threading.Tasks` 移除
 - 注意：该方法目前**未用 ReserveTypeId 模式**（与其它 Async 方法不一致）——迁移时一并补上 `ReserveTypeId / CancelReservation`（await 前预定，防止并发抢占），对齐 `CreateCustomItemAsync` 模式
